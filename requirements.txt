@@ -1,0 +1,8 @@
+playwright
+asyncio
+dotenv
+fastapi
+pydantic
+typing
+bs4
+uvicorn

@@ -1,0 +1,10 @@
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv()
+
+
+BASE_DIR = Path(__file__).resolve().parent
+
+BASE_SAMA_URL=os.getenv("BASE_SAMA_URL","https://anime-sama.to/")
