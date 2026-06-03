@@ -6,3 +6,7 @@ pydantic
 typing
 bs4
 uvicorn
+yt_dlp
+selenium
+webdriver-manager
+httpx
