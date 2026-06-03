@@ -6,24 +6,27 @@ from enum import Enum
 class TypeContent(str,Enum):
     EPISODE="episode"
     SEASON="season"
+    FILM="film"
     MANGA="manga"
     AUTRE="autre"
     
-
-
-
 
 class Content(BaseModel):
     name:str
     type:TypeContent
     metadata:Optional[dict[str,any]]
     
-    
+class Video(BaseModel):
+       videoid: Optional[str]
+       videosrc:Optional[str] 
 class Episode(Content):
-    numero: Optional[int]
-    link: Optional[str]
+    numepisode: Optional[int]
+    data:Optional[Video]
     type:TypeContent=TypeContent.EPISODE
-    
+ 
+class Film(Content):  
+    data:Optional[Video]
+    type:TypeContent=TypeContent.FILM
 
 class Season(Content):
     lang:Optional[list[str]]
@@ -33,16 +36,16 @@ class Season(Content):
     
 
 
-class Image(BaseModel):
+class MangaImage(BaseModel):
     page:Optional[int]
     link:Optional[str]
 
-class Chapitre(Content):
-    images:Optional[list[Image]]
+class MangaChapitre(Content):
+    images:Optional[list[MangaImage]]
     
     
 
 class Scan(Content):
     lang:Optional[list[str]]
-    Chapitres:Optional[list[Chapitre]]
+    Chapitres:Optional[list[MangaChapitre]]
 
