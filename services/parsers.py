@@ -438,6 +438,57 @@ class Parser:
         return results
 
     # ------------------------------------------------------------------
+    # Genres disponibles depuis /catalogue/
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def parse_genres_from_catalogue(html: str) -> list[str]:
+        """
+        Extrait tous les genres disponibles depuis la page /catalogue/.
+        Trois stratégies dans l'ordre :
+          1. Select ou checkboxes de filtre labellisés « genre »
+          2. Liens de filtre href contenant « genre »
+          3. Toutes les .genre-pill des cartes catalogue (plus exhaustif)
+        Retourne une liste triée et dédupliquée.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        genres: set[str] = set()
+
+        # Stratégie 1 — select ou checkbox nommés "genre*"
+        for sel in soup.select("select"):
+            attrs = " ".join([sel.get("name",""), sel.get("id","")]).lower()
+            if "genre" in attrs:
+                for opt in sel.select("option"):
+                    val = opt.get("value","").strip()
+                    txt = opt.get_text(strip=True)
+                    if val and val.lower() not in ("","0","all","tous","toutes"):
+                        genres.add(txt or val)
+
+        for inp in soup.select("input[type='checkbox'], input[type='radio']"):
+            name = inp.get("name","").lower()
+            if "genre" in name:
+                lbl = inp.find_next_sibling(string=True) or (inp.find_next("label") and inp.find_next("label").get_text(strip=True))
+                val = inp.get("value","").strip()
+                if val and val.lower() not in ("","0"):
+                    genres.add(str(lbl).strip() if lbl else val)
+
+        # Stratégie 2 — liens de filtre contenant "genre" dans href ou data-*
+        for a in soup.select("a[href*='genre'], [data-genre]"):
+            txt = a.get_text(strip=True)
+            dg  = a.get("data-genre","").strip()
+            candidate = dg or txt
+            if candidate and 2 <= len(candidate) <= 40:
+                genres.add(candidate)
+
+        # Stratégie 3 — .genre-pill dans les cartes du catalogue (toujours disponible)
+        for pill in soup.select(".genre-pill"):
+            txt = pill.get_text(strip=True)
+            if txt and 2 <= len(txt) <= 40:
+                genres.add(txt)
+
+        return sorted(genres)
+
+    # ------------------------------------------------------------------
     # Planning (/planning/)  —  HTML statique
     # ------------------------------------------------------------------
 

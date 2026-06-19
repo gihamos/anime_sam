@@ -9,13 +9,16 @@ DELETE /admin/api/groups/{gid}                  → supprimer (204)
 GET    /admin/api/groups/{gid}/members          → membres
 POST   /admin/api/groups/{gid}/members          → ajouter un membre {username}
 DELETE /admin/api/groups/{gid}/members/{u}      → retirer un membre (204)
-GET    /admin/api/genres                        → genres distincts des catalogues
+
+GET    /admin/api/genres                        → tous les genres depuis DB (ou fallback distinct)
+POST   /admin/api/genres/sync                   → synchronise les genres depuis anime-sama.to
 """
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from models.group import GroupCreate, GroupUpdate
 import db.groups_repository as groups_repo
+import db.genres_repository as genres_repo
 import db.user_repository as user_repo
 from api.dependencies import require_admin
 
@@ -26,9 +29,38 @@ router = APIRouter(prefix="/admin", tags=["Groupes"])
 # Genres
 # ---------------------------------------------------------------------------
 
-@router.get("/api/genres", summary="Genres distincts des catalogues")
+@router.get("/api/genres", summary="Genres disponibles (DB + fallback)")
 async def list_genres(_: dict = Depends(require_admin)):
-    return await groups_repo.list_unique_genres()
+    """
+    Retourne les genres scrappés depuis anime-sama.to/catalogue/ (stockés en DB).
+    Si la DB est vide, renvoie les genres distincts des catalogues déjà en base.
+    """
+    genres = await genres_repo.get_all()
+    if not genres:
+        genres = await groups_repo.list_unique_genres()
+    return genres
+
+
+@router.post("/api/genres/sync", summary="Synchronise les genres depuis anime-sama.to")
+async def sync_genres(_: dict = Depends(require_admin)):
+    """
+    Scrape anime-sama.to/catalogue/ pour récupérer tous les genres disponibles
+    et les sauvegarde en DB. Lance la tâche en arrière-plan et répond immédiatement.
+    """
+    import asyncio
+    from services.scraper import get_genres_from_site
+
+    async def _do_sync():
+        genres = await get_genres_from_site()
+        # Sauvegarder uniquement si on a trouvé au moins 5 genres valides
+        if len(genres) >= 5:
+            await genres_repo.save_all(genres)
+        else:
+            from utils.logger import logger
+            logger.warning(f"Sync genres : seulement {len(genres)} genres trouvés, pas de sauvegarde")
+
+    asyncio.create_task(_do_sync())
+    return {"status": "started", "message": "Synchronisation des genres lancée en arrière-plan"}
 
 
 # ---------------------------------------------------------------------------

@@ -224,6 +224,25 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 .genre-chip{display:inline-flex;align-items:center;gap:.2rem;padding:.2rem .5rem;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);border-radius:5px;font-size:.76rem;color:var(--info)}
 .genre-chip button{border:none;background:none;color:inherit;cursor:pointer;padding:0;font-size:.8rem;line-height:1;opacity:.7}.genre-chip button:hover{opacity:1}
 
+/* Groupe modal — recherche catalogue */
+.mg-cat-search-wrap{position:relative}
+.mg-cat-search-wrap .search-drop{position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;max-height:190px;overflow-y:auto;z-index:60;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.mg-cat-search-wrap .sd-item{padding:.45rem .75rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.83rem;border-bottom:1px solid var(--bdr)}
+.mg-cat-search-wrap .sd-item:last-child{border-bottom:none}.mg-cat-search-wrap .sd-item:hover{background:var(--surh)}
+.mg-cat-search-wrap .sd-slug{font-size:.7rem;color:var(--mu);font-family:monospace}
+.mg-cat-search-wrap .sd-empty{padding:.6rem .75rem;font-size:.8rem;color:var(--mu);text-align:center}
+
+/* Groupe modal — grille genres */
+.genre-grid-wrap{background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
+.genre-grid-filter{padding:.4rem .5rem;border-bottom:1px solid var(--bdr)}
+.genre-grid-filter input{width:100%;background:transparent;border:none;outline:none;font-size:.82rem;color:var(--tx);padding:.1rem}
+.genre-grid{display:flex;flex-wrap:wrap;gap:.3rem;padding:.5rem;max-height:160px;overflow-y:auto}
+.gs-chip{padding:.22rem .6rem;border-radius:20px;font-size:.77rem;cursor:pointer;border:1px solid var(--bdr);background:var(--sur);color:var(--tx2);transition:all .1s;user-select:none}
+.gs-chip:hover{border-color:var(--info);color:var(--info)}
+.gs-chip.on{background:rgba(56,189,248,.15);border-color:var(--info);color:var(--info);font-weight:600}
+.genre-grid-sync{display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-top:1px solid var(--bdr);font-size:.75rem;color:var(--mu)}
+.genre-grid-sync button{margin-left:auto}
+
 /* OIDC login */
 .oidc-sep{display:flex;align-items:center;gap:.5rem;margin:.9rem 0;color:var(--mu);font-size:.78rem}
 .oidc-sep::before,.oidc-sep::after{content:'';flex:1;border-top:1px solid var(--bdr)}
@@ -723,24 +742,27 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 
       <!-- Section Catalogues -->
       <div id="mg-sect-catalogue">
-        <div class="fg"><label style="font-size:.78rem;color:var(--ac)">🗂️ Catalogues accessibles aux membres</label>
-          <div id="mg-cat-chips" class="genre-chips" style="min-height:30px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.4rem"></div>
-          <div style="display:flex;gap:.4rem;margin-top:.35rem">
-            <input id="mg-cat-search" class="fc" list="mg-cat-dl" placeholder="Ajouter un catalogue (slug)…" style="flex:1">
-            <datalist id="mg-cat-dl"></datalist>
-            <button class="btn btn-secondary btn-sm" onclick="mgAddCat()">+ Ajouter</button>
+        <div class="fg">
+          <label style="font-size:.78rem;color:var(--ac)">🗂️ Catalogues accessibles aux membres</label>
+          <div id="mg-cat-chips" class="genre-chips" style="min-height:28px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.4rem;margin-bottom:.35rem"></div>
+          <div class="mg-cat-search-wrap">
+            <input id="mg-cat-search" class="fc" placeholder="Rechercher par titre…" oninput="mgSearchCats()" autocomplete="off">
+            <div id="mg-cat-drop" class="search-drop" style="display:none"></div>
           </div>
         </div>
       </div>
 
       <!-- Section Genres -->
       <div id="mg-sect-genre" style="display:none">
-        <div class="fg"><label style="font-size:.78rem;color:var(--info)">🏷️ Genres — accès à tous les catalogues de ces genres</label>
-          <div id="mg-genre-chips" class="genre-chips" style="min-height:30px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.4rem"></div>
-          <div style="display:flex;gap:.4rem;margin-top:.35rem">
-            <input id="mg-genre-search" class="fc" list="mg-genre-dl" placeholder="Ajouter un genre…" style="flex:1">
-            <datalist id="mg-genre-dl"></datalist>
-            <button class="btn btn-secondary btn-sm" onclick="mgAddGenre()">+ Ajouter</button>
+        <div class="fg">
+          <label style="font-size:.78rem;color:var(--info)">🏷️ Genres — accès à tous les catalogues de ces genres</label>
+          <div class="genre-grid-wrap">
+            <div class="genre-grid-filter"><input id="mg-genre-filter" placeholder="Filtrer les genres…" oninput="filterGenreGrid()"></div>
+            <div id="mg-genre-grid" class="genre-grid"><span style="color:var(--mu);font-size:.78rem;padding:.4rem">Chargement des genres…</span></div>
+            <div class="genre-grid-sync">
+              <span id="mg-genre-sync-lbl"></span>
+              <button class="btn btn-secondary btn-sm" onclick="syncGenres()" id="mg-genre-sync-btn">↺ Sync genres</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1594,31 +1616,100 @@ function onGroupTypeChange(){
   document.getElementById('mg-sect-genre').style.display=t==='genre'?'':'none';
 }
 
+// ── Catalogues chips ──────────────────────────────────────────────────────
 function _mgRenderCatChips(){
   const el=document.getElementById('mg-cat-chips');
-  el.innerHTML=[..._mgCatSlugs].map(s=>`<span class="genre-chip">${esc(s)} <button onclick="_mgCatSlugs.delete('${esc(s)}');_mgRenderCatChips()">✕</button></span>`).join('');
+  el.innerHTML=[..._mgCatSlugs].map(s=>`<span class="genre-chip">${esc(s)}<button onclick="event.stopPropagation();_mgCatSlugs.delete('${esc(s)}');_mgRenderCatChips()">✕</button></span>`).join('')||'<span style="color:var(--mu);font-size:.75rem">Aucun catalogue sélectionné</span>';
 }
-function mgAddCat(){
-  const v=document.getElementById('mg-cat-search').value.trim();
-  if(v){_mgCatSlugs.add(v);document.getElementById('mg-cat-search').value='';_mgRenderCatChips();}
+
+let _mgCatSearchTimer=null;
+async function mgSearchCats(){
+  clearTimeout(_mgCatSearchTimer);
+  const q=document.getElementById('mg-cat-search').value.trim();
+  const drop=document.getElementById('mg-cat-drop');
+  if(!q||q.length<2){drop.style.display='none';return;}
+  _mgCatSearchTimer=setTimeout(async()=>{
+    drop.innerHTML=`<div class="sd-empty">Recherche…</div>`;drop.style.display='';
+    try{
+      let res=[];
+      // Chercher d'abord en DB
+      try{res=await api('GET','/catalogues/rechercher?q='+encodeURIComponent(q));}catch{}
+      // Si peu de résultats, compléter avec ce qu'on a en mémoire
+      if(!res.length){res=allCats.filter(c=>(c.nom||'').toLowerCase().includes(q.toLowerCase())).slice(0,8);}
+      if(!res.length){drop.innerHTML=`<div class="sd-empty">Aucun résultat — <a href="#" onclick="mgSiteSearch('${esc(q)}');return false" style="color:var(--ac)">chercher sur le site</a></div>`;return;}
+      drop.innerHTML=res.slice(0,10).map(r=>{
+        const slug=r.slug||'';const nom=r.nom||r.title||slug;
+        const already=_mgCatSlugs.has(slug)?'opacity:.5;pointer-events:none':'';
+        return `<div class="sd-item" style="${already}" onclick="mgSelectCat('${esc(slug)}','${esc(nom)}')">
+          <span>${esc(nom)}</span><span class="sd-slug">${esc(slug)}</span>
+        </div>`;
+      }).join('');
+    }catch(e){drop.innerHTML=`<div class="sd-empty">${esc(String(e))}</div>`;}
+  },280);
 }
-function _mgRenderGenreChips(){
-  const el=document.getElementById('mg-genre-chips');
-  el.innerHTML=[..._mgGenres].map(g=>`<span class="genre-chip">${esc(g)} <button onclick="_mgGenres.delete('${esc(g)}');_mgRenderGenreChips()">✕</button></span>`).join('');
+async function mgSiteSearch(q){
+  const drop=document.getElementById('mg-cat-drop');
+  drop.innerHTML=`<div class="sd-empty">Recherche sur le site…</div>`;
+  try{
+    const res=await api('GET','/catalogues/site/rechercher?q='+encodeURIComponent(q));
+    if(!res.length){drop.innerHTML=`<div class="sd-empty">Aucun résultat</div>`;return;}
+    drop.innerHTML=res.slice(0,10).map(r=>{
+      const slug=r.slug||'';const nom=r.title||r.nom||slug;
+      return `<div class="sd-item" onclick="mgSelectCat('${esc(slug)}','${esc(nom)}')">
+        <span>${esc(nom)}</span><span class="sd-slug">${esc(slug)}</span>
+      </div>`;
+    }).join('');
+  }catch{drop.innerHTML=`<div class="sd-empty">Erreur de recherche</div>`;}
 }
-function mgAddGenre(){
-  const v=document.getElementById('mg-genre-search').value.trim();
-  if(v){_mgGenres.add(v);document.getElementById('mg-genre-search').value='';_mgRenderGenreChips();}
+function mgSelectCat(slug,name){
+  _mgCatSlugs.add(slug);_mgRenderCatChips();
+  document.getElementById('mg-cat-search').value='';
+  document.getElementById('mg-cat-drop').style.display='none';
+}
+// Fermer le dropdown en cliquant ailleurs
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.mg-cat-search-wrap')){
+    const d=document.getElementById('mg-cat-drop');if(d)d.style.display='none';
+  }
+});
+
+// ── Genres grid ────────────────────────────────────────────────────────────
+function renderGenreGrid(){
+  const q=(document.getElementById('mg-genre-filter')?.value||'').toLowerCase();
+  const el=document.getElementById('mg-genre-grid');
+  if(!_allGenres.length){el.innerHTML=`<span style="color:var(--mu);font-size:.78rem">Aucun genre disponible — cliquez sur ↺ Sync genres</span>`;return;}
+  const filtered=q?_allGenres.filter(g=>g.toLowerCase().includes(q)):_allGenres;
+  if(!filtered.length){el.innerHTML=`<span style="color:var(--mu);font-size:.78rem">Aucun genre correspondant</span>`;return;}
+  el.innerHTML=filtered.map(g=>`<span class="gs-chip ${_mgGenres.has(g)?'on':''}" onclick="toggleGenreChip('${esc(g)}')">${esc(g)}</span>`).join('');
+}
+function filterGenreGrid(){renderGenreGrid();}
+function toggleGenreChip(g){
+  if(_mgGenres.has(g))_mgGenres.delete(g);else _mgGenres.add(g);
+  renderGenreGrid();
+}
+async function syncGenres(){
+  const btn=document.getElementById('mg-genre-sync-btn');
+  const lbl=document.getElementById('mg-genre-sync-lbl');
+  btn.disabled=true;btn.textContent='⏳ En cours…';lbl.textContent='';
+  try{
+    await api('POST','/admin/api/genres/sync');
+    lbl.textContent='Synchronisation lancée…';
+    // Recharger après 4s (le scraping est en arrière-plan)
+    setTimeout(async()=>{
+      _allGenres=await api('GET','/admin/api/genres').catch(()=>_allGenres);
+      renderGenreGrid();lbl.textContent=`${_allGenres.length} genres`;
+      btn.disabled=false;btn.textContent='↺ Sync genres';
+    },4000);
+  }catch(e){lbl.textContent=String(e);btn.disabled=false;btn.textContent='↺ Sync genres';}
 }
 
 function _populateGroupModal(){
-  // Remplir les datalists
-  const cdl=document.getElementById('mg-cat-dl');
-  cdl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
-  const gdl=document.getElementById('mg-genre-dl');
-  gdl.innerHTML=_allGenres.map(g=>`<option value="${esc(g)}">`).join('');
-  _mgRenderCatChips();_mgRenderGenreChips();
+  _mgRenderCatChips();
+  renderGenreGrid();
   onGroupTypeChange();
+  // Mettre à jour l'info de la dernière sync dans le label
+  const lbl=document.getElementById('mg-genre-sync-lbl');
+  if(lbl)lbl.textContent=_allGenres.length?`${_allGenres.length} genres en DB`:'Aucun genre en DB — lancez une sync';
 }
 
 function openCreateGroup(){
