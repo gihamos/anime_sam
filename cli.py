@@ -6,7 +6,11 @@ Utilisation :
   py cli.py rechercher "naruto" --type anime --lang vostfr --etat en_cours
   py cli.py get dragon-ball
   py cli.py sync-content dragon-ball
+  py cli.py saisons naruto
+  py cli.py films naruto
+  py cli.py scans naruto
   py cli.py episodes naruto saison1 --lang vostfr
+  py cli.py chapitres naruto 0
   py cli.py rafraichir dragon-ball
   py cli.py planning
   py cli.py liste
@@ -26,6 +30,12 @@ console = Console()
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def _get_or_fetch(slug: str) -> dict | None:
+    """Retourne le catalogue depuis la DB. Le scrape et le sauvegarde s'il est absent."""
+    from services.catalogue_service import get_catalogue
+    return _run(get_catalogue(slug))
 
 
 # ---------------------------------------------------------------------------
@@ -85,11 +95,9 @@ def rechercher(
 # ---------------------------------------------------------------------------
 @app.command()
 def get(slug: str = typer.Argument(..., help="Slug de l'animé (ex: dragon-ball)")):
-    """Récupère le catalogue complet (DB ou scraping)."""
-    from services.catalogue_service import get_catalogue
-
+    """Récupère le catalogue complet (DB ou scraping si absent)."""
     with console.status(f"Chargement de [bold]{slug}[/bold]..."):
-        cat = _run(get_catalogue(slug))
+        cat = _get_or_fetch(slug)
 
     if not cat:
         rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
@@ -107,37 +115,48 @@ def get(slug: str = typer.Argument(..., help="Slug de l'animé (ex: dragon-ball)
     if syn:
         rprint(f"\n{syn[:400]}{'…' if len(syn) > 400 else ''}")
 
-    saisons = cat.get("saisons", [])
-    films   = cat.get("films",   [])
-    scans   = cat.get("scans",   [])
+    saison_list = cat.get("saisons", [])
+    film_list   = cat.get("films",   [])
+    scan_list   = cat.get("scans",   [])
 
-    if saisons:
+    if saison_list:
         t = Table(title="Saisons", show_lines=False)
-        t.add_column("Nom",  style="green")
+        t.add_column("Nom",      style="green")
         t.add_column("Lang")
         t.add_column("Épisodes", justify="right")
-        for s in saisons:
-            t.add_row(s["nom"], s["lang"], str(s.get("total_episodes") or len(s.get("episodes", []))))
+        t.add_column("Synced",   justify="center")
+        for s in saison_list:
+            ep_count = len(s.get("episodes", []))
+            total    = s.get("total_episodes") or ep_count
+            t.add_row(s["nom"], s.get("lang","?"), str(total), "✓" if ep_count else "–")
         console.print(t)
 
-    if films:
+    if film_list:
         t = Table(title="Films", show_lines=False)
-        t.add_column("Nom", style="yellow")
+        t.add_column("Nom",      style="yellow")
         t.add_column("Lang")
-        for f in films:
-            t.add_row(f["nom"], f["lang"])
+        t.add_column("Lecteurs", justify="right")
+        t.add_column("Synced",   justify="center")
+        for f in film_list:
+            lect = len(f.get("videos", []))
+            t.add_row(f["nom"], f.get("lang","?"), str(lect), "✓" if lect else "–")
         console.print(t)
 
-    if scans:
-        t = Table(title="Scans", show_lines=False)
-        t.add_column("Nom", style="magenta")
-        for s in scans:
-            t.add_row(s["nom"])
+    if scan_list:
+        t = Table(title="Scans / Mangas", show_lines=False)
+        t.add_column("Nom",       style="magenta")
+        t.add_column("Lang")
+        t.add_column("Chapitres", justify="right")
+        t.add_column("Synced",    justify="center")
+        for s in scan_list:
+            chaps = len(s.get("chapitres", []))
+            t.add_row(s["nom"], s.get("lang") or "?", str(chaps), "✓" if chaps else "–")
         console.print(t)
 
     synced = cat.get("episodes_synced", False)
+    hint   = f"py cli.py sync-content {slug}"
     rprint(f"\n[{'green' if synced else 'yellow'}]"
-           f"Épisodes {'synchronisés ✓' if synced else 'non synchronisés — lancez : py cli.py sync-content ' + slug}[/]")
+           f"Contenu {'synchronisé ✓' if synced else f'non synchronisé — lancez : {hint}'}[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -156,30 +175,261 @@ def sync_content(slug: str = typer.Argument(..., help="Slug de l'animé")):
 
 
 # ---------------------------------------------------------------------------
-# episodes (on-demand pour une saison)
+# saisons — liste les saisons d'un catalogue
+# ---------------------------------------------------------------------------
+@app.command()
+def saisons(
+    slug: str           = typer.Argument(..., help="Slug de l'animé"),
+    lang: Optional[str] = typer.Option(None, "--lang", help="Filtre langue : vf|vostfr|vo"),
+):
+    """Liste les saisons disponibles (DB ou scraping si absent)."""
+    with console.status(f"Chargement de [bold]{slug}[/bold]..."):
+        cat = _get_or_fetch(slug)
+
+    if not cat:
+        rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
+        raise typer.Exit(1)
+
+    items = cat.get("saisons", [])
+    if lang:
+        items = [s for s in items if s.get("lang", "").lower() == lang.lower()]
+
+    if not items:
+        rprint("[yellow]Aucune saison trouvée.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Saisons — {cat.get('nom')}")
+    table.add_column("#",      justify="right", style="dim")
+    table.add_column("Nom",    style="green")
+    table.add_column("Lang")
+    table.add_column("Slug")
+    table.add_column("Épisodes", justify="right")
+    table.add_column("Synced",   justify="center")
+
+    for idx, s in enumerate(items):
+        ep_count = len(s.get("episodes", []))
+        total    = s.get("total_episodes") or ep_count
+        synced   = "✓" if ep_count > 0 else "–"
+        table.add_row(str(idx), s.get("nom","?"), s.get("lang","?"),
+                      s.get("slug","?"), str(total), synced)
+    console.print(table)
+    rprint(f"\n[dim]py cli.py episodes {slug} <slug-saison> --lang <lang>[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# films — liste les films d'un catalogue
+# ---------------------------------------------------------------------------
+@app.command()
+def films(
+    slug: str           = typer.Argument(..., help="Slug de l'animé"),
+    lang: Optional[str] = typer.Option(None, "--lang", help="Filtre langue : vf|vostfr|vo"),
+):
+    """Liste les films disponibles (DB ou scraping si absent)."""
+    with console.status(f"Chargement de [bold]{slug}[/bold]..."):
+        cat = _get_or_fetch(slug)
+
+    if not cat:
+        rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
+        raise typer.Exit(1)
+
+    items = cat.get("films", [])
+    if lang:
+        items = [f for f in items if f.get("lang", "").lower() == lang.lower()]
+
+    if not items:
+        rprint("[yellow]Aucun film trouvé.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Films — {cat.get('nom')}")
+    table.add_column("#",    justify="right", style="dim")
+    table.add_column("Nom",  style="yellow")
+    table.add_column("Lang")
+    table.add_column("Slug")
+    table.add_column("Lecteurs", justify="right")
+    table.add_column("Synced",   justify="center")
+
+    for idx, f in enumerate(items):
+        lect_count = len(f.get("videos", []))
+        table.add_row(str(idx), f.get("nom","?"), f.get("lang","?"),
+                      f.get("slug","?"), str(lect_count), "✓" if lect_count > 0 else "–")
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# scans — liste les scans/mangas d'un catalogue
+# ---------------------------------------------------------------------------
+@app.command()
+def scans(
+    slug: str           = typer.Argument(..., help="Slug de l'animé"),
+    lang: Optional[str] = typer.Option(None, "--lang", help="Filtre langue : vf|vostfr|vo"),
+):
+    """Liste les scans/mangas disponibles (DB ou scraping si absent)."""
+    with console.status(f"Chargement de [bold]{slug}[/bold]..."):
+        cat = _get_or_fetch(slug)
+
+    if not cat:
+        rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
+        raise typer.Exit(1)
+
+    items = cat.get("scans", [])
+    if lang:
+        items = [s for s in items if s.get("lang", "").lower() == lang.lower()]
+
+    if not items:
+        rprint("[yellow]Aucun scan trouvé.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Scans — {cat.get('nom')}")
+    table.add_column("#",          justify="right", style="dim")
+    table.add_column("Nom",        style="magenta")
+    table.add_column("Lang")
+    table.add_column("Chapitres",  justify="right")
+    table.add_column("Images",     justify="right")
+    table.add_column("Synced",     justify="center")
+
+    for idx, s in enumerate(items):
+        chaps      = s.get("chapitres", [])
+        nb_images  = sum(len(c.get("images", [])) for c in chaps)
+        table.add_row(str(idx), s.get("nom","?"), s.get("lang") or "?",
+                      str(len(chaps)), str(nb_images), "✓" if chaps else "–")
+    console.print(table)
+    rprint(f"\n[dim]py cli.py chapitres {slug} <index-scan>[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# episodes — épisodes d'une saison depuis la DB
 # ---------------------------------------------------------------------------
 @app.command()
 def episodes(
     slug:   str           = typer.Argument(..., help="Slug de l'animé"),
-    saison: str           = typer.Argument(..., help="Ex: saison1"),
-    lang:   str           = typer.Option("vostfr", help="Code langue"),
+    saison: str           = typer.Argument(..., help="Slug de la saison (ex: saison1)"),
+    lang:   str           = typer.Option("vf", "--lang", help="Langue prioritaire : vf|vostfr|vo"),
+    tout:   bool          = typer.Option(False, "--tout", help="Afficher tous les lecteurs"),
 ):
-    """Affiche les épisodes d'une saison (scraping direct, sans passer par la DB)."""
-    from services.scraper import get_episodes
-    from params import BASE_SAMA_URL
+    """
+    Affiche les épisodes d'une saison depuis la DB.
 
-    url = f"{BASE_SAMA_URL}catalogue/{slug}/{saison}/{lang}/"
-    with console.status(f"Extraction des épisodes de [bold]{slug}/{saison}/{lang}[/bold]..."):
-        data = _run(get_episodes(url))
+    Le catalogue est récupéré en DB (scraping + sauvegarde si absent).
+    Si les épisodes ne sont pas encore synchronisés, un message guide vers sync-content.
+    """
+    with console.status(f"Chargement de [bold]{slug}[/bold]..."):
+        cat = _get_or_fetch(slug)
 
-    if not data:
-        rprint("[red]Aucun épisode trouvé.[/red]")
+    if not cat:
+        rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
         raise typer.Exit(1)
 
-    for ep_num, lecteurs in data.items():
-        rprint(f"\n[bold]Épisode {ep_num}[/bold]")
-        for l in lecteurs:
-            rprint(f"  [{l['lecteur']}] {l['player_url']}")
+    all_saisons = cat.get("saisons", [])
+
+    # Chercher la saison par slug + langue, avec fallback sur les autres langues
+    lang_priority = [lang] + [l for l in ("vf", "vostfr", "vo") if l != lang]
+    found = None
+    for pref_lang in lang_priority:
+        for s in all_saisons:
+            if s.get("slug", "").lower() == saison.lower() \
+               and s.get("lang", "").lower() == pref_lang.lower():
+                found = s
+                break
+        if found:
+            break
+
+    # Fallback : slug uniquement (ignore la langue)
+    if not found:
+        for s in all_saisons:
+            if s.get("slug", "").lower() == saison.lower():
+                found = s
+                break
+
+    if not found:
+        rprint(f"[red]Saison '{saison}' introuvable pour '{slug}'.[/red]")
+        rprint(f"[dim]Slugs disponibles : {[s.get('slug') for s in all_saisons]}[/dim]")
+        raise typer.Exit(1)
+
+    eps = found.get("episodes", [])
+    if not eps:
+        rprint(f"[yellow]Épisodes non encore synchronisés pour "
+               f"[bold]{found.get('nom')}[/bold].[/yellow]")
+        rprint(f"[dim]Lancez d'abord : py cli.py sync-content {slug}[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"{found.get('nom')} ({found.get('lang','?').upper()})"
+                        f" — {len(eps)} épisode(s)")
+    table.add_column("Ep",      justify="right", style="bold")
+    table.add_column("Titre",   style="cyan")
+    if tout:
+        table.add_column("Lecteurs")
+    else:
+        table.add_column("Lecteur principal")
+
+    for ep in sorted(eps, key=lambda e: e.get("numero", 0)):
+        videos = ep.get("videos", [])
+        if tout:
+            lect_str = "\n".join(
+                f"[dim]{v.get('lecteur')}[/dim] {v.get('player_url') or ''}"
+                for v in videos
+            )
+        else:
+            v = videos[0] if videos else {}
+            lect_str = f"[dim]{v.get('lecteur','')}[/dim]  {v.get('player_url') or '–'}"
+
+        table.add_row(
+            str(ep.get("numero", "?")),
+            ep.get("titre") or "",
+            lect_str,
+        )
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# chapitres — chapitres d'un scan depuis la DB
+# ---------------------------------------------------------------------------
+@app.command()
+def chapitres(
+    slug:       str = typer.Argument(..., help="Slug de l'animé"),
+    scan_index: int = typer.Argument(0,   help="Index du scan (voir : py cli.py scans <slug>)"),
+    images:     bool = typer.Option(False, "--images", help="Afficher les URLs des images"),
+):
+    """
+    Affiche les chapitres d'un scan depuis la DB.
+
+    Le catalogue est récupéré en DB (scraping + sauvegarde si absent).
+    Si les chapitres ne sont pas encore synchronisés, un message guide vers sync-content.
+    """
+    with console.status(f"Chargement de [bold]{slug}[/bold]..."):
+        cat = _get_or_fetch(slug)
+
+    if not cat:
+        rprint(f"[red]Catalogue '{slug}' introuvable.[/red]")
+        raise typer.Exit(1)
+
+    scan_list = cat.get("scans", [])
+    if scan_index >= len(scan_list):
+        rprint(f"[red]Index {scan_index} invalide — {len(scan_list)} scan(s) disponible(s).[/red]")
+        raise typer.Exit(1)
+
+    scan = scan_list[scan_index]
+    chaps = scan.get("chapitres", [])
+
+    if not chaps:
+        rprint(f"[yellow]Chapitres non encore synchronisés pour "
+               f"[bold]{scan.get('nom')}[/bold].[/yellow]")
+        rprint(f"[dim]Lancez d'abord : py cli.py sync-content {slug}[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"{scan.get('nom')} — {len(chaps)} chapitre(s)")
+    table.add_column("Ch.",    justify="right", style="bold")
+    table.add_column("Titre",  style="cyan")
+    table.add_column("Images", justify="right")
+    if images:
+        table.add_column("URL première image")
+
+    for ch in sorted(chaps, key=lambda c: c.get("numero", 0)):
+        imgs = ch.get("images", [])
+        row  = [str(ch.get("numero","?")), ch.get("titre") or "", str(len(imgs))]
+        if images:
+            row.append(imgs[0] if imgs else "–")
+        table.add_row(*row)
+    console.print(table)
 
 
 # ---------------------------------------------------------------------------

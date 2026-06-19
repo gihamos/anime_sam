@@ -30,6 +30,12 @@ from services.scraper import get_episodes as scraper_get_episodes
 from services.sync_manager import sync_manager
 import db.repository as repo
 from params import BASE_SAMA_URL
+from api.dependencies import (
+    get_current_user, get_optional_user, require_admin,
+    check_can_sync, check_can_delete, check_can_refresh, check_catalogue_access,
+    decode_ws_token,
+)
+from fastapi import Depends
 
 router = APIRouter(prefix="/catalogues", tags=["Catalogues"])
 
@@ -92,7 +98,8 @@ async def sync_global_status():
 
 
 @router.post("/mettre-a-jour-tous", summary="Update tous les catalogues EN_COURS")
-async def update_all(background_tasks: BackgroundTasks):
+async def update_all(background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
+    check_can_refresh(user)
     background_tasks.add_task(mettre_a_jour_tous)
     return {"message": "Mise à jour lancée en arrière-plan"}
 
@@ -102,19 +109,33 @@ async def update_all(background_tasks: BackgroundTasks):
 # ------------------------------------------------------------------
 
 @router.get("/{slug}", summary="Catalogue complet")
-async def obtenir_catalogue(slug: str):
+async def obtenir_catalogue(
+    slug: str,
+    user: Optional[dict] = Depends(get_optional_user),
+):
     """
-    Retourne le catalogue depuis la DB. Scrape + sauvegarde si absent.
-    Les épisodes sont vides tant que `sync-content` n'a pas été appelé.
+    Retourne le catalogue depuis la DB.
+    - Authentifié : scrape + sauvegarde si absent en DB.
+    - Non authentifié : 404 si absent (pas de scraping).
     """
+    catalogue = await repo.find_by_slug(slug)
+    if catalogue:
+        return catalogue
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Authentifié → scrape + sauvegarde
     catalogue = await get_catalogue(slug)
     if not catalogue:
-        raise HTTPException(status_code=404, detail=f"Catalogue '{slug}' introuvable")
+        raise HTTPException(status_code=404, detail="Not found")
     return catalogue
 
 
 @router.post("/{slug}/rafraichir", summary="Re-scrape la structure")
-async def rafraichir(slug: str):
+async def rafraichir(slug: str, user: dict = Depends(get_current_user)):
+    check_can_refresh(user)
+    check_catalogue_access(user, slug)
     catalogue = await rafraichir_catalogue(slug)
     if not catalogue:
         raise HTTPException(status_code=404, detail=f"Impossible de rafraîchir '{slug}'")
@@ -133,7 +154,7 @@ async def sync_status(slug: str):
 
 
 @router.post("/{slug}/sync-content", summary="Démarre la sync (HTTP)")
-async def start_sync_http(slug: str):
+async def start_sync_http(slug: str, user: dict = Depends(get_current_user)):
     """
     Démarre la synchronisation de tout le contenu (saisons, films, scans).
 
@@ -145,6 +166,9 @@ async def start_sync_http(slug: str):
     Pour le suivi en temps réel, connectez-vous au WebSocket :
     `WS /catalogues/{slug}/sync-content/ws`
     """
+    check_can_sync(user)
+    check_catalogue_access(user, slug)
+
     doc = await repo.find_by_slug(slug)
     if not doc:
         raise HTTPException(status_code=404, detail=f"'{slug}' absent de la DB")
@@ -179,7 +203,11 @@ async def start_sync_http(slug: str):
 
 
 @router.websocket("/{slug}/sync-content/ws")
-async def ws_sync_episodes(websocket: WebSocket, slug: str):
+async def ws_sync_episodes(
+    websocket: WebSocket,
+    slug:      str,
+    token:     str = Query(..., description="JWT token d'authentification"),
+):
     """
     WebSocket de suivi de synchronisation.
 
@@ -205,6 +233,21 @@ async def ws_sync_episodes(websocket: WebSocket, slug: str):
       {"type": "ping"}          (keep-alive toutes les 30s)
     """
     await websocket.accept()
+
+    # Authentification WebSocket via query param ?token=
+    ws_user = await decode_ws_token(token)
+    if not ws_user:
+        await websocket.send_json({"type": "error", "reason": "auth_failed", "slug": slug})
+        await websocket.close(code=4001)
+        return
+
+    try:
+        check_can_sync(ws_user)
+        check_catalogue_access(ws_user, slug)
+    except HTTPException as e:
+        await websocket.send_json({"type": "error", "reason": e.detail, "slug": slug})
+        await websocket.close(code=4003)
+        return
 
     # Abonnement AVANT de vérifier can_start pour ne rater aucun événement
     conn_id, q = sync_manager.subscribe(slug)
@@ -275,7 +318,8 @@ async def obtenir_episodes(
 
 
 @router.delete("/{slug}", summary="Supprime un catalogue de la DB")
-async def supprimer_catalogue(slug: str):
+async def supprimer_catalogue(slug: str, user: dict = Depends(get_current_user)):
+    check_can_delete(user)
     deleted = await repo.delete_by_slug(slug)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Catalogue '{slug}' introuvable")

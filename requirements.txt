@@ -10,3 +10,6 @@ typer[all]
 apscheduler
 rich
 python-dotenv
+python-jose[cryptography]
+bcrypt
+python-multipart

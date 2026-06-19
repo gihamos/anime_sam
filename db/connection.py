@@ -24,21 +24,43 @@ def get_db() -> AsyncIOMotorDatabase:
 async def setup_indexes():
     from utils.logger import logger
     from pymongo.errors import OperationFailure
+
     try:
-        db = get_db()
+        db  = get_db()
         col = db["catalogues"]
-        await col.create_index("slug",         unique=True)
-        await col.create_index([("nom", "text"), ("titre_alternatif", "text")])
+
+        await col.create_index("slug",        unique=True)
         await col.create_index("etat")
         await col.create_index("type_contenu")
         await col.create_index("genres")
         await col.create_index("langues")
+
+        # L'index texte peut entrer en conflit avec un ancien index (ex: "name_text").
+        # On supprime l'ancien avant de recréer.
+        try:
+            await col.create_index([("nom", "text"), ("titre_alternatif", "text")])
+        except OperationFailure as e:
+            if e.code == 85:  # IndexOptionsConflict
+                logger.warning("Index texte en conflit — suppression de l'ancien index texte.")
+                try:
+                    existing = await col.index_information()
+                    for name, info in existing.items():
+                        if info.get("key", {}).get("_fts") == "text":
+                            await col.drop_index(name)
+                            logger.info(f"Ancien index texte '{name}' supprimé.")
+                    await col.create_index([("nom", "text"), ("titre_alternatif", "text")])
+                except Exception as inner_e:
+                    logger.warning(f"Impossible de recréer l'index texte : {inner_e}")
+            else:
+                raise
+
+        # Index sur la collection users
+        await db["users"].create_index("username", unique=True)
+
         logger.info("Index MongoDB créés")
+
     except OperationFailure as e:
-        logger.warning(
-            f"Impossible de créer les index MongoDB (authentification requise). "
-            f"Ajoutez vos credentials dans MONGODB_URL dans .env — {e}"
-        )
+        logger.warning(f"Index MongoDB — erreur d'authentification ou de droits : {e}")
     except ValueError as e:
         logger.error(str(e))
     except Exception as e:
