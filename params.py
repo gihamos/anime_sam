@@ -23,3 +23,6 @@ JWT_EXPIRE_MINUTES  = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24 h par d
 # Compte admin créé automatiquement au démarrage si aucun utilisateur n'existe.
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+
+API_PORT   = int(os.getenv("API_PORT",   "8000"))
+ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8001"))

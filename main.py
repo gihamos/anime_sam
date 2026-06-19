@@ -3,12 +3,13 @@ from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from utils.logger import logger
 from db.connection import setup_indexes
+from fastapi.middleware.cors import CORSMiddleware
 from api.routes.catalogues import router as catalogues_router
 from api.routes.planning import router as planning_router
 from api.routes.auth import router as auth_router
 from api.routes.admin import router as admin_router
 from services.catalogue_service import mettre_a_jour_tous
-from params import ADMIN_USERNAME, ADMIN_PASSWORD
+from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT
 
 scheduler = AsyncIOScheduler()
 
@@ -68,6 +69,14 @@ app = FastAPI(
         "5. **Planning** : `GET /planning/`\n"
     ),
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[f"http://localhost:{ADMIN_PORT}", f"http://127.0.0.1:{ADMIN_PORT}"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)
