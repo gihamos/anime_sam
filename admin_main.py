@@ -1,16 +1,10 @@
 """
 Serveur d'administration autonome (port 8001 par défaut).
 
-Lance séparément du serveur principal :
   python admin_main.py
-ou :
-  uvicorn admin_main:app --port 8001 --reload
-
-L'interface fait ses appels API vers le serveur principal (port 8000).
+  API_BASE=http://localhost:8000 ADMIN_PORT=8001 python admin_main.py
 """
-
-import os
-import uvicorn
+import os, uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
@@ -19,1107 +13,1444 @@ ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8001"))
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-# ---------------------------------------------------------------------------
-# SPA HTML
-# ---------------------------------------------------------------------------
-
 _HTML = r"""<!DOCTYPE html>
 <html lang="fr" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Anime Sama · Admin</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <style>
-/* ─── Variables de thème ──────────────────────────────────────────── */
-:root {
-  --bg:           #0f172a;
-  --surface:      #1e293b;
-  --surface2:     #263043;
-  --surface-h:    #2d3f56;
-  --border:       #334155;
-  --text:         #f1f5f9;
-  --text2:        #cbd5e1;
-  --muted:        #94a3b8;
-  --accent:       #8b5cf6;
-  --accent-h:     #7c3aed;
-  --ok:           #10b981;
-  --warn:         #f59e0b;
-  --danger:       #f43f5e;
-  --info:         #38bdf8;
-  --sidebar-w:    240px;
-  --header-h:     56px;
+:root{
+  --bg:#0f172a;--sur:#1e293b;--sur2:#263043;--surh:#2d3f56;
+  --bdr:#334155;--tx:#f1f5f9;--tx2:#cbd5e1;--mu:#94a3b8;
+  --ac:#8b5cf6;--ach:#7c3aed;
+  --ok:#10b981;--wa:#f59e0b;--er:#f43f5e;--info:#38bdf8;
+  --sbw:230px;--tbh:54px;
 }
-[data-theme="light"] {
-  --bg:           #f1f5f9;
-  --surface:      #ffffff;
-  --surface2:     #f8fafc;
-  --surface-h:    #e2e8f0;
-  --border:       #cbd5e1;
-  --text:         #0f172a;
-  --text2:        #1e293b;
-  --muted:        #64748b;
-  --accent:       #7c3aed;
-  --accent-h:     #6d28d9;
-  --ok:           #059669;
-  --warn:         #d97706;
-  --danger:       #dc2626;
-  --info:         #0284c7;
+[data-theme="light"]{
+  --bg:#f1f5f9;--sur:#fff;--sur2:#f8fafc;--surh:#e2e8f0;
+  --bdr:#cbd5e1;--tx:#0f172a;--tx2:#1e293b;--mu:#64748b;
+  --ac:#7c3aed;--ach:#6d28d9;
+  --ok:#059669;--wa:#d97706;--er:#dc2626;--info:#0284c7;
 }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,sans-serif}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}
 
-/* ─── Base ────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; }
-a { color:var(--accent); text-decoration:none; }
-a:hover { color:var(--accent-h); }
-::-webkit-scrollbar { width:6px; height:6px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+/* Layout */
+#shell{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:var(--sbw);flex-shrink:0;background:var(--sur);border-right:1px solid var(--bdr);display:flex;flex-direction:column}
+#main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+#topbar{height:var(--tbh);flex-shrink:0;background:var(--sur);border-bottom:1px solid var(--bdr);display:flex;align-items:center;padding:0 1.5rem;gap:.75rem}
+#content{flex:1;overflow-y:auto;padding:1.25rem 1.75rem;display:flex;flex-direction:column}
 
-/* ─── Layout ──────────────────────────────────────────────────────── */
-#shell { display:flex; height:100vh; overflow:hidden; }
-#sidebar {
-  width:var(--sidebar-w); flex-shrink:0;
-  background:var(--surface); border-right:1px solid var(--border);
-  display:flex; flex-direction:column; overflow:hidden;
-}
-#main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
-#topbar {
-  height:var(--header-h); flex-shrink:0;
-  background:var(--surface); border-bottom:1px solid var(--border);
-  display:flex; align-items:center; padding:0 1.5rem; gap:1rem;
-}
-#content { flex:1; overflow-y:auto; padding:1.5rem 2rem; }
+/* Sidebar */
+.sb-brand{padding:.85rem 1rem .65rem;border-bottom:1px solid var(--bdr)}
+.sb-brand .t{font-size:.9rem;font-weight:700;color:var(--ac)}.sb-brand .s{font-size:.7rem;color:var(--mu)}
+.sb-nav{flex:1;padding:.6rem .4rem;overflow-y:auto}
+.ni{display:flex;align-items:center;gap:.55rem;padding:.45rem .7rem;border-radius:7px;cursor:pointer;color:var(--mu);font-size:.85rem;font-weight:500;transition:background .12s,color .12s;user-select:none}
+.ni:hover{background:var(--surh);color:var(--tx2)}.ni.active{background:rgba(139,92,246,.14);color:var(--ac)}
+.sb-foot{padding:.65rem .9rem;border-top:1px solid var(--bdr);font-size:.76rem;color:var(--mu)}
+.sb-foot .me{margin-bottom:.35rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* ─── Sidebar ─────────────────────────────────────────────────────── */
-.sb-brand {
-  padding:1rem 1rem .75rem;
-  border-bottom:1px solid var(--border);
-}
-.sb-brand .title { font-size:.9rem; font-weight:700; color:var(--accent); }
-.sb-brand .sub   { font-size:.72rem; color:var(--muted); }
+/* Topbar */
+#topbar h1{font-size:.95rem;font-weight:600;margin:0;flex:1}
+#sync-badge{display:none;background:rgba(56,189,248,.14);color:var(--info);border:1px solid rgba(56,189,248,.25);border-radius:999px;padding:.18rem .6rem;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap}
 
-.sb-nav { flex:1; padding:.75rem .5rem; overflow-y:auto; }
-.nav-item {
-  display:flex; align-items:center; gap:.6rem;
-  padding:.5rem .75rem; border-radius:8px; cursor:pointer;
-  color:var(--muted); font-size:.875rem; font-weight:500;
-  transition:background .15s, color .15s; user-select:none;
-}
-.nav-item:hover { background:var(--surface-h); color:var(--text2); }
-.nav-item.active { background:rgba(139,92,246,.15); color:var(--accent); }
-.nav-item .icon { font-size:1rem; width:20px; text-align:center; }
+/* Buttons */
+.btn{border:none;border-radius:7px;font-size:.8rem;font-weight:500;padding:.38rem .8rem;cursor:pointer;transition:background .12s,opacity .12s;display:inline-flex;align-items:center;gap:.35rem;line-height:1.4}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--ac);color:#fff}.btn-primary:hover{background:var(--ach)}
+.btn-secondary{background:var(--sur2);color:var(--tx2);border:1px solid var(--bdr)}.btn-secondary:hover{background:var(--surh)}
+.btn-danger{background:rgba(244,63,94,.1);color:var(--er);border:1px solid rgba(244,63,94,.2)}.btn-danger:hover{background:rgba(244,63,94,.2)}
+.btn-warn{background:rgba(245,158,11,.1);color:var(--wa);border:1px solid rgba(245,158,11,.2)}.btn-warn:hover{background:rgba(245,158,11,.2)}
+.btn-ok{background:rgba(16,185,129,.1);color:var(--ok);border:1px solid rgba(16,185,129,.2)}.btn-ok:hover{background:rgba(16,185,129,.2)}
+.btn-info{background:rgba(56,189,248,.1);color:var(--info);border:1px solid rgba(56,189,248,.2)}.btn-info:hover{background:rgba(56,189,248,.2)}
+.btn-ghost{background:transparent;color:var(--mu);padding:.3rem .45rem}.btn-ghost:hover{background:var(--sur2);color:var(--tx)}
+.btn-sm{font-size:.75rem;padding:.28rem .55rem}.btn-icon{padding:.3rem .4rem;border-radius:6px}
 
-.sb-footer {
-  padding:.75rem 1rem; border-top:1px solid var(--border);
-  font-size:.78rem; color:var(--muted);
-}
-.sb-footer .me { margin-bottom:.4rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* Filter bar */
+.fbar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;background:var(--sur);border:1px solid var(--bdr);border-radius:9px;padding:.55rem .85rem;margin-bottom:.85rem}
+.fbar input,.fbar select{background:var(--sur2);border:1px solid var(--bdr);color:var(--tx);border-radius:6px;padding:.3rem .65rem;font-size:.8rem;outline:none;transition:border .12s}
+.fbar input:focus,.fbar select:focus{border-color:var(--ac)}
+.fbar input{flex:1;min-width:150px}.fbar select{min-width:120px}
 
-/* ─── Topbar ──────────────────────────────────────────────────────── */
-#topbar h1 { font-size:1rem; font-weight:600; margin:0; flex:1; }
-.topbar-actions { display:flex; align-items:center; gap:.5rem; }
+/* Table */
+.dtw{background:var(--sur);border:1px solid var(--bdr);border-radius:11px;overflow:hidden}
+.dt{width:100%;border-collapse:collapse}
+.dt thead tr{background:var(--sur2)}
+.dt thead th{padding:.6rem .85rem;font-size:.73rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr);white-space:nowrap}
+.dt tbody td{padding:.6rem .85rem;font-size:.82rem;border-bottom:1px solid var(--bdr);vertical-align:middle}
+.dt tbody tr:last-child td{border-bottom:none}
+.dt tbody tr:hover td{background:var(--surh)}
+.actions{display:flex;gap:.3rem;flex-wrap:nowrap}
 
-/* ─── Buttons ─────────────────────────────────────────────────────── */
-.btn { border:none; border-radius:8px; font-size:.825rem; font-weight:500;
-       padding:.4rem .85rem; cursor:pointer; transition:background .15s, opacity .15s;
-       display:inline-flex; align-items:center; gap:.4rem; }
-.btn:disabled { opacity:.45; cursor:not-allowed; }
-.btn-primary   { background:var(--accent); color:#fff; }
-.btn-primary:hover   { background:var(--accent-h); }
-.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
-.btn-secondary:hover { background:var(--surface-h); }
-.btn-danger  { background:rgba(244,63,94,.12); color:var(--danger); border:1px solid rgba(244,63,94,.2); }
-.btn-danger:hover { background:rgba(244,63,94,.22); }
-.btn-ghost   { background:transparent; color:var(--muted); padding:.3rem .5rem; }
-.btn-ghost:hover { background:var(--surface2); color:var(--text); }
-.btn-icon    { padding:.35rem .45rem; border-radius:6px; }
-.btn-sm      { font-size:.78rem; padding:.3rem .65rem; }
+/* Badge */
+.badge{display:inline-block;border-radius:999px;padding:.18rem .55rem;font-size:.7rem;font-weight:600;white-space:nowrap}
+.b-ac{background:rgba(139,92,246,.14);color:var(--ac)}.b-ok{background:rgba(16,185,129,.14);color:var(--ok)}
+.b-wa{background:rgba(245,158,11,.14);color:var(--wa)}.b-er{background:rgba(244,63,94,.14);color:var(--er)}
+.b-info{background:rgba(56,189,248,.14);color:var(--info)}.b-mu{background:var(--sur2);color:var(--mu)}
 
-/* ─── Filter bar ──────────────────────────────────────────────────── */
-.filter-bar {
-  display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:.6rem .9rem; margin-bottom:1rem;
-}
-.filter-bar input, .filter-bar select {
-  background:var(--surface2); border:1px solid var(--border);
-  color:var(--text); border-radius:7px; padding:.35rem .7rem; font-size:.825rem;
-  outline:none; transition:border .15s;
-}
-.filter-bar input:focus, .filter-bar select:focus { border-color:var(--accent); }
-.filter-bar input { flex:1; min-width:160px; }
-.filter-bar select { min-width:130px; }
+/* Avatar */
+.av{width:30px;height:30px;border-radius:50%;background:rgba(139,92,246,.18);color:var(--ac);font-weight:700;font-size:.72rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.avc{width:30px;height:30px;border-radius:50%;background:rgba(56,189,248,.15);color:var(--info);font-weight:700;font-size:.72rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 
-/* ─── Tables ──────────────────────────────────────────────────────── */
-.data-table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-.data-table { width:100%; border-collapse:collapse; }
-.data-table thead tr { background:var(--surface2); }
-.data-table thead th {
-  padding:.7rem 1rem; font-size:.78rem; font-weight:600;
-  color:var(--muted); text-transform:uppercase; letter-spacing:.04em;
-  border-bottom:1px solid var(--border); white-space:nowrap;
-}
-.data-table tbody td { padding:.7rem 1rem; font-size:.85rem; border-bottom:1px solid var(--border); vertical-align:middle; }
-.data-table tbody tr:last-child td { border-bottom:none; }
-.data-table tbody tr:hover td { background:var(--surface-h); }
-.data-table .actions { display:flex; gap:.4rem; }
+/* Perms */
+.pc{display:inline-flex;align-items:center;gap:.2rem;padding:.12rem .4rem;border-radius:4px;font-size:.7rem;font-weight:500;background:var(--sur2);color:var(--mu)}
+.pc.on{background:rgba(16,185,129,.1);color:var(--ok)}
+.tag{display:inline-block;padding:.12rem .45rem;border-radius:4px;font-size:.7rem;background:var(--sur2);color:var(--tx2);margin:1px}
 
-/* ─── Badges ──────────────────────────────────────────────────────── */
-.badge {
-  display:inline-block; border-radius:999px; padding:.2rem .6rem;
-  font-size:.72rem; font-weight:600; white-space:nowrap;
-}
-.badge-accent   { background:rgba(139,92,246,.15); color:var(--accent); }
-.badge-ok       { background:rgba(16,185,129,.15);  color:var(--ok); }
-.badge-warn     { background:rgba(245,158,11,.15);  color:var(--warn); }
-.badge-danger   { background:rgba(244,63,94,.15);   color:var(--danger); }
-.badge-info     { background:rgba(56,189,248,.15);  color:var(--info); }
-.badge-muted    { background:var(--surface2); color:var(--muted); }
+/* Login */
+#login-page{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100}
+.lcard{width:370px;background:var(--sur);border:1px solid var(--bdr);border-radius:14px;padding:1.75rem;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.lcard h2{text-align:center;font-size:1.15rem;font-weight:700;margin-bottom:1.4rem}
 
-/* ─── Avatar initiales ────────────────────────────────────────────── */
-.avatar {
-  width:32px; height:32px; border-radius:50%; background:rgba(139,92,246,.2);
-  color:var(--accent); font-weight:700; font-size:.75rem;
-  display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
-}
+/* Form */
+.fg{margin-bottom:.85rem}
+.fg label{display:block;font-size:.78rem;font-weight:500;color:var(--tx2);margin-bottom:.3rem}
+.fc,.fs{width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--tx);border-radius:7px;padding:.45rem .7rem;font-size:.85rem;outline:none;transition:border .12s}
+.fc:focus,.fs:focus{border-color:var(--ac)}.fc::placeholder{color:var(--mu)}
+textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
+.fcheck{display:flex;align-items:center;gap:.45rem;cursor:pointer}
+.fcheck input[type=checkbox]{width:15px;height:15px;border-radius:3px;accent-color:var(--ac);cursor:pointer;flex-shrink:0}
+.fsw{display:flex;align-items:center;gap:.55rem;cursor:pointer}
+.fsw input[type=checkbox]{width:32px;height:17px;appearance:none;border-radius:999px;background:var(--bdr);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.fsw input:checked{background:var(--ac)}
+.fsw input::after{content:'';position:absolute;width:11px;height:11px;background:#fff;border-radius:50%;top:3px;left:3px;transition:left .18s}
+.fsw input:checked::after{left:18px}
 
-/* ─── Perm chips ──────────────────────────────────────────────────── */
-.perm-chip {
-  display:inline-flex; align-items:center; gap:.25rem;
-  padding:.15rem .45rem; border-radius:5px; font-size:.72rem; font-weight:500;
-  background:var(--surface2); color:var(--muted);
-}
-.perm-chip.on  { background:rgba(16,185,129,.12); color:var(--ok); }
-.perm-chip.off { opacity:.4; }
+/* Modal */
+.mbk{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem}
+.mbox{background:var(--sur);border:1px solid var(--bdr);border-radius:13px;width:100%;box-shadow:0 25px 80px rgba(0,0,0,.55);display:flex;flex-direction:column;max-height:90vh;animation:mi .17s ease-out}
+@keyframes mi{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+.mbox.sm{max-width:480px}.mbox.md{max-width:640px}.mbox.lg{max-width:820px}.mbox.xl{max-width:1000px}
+.mhd{display:flex;align-items:center;padding:.9rem 1.1rem;border-bottom:1px solid var(--bdr);gap:.65rem;flex-shrink:0}
+.mhd h3{margin:0;font-size:.95rem;font-weight:600;flex:1}
+.mbd{padding:1.1rem;overflow-y:auto;flex:1}.mft{display:flex;justify-content:flex-end;gap:.5rem;padding:.85rem 1.1rem;border-top:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap}
 
-/* ─── Genre tags ──────────────────────────────────────────────────── */
-.tag {
-  display:inline-block; padding:.15rem .5rem; border-radius:5px;
-  font-size:.72rem; background:var(--surface2); color:var(--text2);
-  margin:1px;
-}
+/* Alerts */
+.alert{padding:.55rem .8rem;border-radius:7px;font-size:.8rem;margin-bottom:.65rem}
+.a-er{background:rgba(244,63,94,.1);color:var(--er);border:1px solid rgba(244,63,94,.2)}
+.a-ok{background:rgba(16,185,129,.1);color:var(--ok);border:1px solid rgba(16,185,129,.2)}
+.a-wa{background:rgba(245,158,11,.1);color:var(--wa);border:1px solid rgba(245,158,11,.2)}
+.a-info{background:rgba(56,189,248,.1);color:var(--info);border:1px solid rgba(56,189,248,.2)}
 
-/* ─── Page header ─────────────────────────────────────────────────── */
-.page-header { display:flex; align-items:center; gap:1rem; margin-bottom:1.25rem; }
-.page-header h2 { margin:0; font-size:1.15rem; font-weight:700; flex:1; }
+/* Secret reveal box */
+.secret-box{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:.65rem .85rem;font-family:monospace;font-size:.82rem;word-break:break-all;position:relative}
+.secret-box .s-label{font-size:.7rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+.secret-val{color:var(--ok);font-weight:600}
 
-/* ─── Empty state ─────────────────────────────────────────────────── */
-.empty-state { text-align:center; padding:3rem 1rem; color:var(--muted); }
-.empty-state .icon { font-size:2.5rem; margin-bottom:.75rem; }
+/* Progress */
+.prog-wrap{height:8px;background:var(--bdr);border-radius:4px;overflow:hidden;margin:.55rem 0}
+.prog-fill{height:100%;border-radius:4px;transition:width .35s,background .3s;width:0;background:var(--ac)}
+.prog-fill.paused{background:var(--wa)}.prog-fill.done{background:var(--ok)}.prog-fill.er{background:var(--er)}.prog-fill.cancelled{background:var(--mu)}
 
-/* ─── Login ───────────────────────────────────────────────────────── */
-#login-page {
-  position:fixed; inset:0; background:var(--bg);
-  display:flex; align-items:center; justify-content:center; z-index:100;
-}
-.login-card {
-  width:380px; background:var(--surface); border:1px solid var(--border);
-  border-radius:16px; padding:2rem; box-shadow:0 20px 60px rgba(0,0,0,.4);
-}
-.login-card h2 { text-align:center; font-size:1.25rem; font-weight:700; margin-bottom:1.5rem; }
-.login-card .logo { color:var(--accent); }
+/* Sync */
+.sync-ctrl{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.6rem 0}
+.sync-log{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:.6rem .8rem;font-size:.74rem;font-family:monospace;color:var(--tx2);max-height:190px;overflow-y:auto;margin-top:.5rem}
+.sl-ok{color:var(--ok)}.sl-skip{color:var(--mu)}.sl-run{color:var(--info)}.sl-er{color:var(--er)}.sl-pause{color:var(--wa)}.sl-cancel{color:var(--er)}
 
-/* ─── Form controls ───────────────────────────────────────────────── */
-.form-group { margin-bottom:1rem; }
-.form-group label { display:block; font-size:.8rem; font-weight:500; color:var(--text2); margin-bottom:.35rem; }
-.form-control, .form-select {
-  width:100%; background:var(--surface2); border:1px solid var(--border);
-  color:var(--text); border-radius:8px; padding:.5rem .75rem; font-size:.875rem;
-  outline:none; transition:border .15s;
-}
-.form-control:focus, .form-select:focus { border-color:var(--accent); }
-.form-control::placeholder { color:var(--muted); }
-.form-check { display:flex; align-items:center; gap:.5rem; cursor:pointer; }
-.form-check input[type=checkbox] {
-  width:16px; height:16px; border-radius:4px; border:2px solid var(--border);
-  background:var(--surface2); cursor:pointer; flex-shrink:0;
-  accent-color:var(--accent);
-}
-.form-switch { display:flex; align-items:center; gap:.6rem; cursor:pointer; }
-.form-switch input[type=checkbox] {
-  width:34px; height:18px; appearance:none; border-radius:999px;
-  background:var(--border); cursor:pointer; position:relative; transition:background .2s; flex-shrink:0;
-}
-.form-switch input[type=checkbox]:checked { background:var(--accent); }
-.form-switch input[type=checkbox]::after {
-  content:''; position:absolute; width:12px; height:12px;
-  background:#fff; border-radius:50%; top:3px; left:3px; transition:left .2s;
-}
-.form-switch input[type=checkbox]:checked::after { left:19px; }
+/* Background syncs bar */
+#bg-bar{flex-shrink:0;margin-top:auto;border-top:1px solid var(--bdr);padding-top:.65rem;display:none}
+#bg-bar .bbt{font-size:.73rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem}
+.bg-item{display:flex;align-items:center;gap:.55rem;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:.45rem .7rem;margin-bottom:.35rem}
+.bg-item .bi-slug{font-weight:600;font-size:.8rem;min-width:100px}
+.bg-item .bi-pct{font-size:.75rem;color:var(--mu);min-width:30px;text-align:right}
+.bg-item .mini-prog{flex:1;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden;min-width:60px}
+.bg-item .mini-fill{height:100%;border-radius:3px;transition:width .3s,background .3s;background:var(--ac)}.bg-item .mini-fill.paused{background:var(--wa)}
 
-/* ─── Modals ──────────────────────────────────────────────────────── */
-.modal-backdrop {
-  position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200;
-  display:flex; align-items:center; justify-content:center; padding:1rem;
-}
-.modal-box {
-  background:var(--surface); border:1px solid var(--border); border-radius:14px;
-  width:100%; box-shadow:0 25px 80px rgba(0,0,0,.5);
-  display:flex; flex-direction:column; max-height:90vh;
-  animation:modal-in .18s ease-out;
-}
-@keyframes modal-in { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
-.modal-box.sm { max-width:480px; }
-.modal-box.md { max-width:640px; }
-.modal-box.lg { max-width:820px; }
-.modal-head {
-  display:flex; align-items:center; padding:1rem 1.25rem;
-  border-bottom:1px solid var(--border); gap:.75rem; flex-shrink:0;
-}
-.modal-head h3 { margin:0; font-size:1rem; font-weight:600; flex:1; }
-.modal-body { padding:1.25rem; overflow-y:auto; flex:1; }
-.modal-foot {
-  display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.25rem;
-  border-top:1px solid var(--border); flex-shrink:0;
-}
+/* Cat access */
+.car{border:1px solid var(--bdr);border-radius:9px;overflow:hidden;margin-bottom:.4rem}
+.cah{display:flex;align-items:center;gap:.65rem;padding:.55rem .8rem;background:var(--sur2);cursor:pointer;user-select:none}
+.cah:hover{background:var(--surh)}.cab{padding:.65rem .8rem;border-top:1px solid var(--bdr);display:none}.cab.open{display:block}
+.cs label{font-size:.74rem;font-weight:600;color:var(--mu);display:block;margin-bottom:.3rem}
+.pills{display:flex;flex-wrap:wrap;gap:.3rem}
+.pill{display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .55rem;border-radius:5px;font-size:.74rem;background:var(--sur2);border:1px solid var(--bdr);cursor:pointer;transition:background .1s,border .1s}
+.pill:has(input:checked){background:rgba(139,92,246,.14);border-color:var(--ac);color:var(--ac)}
+.pill input{display:none}
 
-/* ─── Alert ───────────────────────────────────────────────────────── */
-.alert { padding:.6rem .9rem; border-radius:8px; font-size:.825rem; margin-bottom:.75rem; }
-.alert-danger  { background:rgba(244,63,94,.1); color:var(--danger); border:1px solid rgba(244,63,94,.2); }
-.alert-success { background:rgba(16,185,129,.1); color:var(--ok); border:1px solid rgba(16,185,129,.2); }
+/* Tags éditables */
+.tag-box{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.35rem .5rem;min-height:38px}
+.tag-box:focus-within{border-color:var(--ac)}
+.etag{display:inline-flex;align-items:center;gap:.25rem;background:rgba(139,92,246,.12);color:var(--ac);border-radius:4px;padding:.15rem .45rem;font-size:.75rem}
+.etag button{background:none;border:none;color:inherit;cursor:pointer;padding:0;line-height:1;font-size:.8rem}
+.tag-input{background:none;border:none;outline:none;color:var(--tx);font-size:.82rem;min-width:80px;flex:1}
+.tag-input::placeholder{color:var(--mu)}
 
-/* ─── Section d'accès catalogue ──────────────────────────────────── */
-.cat-access-row {
-  border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:.5rem;
-}
-.cat-access-head {
-  display:flex; align-items:center; gap:.75rem; padding:.6rem .9rem;
-  background:var(--surface2); cursor:pointer; user-select:none;
-}
-.cat-access-head:hover { background:var(--surface-h); }
-.cat-access-body { padding:.75rem .9rem; border-top:1px solid var(--border); display:none; }
-.cat-access-body.open { display:block; }
-.content-section { margin-bottom:.75rem; }
-.content-section label { font-size:.78rem; font-weight:600; color:var(--muted); display:block; margin-bottom:.4rem; }
-.content-pills { display:flex; flex-wrap:wrap; gap:.35rem; }
-.pill-check {
-  display:inline-flex; align-items:center; gap:.3rem;
-  padding:.25rem .6rem; border-radius:6px; font-size:.78rem;
-  background:var(--surface2); border:1px solid var(--border);
-  cursor:pointer; transition:background .1s, border .1s;
-}
-.pill-check:has(input:checked) { background:rgba(139,92,246,.15); border-color:var(--accent); color:var(--accent); }
-.pill-check input { display:none; }
+/* Content viewer */
+.ctabs{display:flex;gap:0;border-bottom:2px solid var(--bdr);margin-bottom:1rem}
+.ctab{padding:.45rem 1rem;font-size:.83rem;font-weight:500;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .12s,border-color .12s}
+.ctab:hover{color:var(--tx2)}.ctab.active{color:var(--ac);border-bottom-color:var(--ac)}
+.ctab-content{display:none}.ctab-content.active{display:block}
+.citem{border:1px solid var(--bdr);border-radius:9px;margin-bottom:.5rem;overflow:hidden}
+.citem-head{display:flex;align-items:center;gap:.6rem;padding:.6rem .85rem;background:var(--sur2);cursor:pointer;user-select:none}
+.citem-head:hover{background:var(--surh)}.citem-head .ci-nom{font-weight:600;font-size:.85rem;flex:1}.citem-head .ci-count{font-size:.78rem;color:var(--mu)}
+.citem-body{padding:.75rem .85rem;border-top:1px solid var(--bdr);display:none}.citem-body.open{display:block}.citem-body.unsynced{color:var(--mu);font-size:.82rem;text-align:center;padding:1rem}
+.ep-grid{display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.35rem}
+.ep-chip{display:inline-block;min-width:32px;padding:.15rem .25rem;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:4px;font-size:.7rem;text-align:center;color:var(--ok);font-family:monospace}
+.ep-chip.chap{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--ac)}
+.ep-more{display:inline-block;padding:.15rem .5rem;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;font-size:.7rem;color:var(--mu);cursor:pointer;margin-top:.2rem}
+.ep-more:hover{background:var(--surh)}.lecteur-pill{display:inline-flex;align-items:center;gap:.3rem;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;padding:.2rem .5rem;font-size:.75rem;margin:.15rem}
 
-/* ─── Vis section ─────────────────────────────────────────────────── */
-.vis-section { border:1px solid var(--border); border-radius:10px; padding:.85rem 1rem; margin-bottom:.75rem; }
-.vis-section h5 { font-size:.875rem; font-weight:600; margin-bottom:.75rem; }
+/* Search results */
+.sr-item{display:flex;align-items:center;gap:.65rem;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--bdr);background:var(--sur2);margin-bottom:.35rem;cursor:pointer;transition:background .1s,border-color .1s}
+.sr-item:hover{background:var(--surh);border-color:var(--ac)}.sr-item.selected{background:rgba(139,92,246,.12);border-color:var(--ac)}
+.sr-img{width:38px;height:54px;border-radius:4px;object-fit:cover;flex-shrink:0;background:var(--bdr)}
+.sr-nom{font-weight:600;font-size:.85rem;flex:1}.sr-slug{font-size:.73rem;color:var(--mu);font-family:monospace}
+.search-sep{text-align:center;font-size:.75rem;color:var(--mu);margin:.75rem 0;position:relative}
+.search-sep::before,.search-sep::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:var(--bdr)}
+.search-sep::before{left:0}.search-sep::after{right:0}
 
-/* ─── Divider ─────────────────────────────────────────────────────── */
-.divider { border-top:1px solid var(--border); margin:1rem 0; }
+/* Misc */
+.div{border-top:1px solid var(--bdr);margin:.85rem 0}
+.empty{text-align:center;padding:2.5rem;color:var(--mu)}.empty .ic{font-size:2rem;margin-bottom:.5rem}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--ac);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mono{font-family:monospace;font-size:.82rem;color:var(--info);background:rgba(56,189,248,.07);padding:.1rem .35rem;border-radius:4px;word-break:break-all}
 
-/* ─── Toast ───────────────────────────────────────────────────────── */
-#toast-wrap { position:fixed; bottom:1.5rem; right:1.5rem; z-index:300; display:flex; flex-direction:column; gap:.5rem; }
-.toast {
-  padding:.65rem 1rem; border-radius:9px; font-size:.825rem; font-weight:500;
-  box-shadow:0 4px 20px rgba(0,0,0,.3); animation:toast-in .2s ease-out; min-width:220px;
-  display:flex; align-items:center; gap:.5rem;
-}
-@keyframes toast-in { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:none; } }
-.toast-ok   { background:#134e3a; color:#6ee7b7; border:1px solid #065f46; }
-.toast-err  { background:#4c0519; color:#fda4af; border:1px solid #881337; }
-.toast-info { background:#0c2a4a; color:#7dd3fc; border:1px solid #075985; }
+/* Planning / History */
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem}
+.section-hd h2{font-size:.88rem;font-weight:700;margin:0;color:var(--tx2)}
+.htable-wrap{background:var(--sur);border:1px solid var(--bdr);border-radius:11px;overflow:hidden;margin-bottom:1.25rem}
+.status-chip{display:inline-flex;align-items:center;gap:.25rem;padding:.18rem .5rem;border-radius:5px;font-size:.72rem;font-weight:600}
+.sc-completed{background:rgba(16,185,129,.12);color:var(--ok)}.sc-cancelled{background:var(--sur2);color:var(--mu)}.sc-error{background:rgba(244,63,94,.1);color:var(--er)}.sc-running{background:rgba(56,189,248,.1);color:var(--info)}
+.quota-used{font-size:.72rem;color:var(--mu)}.quota-warn{color:var(--wa)!important}
 
-/* ─── Theme toggle ────────────────────────────────────────────────── */
-#theme-btn { font-size:1.1rem; }
+/* Block badge */
+.b-block{background:rgba(244,63,94,.12);color:var(--er);border:1px solid rgba(244,63,94,.25)}
+.blocked-banner{background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.2);border-radius:7px;padding:.5rem .7rem;font-size:.8rem;color:var(--er);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
+
+/* Toasts */
+#toasts{position:fixed;bottom:1.25rem;right:1.25rem;z-index:300;display:flex;flex-direction:column;gap:.4rem}
+.toast{padding:.6rem .9rem;border-radius:8px;font-size:.8rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.3);animation:ti .18s ease-out;min-width:210px;display:flex;align-items:center;gap:.45rem}
+@keyframes ti{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+.t-ok{background:#0d3d2b;color:#6ee7b7;border:1px solid #065f46}
+.t-er{background:#3d0d1b;color:#fda4af;border:1px solid #881337}
+.t-info{background:#0c2a4a;color:#7dd3fc;border:1px solid #075985}
+.t-wa{background:#3d2a00;color:#fde68a;border:1px solid #92400e}
 </style>
 </head>
 <body>
 
-<!-- ══════════════════ LOGIN ══════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="login-page">
-  <div class="login-card">
-    <h2><span class="logo">★</span> Anime Sama Admin</h2>
-    <div id="login-err" class="alert alert-danger" style="display:none"></div>
-    <div class="form-group">
-      <label>Nom d'utilisateur</label>
-      <input id="l-user" class="form-control" placeholder="admin" autocomplete="username">
-    </div>
-    <div class="form-group">
-      <label>Mot de passe</label>
-      <input id="l-pass" class="form-control" type="password" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:.6rem" onclick="doLogin()">
-      Connexion
-    </button>
+  <div class="lcard">
+    <h2>★ Anime Sama Admin</h2>
+    <div id="lerr" class="alert a-er" style="display:none"></div>
+    <div class="fg"><label>Nom d'utilisateur</label><input id="lu" class="fc" placeholder="admin"></div>
+    <div class="fg"><label>Mot de passe</label><input id="lp" class="fc" type="password"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:.55rem" onclick="doLogin()">Connexion</button>
   </div>
 </div>
 
-<!-- ══════════════════ SHELL ══════════════════════════════════════════ -->
+<!-- SHELL -->
 <div id="shell" style="display:none">
-  <!-- Sidebar -->
   <aside id="sidebar">
-    <div class="sb-brand">
-      <div class="title">★ Anime Sama</div>
-      <div class="sub">Administration</div>
-    </div>
+    <div class="sb-brand"><div class="t">★ Anime Sama</div><div class="s">Administration</div></div>
     <nav class="sb-nav">
-      <div class="nav-item active" data-tab="users" onclick="switchTab(this)">
-        <span class="icon">👥</span> Utilisateurs
-      </div>
-      <div class="nav-item" data-tab="catalogues" onclick="switchTab(this)">
-        <span class="icon">📚</span> Catalogues
-      </div>
+      <div class="ni active" data-tab="users"     onclick="switchTab(this)"><span>👥</span> Utilisateurs</div>
+      <div class="ni"        data-tab="catalogues" onclick="switchTab(this)"><span>📚</span> Catalogues</div>
+      <div class="ni"        data-tab="apps"       onclick="switchTab(this)"><span>🔌</span> Applications</div>
+      <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
     </nav>
-    <div class="sb-footer">
-      <div class="me" id="me-label"></div>
-      <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;margin-bottom:.4rem"
-              id="theme-btn" onclick="toggleTheme()">🌙 Thème clair</button>
-      <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="logout()">
-        ↩ Déconnexion
-      </button>
+    <div class="sb-foot">
+      <div class="me" id="me-lbl"></div>
+      <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;margin-bottom:.35rem" onclick="toggleTheme()" id="tbtn">☀️ Thème clair</button>
+      <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="logout()">↩ Déconnexion</button>
     </div>
   </aside>
-
-  <!-- Main -->
   <div id="main">
     <div id="topbar">
-      <h1 id="topbar-title">Utilisateurs</h1>
-      <div class="topbar-actions" id="topbar-actions"></div>
+      <h1 id="tb-title">Utilisateurs</h1>
+      <span id="sync-badge" onclick="goToCatalogues()"></span>
+      <div id="tb-actions"></div>
     </div>
     <div id="content">
 
-      <!-- ── Tab : Utilisateurs ───────────────────────────────────── -->
+      <!-- USERS -->
       <div id="tab-users">
-        <div class="filter-bar">
-          <input id="user-q" placeholder="🔍  Rechercher un utilisateur…" oninput="filterUsers()">
-          <select onchange="filterUsers()" id="user-role-filter">
-            <option value="">Tous les rôles</option>
-            <option value="admin">Admin</option>
-            <option value="user">Utilisateur</option>
+        <div class="fbar">
+          <input id="uq" placeholder="🔍 Rechercher…" oninput="filterUsers()">
+          <select onchange="filterUsers()" id="uf-role">
+            <option value="">Tous les rôles</option><option value="admin">Admin</option><option value="user">Utilisateur</option>
           </select>
         </div>
-        <div class="data-table-wrap">
-          <table class="data-table">
-            <thead><tr>
-              <th>Utilisateur</th>
-              <th>Rôle</th>
-              <th>Statut</th>
-              <th>Permissions</th>
-              <th>Accès catalogues</th>
-              <th>Actions</th>
-            </tr></thead>
-            <tbody id="users-body">
-              <tr><td colspan="6"><div class="empty-state"><div class="icon">⏳</div>Chargement…</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="dtw"><table class="dt">
+          <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Statut</th><th>Permissions</th><th>Accès catalogues</th><th>Actions</th></tr></thead>
+          <tbody id="utbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
       </div>
 
-      <!-- ── Tab : Catalogues ─────────────────────────────────────── -->
+      <!-- CATALOGUES -->
       <div id="tab-catalogues" style="display:none">
-        <div class="filter-bar">
-          <input id="cat-q" placeholder="🔍  Rechercher un catalogue…" oninput="filterCatalogues()">
-          <select id="cat-vis" onchange="filterCatalogues()">
-            <option value="">Toute visibilité</option>
-            <option value="public">Public</option>
-            <option value="prive">Privé</option>
-            <option value="partiel">Partiel</option>
+        <div class="fbar">
+          <input id="cq" placeholder="🔍 Rechercher nom ou slug…" oninput="filterCats()">
+          <select id="cf-vis" onchange="filterCats()"><option value="">Toute visibilité</option><option value="public">Public</option><option value="prive">Privé</option><option value="partiel">Partiel</option></select>
+          <select id="cf-etat" onchange="filterCats()"><option value="">Tout état</option><option value="en_cours">En cours</option><option value="termine">Terminé</option><option value="abandonne">Abandonné</option></select>
+          <select id="cf-sync" onchange="filterCats()"><option value="">Toute sync</option><option value="no">Non synchronisé</option><option value="yes">Synchronisé</option></select>
+          <select id="cf-genre" onchange="filterCats()"><option value="">Tous les genres</option></select>
+        </div>
+        <div class="dtw"><table class="dt">
+          <thead><tr><th>Catalogue</th><th>Type</th><th>Contenu</th><th>État</th><th>Sync</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+          <tbody id="ctbody"><tr><td colspan="7"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
+        <div id="bg-bar"><div class="bbt">⟳ Synchronisations en arrière-plan</div><div id="bg-list"></div></div>
+      </div>
+
+      <!-- APPLICATIONS -->
+      <div id="tab-apps" style="display:none">
+        <div class="alert a-info" style="margin-bottom:.85rem">
+          <strong>Clients API tiers</strong> — Ces applications s'authentifient via <code>POST /auth/client-token</code> avec leur <code>client_id</code> + <code>client_secret</code>.
+        </div>
+        <div class="fbar">
+          <input id="aq" placeholder="🔍 Rechercher par nom…" oninput="filterApps()">
+          <select id="af-status" onchange="filterApps()"><option value="">Tous statuts</option><option value="active">Actif</option><option value="inactive">Inactif</option></select>
+        </div>
+        <div class="dtw"><table class="dt">
+          <thead><tr><th>Application</th><th>Client ID</th><th>Statut</th><th>Permissions</th><th>Accès catalogues</th><th>Actions</th></tr></thead>
+          <tbody id="atbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- PLANIFICATION -->
+      <div id="tab-planning" style="display:none">
+
+        <!-- Programmations automatiques -->
+        <div class="section-hd">
+          <h2>📅 Programmations automatiques</h2>
+          <button class="btn btn-primary btn-sm" onclick="openCreateSchedule()">+ Nouvelle programmation</button>
+        </div>
+        <div class="htable-wrap"><table class="dt">
+          <thead><tr><th>Catalogue</th><th>Fréquence</th><th>Prochaine exécution</th><th>Dernière exécution</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody id="stbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
+
+        <!-- Historique des syncs -->
+        <div class="section-hd" style="margin-top:.35rem">
+          <h2>🕒 Historique des synchronisations</h2>
+          <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualiser</button>
+        </div>
+        <div class="fbar" style="margin-bottom:.65rem">
+          <input id="hq" placeholder="🔍 Filtrer par slug…" oninput="filterHistory()">
+          <select id="hf-status" onchange="filterHistory()">
+            <option value="">Tous statuts</option>
+            <option value="completed">Terminé</option>
+            <option value="cancelled">Annulé</option>
+            <option value="error">Erreur</option>
           </select>
-          <select id="cat-genre" onchange="filterCatalogues()">
-            <option value="">Tous les genres</option>
+          <select id="hf-trig" onchange="filterHistory()">
+            <option value="">Tous déclencheurs</option>
+            <option value="schedule">Planifié</option>
+            <option value="manual">Manuel</option>
           </select>
         </div>
-        <div class="data-table-wrap">
-          <table class="data-table">
-            <thead><tr>
-              <th>Catalogue</th>
-              <th>Type</th>
-              <th>Contenu</th>
-              <th>Genres</th>
-              <th>Visibilité</th>
-              <th>Actions</th>
-            </tr></thead>
-            <tbody id="cats-body">
-              <tr><td colspan="6"><div class="empty-state"><div class="icon">⏳</div>Chargement…</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="htable-wrap"><table class="dt">
+          <thead><tr><th>Catalogue</th><th>Déclencheur</th><th>Début</th><th>Durée</th><th>Statut</th><th>Éléments</th></tr></thead>
+          <tbody id="htbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
       </div>
 
     </div><!-- /content -->
-  </div><!-- /main -->
-</div><!-- /shell -->
+  </div>
+</div>
 
-<!-- ══════════════════ MODALS ══════════════════════════════════════════ -->
-
-<!-- Modal : Éditer utilisateur -->
-<div class="modal-backdrop" id="modal-user" style="display:none" onclick="if(event.target===this)closeModal('modal-user')">
-  <div class="modal-box md">
-    <div class="modal-head">
-      <h3 id="mu-title">Utilisateur</h3>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-user')">✕</button>
+<!-- ══ MODALS USERS ══ -->
+<div class="mbk" id="m-user" style="display:none" onclick="if(event.target===this)cm('m-user')">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="mu-title">Utilisateur</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-user')">✕</button></div>
+    <div class="mbd">
+      <div id="mu-err" class="alert a-er" style="display:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+        <div class="fg"><label>Nom d'utilisateur *</label><input id="mu-u" class="fc"></div>
+        <div class="fg"><label>Email</label><input id="mu-e" class="fc" type="email"></div>
+        <div class="fg"><label id="mu-pl">Mot de passe *</label><input id="mu-p" class="fc" type="password"></div>
+        <div class="fg"><label>Rôle</label><select id="mu-r" class="fs"><option value="user">Utilisateur</option><option value="admin">Administrateur</option></select></div>
+      </div>
+      <label class="fcheck" style="margin-bottom:.85rem"><input type="checkbox" id="mu-a" checked> Compte actif</label>
+      <div class="div"></div>
+      <p style="font-size:.75rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Permissions</p>
+      <div style="display:flex;gap:1.1rem;flex-wrap:wrap">
+        <label class="fcheck"><input type="checkbox" id="mu-sync"> Synchronisation</label>
+        <label class="fcheck"><input type="checkbox" id="mu-del"> Suppression</label>
+        <label class="fcheck"><input type="checkbox" id="mu-ref"> Rafraîchissement</label>
+      </div>
+      <div class="div"></div>
+      <p style="font-size:.75rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Quota de synchronisation</p>
+      <label class="fcheck" style="margin-bottom:.55rem"><input type="checkbox" id="mu-q-en" onchange="toggleQuotaUI('mu')"> Activer un quota</label>
+      <div id="mu-quota-fields" style="display:none;display:flex;gap:.65rem;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="margin-bottom:0;flex:1;min-width:100px"><label>Limite</label><input id="mu-q-max" class="fc" type="number" min="1" placeholder="10"></div>
+        <div class="fg" style="margin-bottom:0;flex:1;min-width:100px"><label>Période</label><select id="mu-q-period" class="fs"><option value="day">Par jour</option><option value="month" selected>Par mois</option><option value="year">Par an</option></select></div>
+      </div>
     </div>
-    <div class="modal-body">
-      <div id="mu-err" class="alert alert-danger" style="display:none"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-        <div class="form-group">
-          <label>Nom d'utilisateur *</label>
-          <input id="mu-username" class="form-control" placeholder="naruto">
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-user')">Annuler</button><button class="btn btn-primary" onclick="saveUser()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- Accès catalogues USERS -->
+<div class="mbk" id="m-access" style="display:none" onclick="if(event.target===this)cm('m-access')">
+  <div class="mbox lg">
+    <div class="mhd"><h3 id="ma-title">Accès aux catalogues</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-access')">✕</button></div>
+    <div class="mbd">
+      <div id="ma-err" class="alert a-er" style="display:none"></div>
+      <label class="fsw" style="margin-bottom:.85rem"><input type="checkbox" id="ma-all" onchange="toggleAllCats()"><span style="font-weight:600">Accès à tous les catalogues</span></label>
+      <div id="ma-list"></div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-access')">Annuler</button><button class="btn btn-primary" onclick="saveAccess()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══ MODALS CATALOGUES ══ -->
+<div class="mbk" id="m-add" style="display:none" onclick="if(event.target===this)cm('m-add')">
+  <div class="mbox md">
+    <div class="mhd"><h3>Ajouter un catalogue</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-add')">✕</button></div>
+    <div class="mbd">
+      <div id="add-err" class="alert a-er" style="display:none"></div>
+      <div id="add-ok"  class="alert a-ok" style="display:none"></div>
+      <p style="font-size:.8rem;font-weight:600;color:var(--tx2);margin-bottom:.4rem">🔍 Rechercher un catalogue par titre</p>
+      <div style="display:flex;gap:.5rem;margin-bottom:.5rem">
+        <input id="sr-q" class="fc" placeholder="Naruto, One Piece…" onkeydown="if(event.key==='Enter')searchCatalogues()">
+        <button class="btn btn-secondary" onclick="searchCatalogues()" id="sr-btn">Rechercher</button>
+      </div>
+      <div id="sr-loading" style="display:none;color:var(--mu);font-size:.82rem;padding:.4rem 0"><span class="spinner"></span> Recherche…</div>
+      <div id="sr-results" style="max-height:220px;overflow-y:auto;margin-bottom:.4rem"></div>
+      <div class="search-sep">ou entrez directement</div>
+      <div class="fg" style="margin-bottom:.35rem">
+        <label>Slug ou URL</label>
+        <input id="add-slug" class="fc" placeholder="naruto  ou  https://anime-sama.to/catalogue/naruto/">
+      </div>
+      <div id="add-loading" style="display:none;color:var(--mu);font-size:.82rem;padding:.4rem 0"><span class="spinner"></span> Récupération…</div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-add')">Fermer</button><button class="btn btn-primary" id="add-btn" onclick="addCatalogue()">Récupérer</button></div>
+  </div>
+</div>
+
+<div class="mbk" id="m-detail" style="display:none" onclick="if(event.target===this)cm('m-detail')">
+  <div class="mbox lg">
+    <div class="mhd"><h3 id="md-title">Catalogue</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-detail')">✕</button></div>
+    <div class="mbd">
+      <div id="md-err" class="alert a-er" style="display:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+        <div class="fg"><label>Slug</label><input id="md-slug" class="fc" readonly style="opacity:.55"></div>
+        <div class="fg"><label>URL</label><input id="md-url" class="fc" readonly style="opacity:.55"></div>
+        <div class="fg"><label>Nom *</label><input id="md-nom" class="fc"></div>
+        <div class="fg"><label>Titre alternatif</label><input id="md-alt" class="fc"></div>
+      </div>
+      <div class="fg"><label>Synopsis</label><textarea id="md-syn" class="fc"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+        <div class="fg"><label>État</label><select id="md-etat" class="fs"><option value="en_cours">En cours</option><option value="termine">Terminé</option><option value="abandonne">Abandonné</option></select></div>
+        <div class="fg"><label>Type</label><select id="md-type" class="fs"><option value="anime">Anime</option><option value="scan">Scan</option><option value="film">Film</option><option value="autre">Autre</option></select></div>
+        <div class="fg"><label>Genres</label><div class="tag-box" id="md-genres-box" onclick="document.getElementById('md-gi').focus()"><input id="md-gi" class="tag-input" placeholder="Action… + Entrée" onkeydown="addTag('genres',event)"></div></div>
+        <div class="fg"><label>Langues</label><div class="tag-box" id="md-langues-box" onclick="document.getElementById('md-li').focus()"><input id="md-li" class="tag-input" placeholder="vf, vostfr… + Entrée" onkeydown="addTag('langues',event)"></div></div>
+      </div>
+      <div class="div"></div>
+      <p style="font-size:.75rem;color:var(--mu)">Créé : <span id="md-created"></span> · MàJ : <span id="md-updated"></span></p>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-detail')">Annuler</button><button class="btn btn-primary" onclick="saveDetail()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- Viewer contenu catalogue -->
+<div class="mbk" id="m-content" style="display:none" onclick="if(event.target===this)cm('m-content')">
+  <div class="mbox xl">
+    <div class="mhd"><h3 id="mc-title">Contenu</h3><span id="mc-sync-badge" class="badge"></span><button class="btn btn-ghost btn-icon" onclick="cm('m-content')">✕</button></div>
+    <div class="mbd" id="mc-body"><div class="empty"><div class="ic">⏳</div>Chargement…</div></div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-content')">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Modal sync -->
+<div class="mbk" id="m-sync" style="display:none">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="ms-title">Synchronisation</h3><span id="ms-state-badge" class="badge b-info" style="font-size:.68rem">Démarrage</span></div>
+    <div class="mbd">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.2rem">
+        <span id="ms-label" style="font-size:.82rem;font-weight:600;color:var(--mu)">Initialisation…</span>
+        <span id="ms-pct" style="font-size:.82rem;font-weight:700;color:var(--ac)">0%</span>
+      </div>
+      <div class="prog-wrap"><div id="ms-bar" class="prog-fill"></div></div>
+      <p id="ms-current" style="font-size:.77rem;color:var(--mu);margin:.2rem 0 .5rem;min-height:1.1rem"></p>
+      <div class="sync-ctrl">
+        <button class="btn btn-warn btn-sm"      id="ms-btn-pause"  onclick="syncPause()">⏸ Pause</button>
+        <button class="btn btn-ok btn-sm"        id="ms-btn-resume" onclick="syncResume()" style="display:none">▶ Reprendre</button>
+        <button class="btn btn-danger btn-sm"    id="ms-btn-cancel" onclick="syncCancel()">✕ Annuler</button>
+        <button class="btn btn-info btn-sm"      id="ms-btn-fond"   onclick="syncFond()">↗ Fond</button>
+        <button class="btn btn-secondary btn-sm" id="ms-btn-close"  onclick="cm('m-sync')" style="display:none">Fermer</button>
+      </div>
+      <div style="font-size:.73rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin:.4rem 0 .25rem">Journal</div>
+      <div class="sync-log" id="ms-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal visibilité -->
+<div class="mbk" id="m-vis" style="display:none" onclick="if(event.target===this)cm('m-vis')">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="mv-title">Visibilité</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-vis')">✕</button></div>
+    <div class="mbd" id="mv-body"></div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-vis')">Annuler</button><button class="btn btn-primary" onclick="saveVisibility()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══ MODALS APPLICATIONS ══ -->
+
+<!-- Créer / Modifier client -->
+<div class="mbk" id="m-client" style="display:none" onclick="if(event.target===this)cm('m-client')">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="mc2-title">Nouvelle application</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-client')">✕</button></div>
+    <div class="mbd">
+      <div id="mc2-err" class="alert a-er" style="display:none"></div>
+      <div class="fg"><label>Nom de l'application *</label><input id="mc2-name" class="fc" placeholder="Mon Application"></div>
+      <div class="fg"><label>Description</label><textarea id="mc2-desc" class="fc" placeholder="Optionnel — usage de l'application"></textarea></div>
+      <label class="fcheck" style="margin-bottom:.85rem"><input type="checkbox" id="mc2-active" checked> Application active</label>
+      <div class="div"></div>
+      <p style="font-size:.75rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Permissions</p>
+      <div style="display:flex;gap:1.1rem;flex-wrap:wrap">
+        <label class="fcheck"><input type="checkbox" id="mc2-sync"> Synchronisation</label>
+        <label class="fcheck"><input type="checkbox" id="mc2-del"> Suppression</label>
+        <label class="fcheck"><input type="checkbox" id="mc2-ref"> Rafraîchissement</label>
+      </div>
+      <div class="div"></div>
+      <p style="font-size:.75rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Quota de synchronisation</p>
+      <label class="fcheck" style="margin-bottom:.55rem"><input type="checkbox" id="mc2-q-en" onchange="toggleQuotaUI('mc2')"> Activer un quota</label>
+      <div id="mc2-quota-fields" style="display:none;display:flex;gap:.65rem;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="margin-bottom:0;flex:1;min-width:100px"><label>Limite</label><input id="mc2-q-max" class="fc" type="number" min="1" placeholder="10"></div>
+        <div class="fg" style="margin-bottom:0;flex:1;min-width:100px"><label>Période</label><select id="mc2-q-period" class="fs"><option value="day">Par jour</option><option value="month" selected>Par mois</option><option value="year">Par an</option></select></div>
+      </div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-client')">Annuler</button><button class="btn btn-primary" onclick="saveClient()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- Afficher le secret (une seule fois) -->
+<div class="mbk" id="m-secret" style="display:none">
+  <div class="mbox sm">
+    <div class="mhd"><h3 id="ms2-title">Secret généré</h3></div>
+    <div class="mbd">
+      <div class="alert a-wa" style="margin-bottom:.85rem">⚠ <strong>Copiez ce secret maintenant</strong> — il ne sera plus affiché une fois cette fenêtre fermée.</div>
+      <div class="secret-box" style="margin-bottom:.75rem">
+        <div class="s-label">Client ID</div>
+        <span class="secret-val" id="ms2-cid"></span>
+      </div>
+      <div class="secret-box">
+        <div class="s-label">Client Secret</div>
+        <span class="secret-val" id="ms2-secret"></span>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem">
+        <button class="btn btn-secondary btn-sm" onclick="copyText(document.getElementById('ms2-cid').textContent,'Client ID copié')">📋 Copier ID</button>
+        <button class="btn btn-primary btn-sm"   onclick="copyText(document.getElementById('ms2-secret').textContent,'Secret copié !')">📋 Copier secret</button>
+      </div>
+      <p style="font-size:.76rem;color:var(--mu);margin:.65rem 0 0">Utilisez <span class="mono">POST /auth/client-token</span> avec ces identifiants pour obtenir un Bearer token.</p>
+    </div>
+    <div class="mft"><button class="btn btn-primary" onclick="cm('m-secret');loadApps()">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Accès catalogues CLIENTS -->
+<div class="mbk" id="m-clt-access" style="display:none" onclick="if(event.target===this)cm('m-clt-access')">
+  <div class="mbox lg">
+    <div class="mhd"><h3 id="mca-title">Accès aux catalogues</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-clt-access')">✕</button></div>
+    <div class="mbd">
+      <div id="mca-err" class="alert a-er" style="display:none"></div>
+      <label class="fsw" style="margin-bottom:.85rem"><input type="checkbox" id="mca-all" onchange="toggleAllCatsClt()"><span style="font-weight:600">Accès à tous les catalogues</span></label>
+      <div id="mca-list"></div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-clt-access')">Annuler</button><button class="btn btn-primary" onclick="saveClientAccess()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══ MODAL PROGRAMMATION ══ -->
+<div class="mbk" id="m-schedule" style="display:none" onclick="if(event.target===this)cm('m-schedule')">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="ms3-title">Nouvelle programmation</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-schedule')">✕</button></div>
+    <div class="mbd">
+      <div id="ms3-err" class="alert a-er" style="display:none"></div>
+      <div class="fg">
+        <label>Catalogue (slug) *</label>
+        <div style="display:flex;gap:.5rem">
+          <input id="ms3-slug" class="fc" placeholder="naruto" list="ms3-cat-list">
+          <datalist id="ms3-cat-list"></datalist>
         </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input id="mu-email" class="form-control" type="email" placeholder="…@example.com">
-        </div>
-        <div class="form-group">
-          <label id="mu-pass-label">Mot de passe *</label>
-          <input id="mu-password" class="form-control" type="password">
-        </div>
-        <div class="form-group">
-          <label>Rôle</label>
-          <select id="mu-role" class="form-select">
-            <option value="user">Utilisateur</option>
-            <option value="admin">Administrateur</option>
+      </div>
+      <div class="fg">
+        <label>Description</label>
+        <input id="ms3-desc" class="fc" placeholder="Optionnel">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+        <div class="fg"><label>Fréquence *</label>
+          <select id="ms3-freq" class="fs" onchange="onFreqChange()">
+            <option value="daily">Quotidien</option>
+            <option value="weekly">Hebdomadaire</option>
+            <option value="biweekly">Bi-hebdomadaire (2 sem.)</option>
+            <option value="monthly">Mensuel</option>
+            <option value="custom">Personnalisé (N jours)</option>
           </select>
         </div>
-      </div>
-      <div class="form-check" style="margin-bottom:1rem">
-        <input type="checkbox" id="mu-active" checked>
-        <label for="mu-active">Compte actif</label>
-      </div>
-      <div class="divider"></div>
-      <p style="font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">
-        Permissions opérationnelles
-      </p>
-      <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
-        <label class="form-check"><input type="checkbox" id="mu-sync"> Synchronisation</label>
-        <label class="form-check"><input type="checkbox" id="mu-delete"> Suppression</label>
-        <label class="form-check"><input type="checkbox" id="mu-refresh"> Rafraîchissement</label>
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('modal-user')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveUser()">Enregistrer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal : Accès catalogues d'un utilisateur -->
-<div class="modal-backdrop" id="modal-access" style="display:none" onclick="if(event.target===this)closeModal('modal-access')">
-  <div class="modal-box lg">
-    <div class="modal-head">
-      <h3 id="ma-title">Accès aux catalogues</h3>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-access')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div id="ma-err" class="alert alert-danger" style="display:none"></div>
-      <div class="form-check form-switch" style="margin-bottom:1rem">
-        <input type="checkbox" id="ma-all-cats" onchange="toggleAllCats()">
-        <label for="ma-all-cats" style="font-weight:600">Accès à tous les catalogues</label>
-      </div>
-      <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">
-        Activez les catalogues autorisés. Pour chaque catalogue, vous pouvez restreindre
-        l'accès à certaines saisons, films ou scans.
-      </p>
-      <div id="ma-cats-list"></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('modal-access')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveAccess()">Enregistrer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal : Visibilité catalogue -->
-<div class="modal-backdrop" id="modal-vis" style="display:none" onclick="if(event.target===this)closeModal('modal-vis')">
-  <div class="modal-box md">
-    <div class="modal-head">
-      <h3 id="mv-title">Visibilité</h3>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-vis')">✕</button>
-    </div>
-    <div class="modal-body" id="mv-body"></div>
-    <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('modal-vis')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveVisibility()">Enregistrer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Toast container -->
-<div id="toast-wrap"></div>
-
-<script>
-// ─── Config ─────────────────────────────────────────────────────────────────
-const API = '__API_BASE__';
-
-// ─── État ────────────────────────────────────────────────────────────────────
-let token = localStorage.getItem('as_admin_token') || '';
-let allUsers = [], allCats = [];
-let editUsername = null;     // null = création, string = édition
-let accessUsername = null;   // utilisateur en cours d'édition des accès
-let visSlug = null;          // catalogue en cours de visibilité
-
-// ─── Thème ───────────────────────────────────────────────────────────────────
-const html = document.documentElement;
-const savedTheme = localStorage.getItem('as_theme') || 'dark';
-html.setAttribute('data-theme', savedTheme);
-function updateThemeBtn() {
-  const dark = html.getAttribute('data-theme') === 'dark';
-  document.getElementById('theme-btn').textContent = dark ? '☀️ Thème clair' : '🌙 Thème sombre';
-}
-function toggleTheme() {
-  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  html.setAttribute('data-theme', next);
-  localStorage.setItem('as_theme', next);
-  updateThemeBtn();
-}
-updateThemeBtn();
-
-// ─── API helper ──────────────────────────────────────────────────────────────
-async function api(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(API + path, opts);
-  if (r.status === 204) return null;
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw data.detail || JSON.stringify(data);
-  return data;
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
-function toast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = `toast toast-${type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info'}`;
-  el.innerHTML = `<span>${type === 'ok' ? '✓' : type === 'err' ? '✕' : 'ℹ'}</span> ${msg}`;
-  document.getElementById('toast-wrap').appendChild(el);
-  setTimeout(() => el.remove(), 3500);
-}
-
-// ─── Auth ────────────────────────────────────────────────────────────────────
-document.getElementById('l-pass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
-
-async function doLogin() {
-  const err = document.getElementById('login-err');
-  err.style.display = 'none';
-  try {
-    const fd = new URLSearchParams({
-      username: document.getElementById('l-user').value.trim(),
-      password: document.getElementById('l-pass').value,
-    });
-    const r    = await fetch(API + '/auth/login', { method: 'POST', body: fd });
-    const data = await r.json();
-    if (!r.ok) throw data.detail || 'Identifiants incorrects';
-    token = data.access_token;
-    localStorage.setItem('as_admin_token', token);
-    await initApp();
-  } catch (e) {
-    err.textContent = typeof e === 'string' ? e : 'Identifiants incorrects';
-    err.style.display = 'block';
-  }
-}
-
-function logout() {
-  localStorage.removeItem('as_admin_token');
-  token = '';
-  document.getElementById('login-page').style.display = 'flex';
-  document.getElementById('shell').style.display = 'none';
-}
-
-// ─── Init ────────────────────────────────────────────────────────────────────
-async function initApp() {
-  try {
-    const me = await api('GET', '/auth/me');
-    if (me.role !== 'admin') { toast('Réservé aux administrateurs', 'err'); logout(); return; }
-    document.getElementById('me-label').textContent = `@ ${me.username}`;
-    document.getElementById('login-page').style.display = 'none';
-    document.getElementById('shell').style.display = 'flex';
-    await Promise.all([loadUsers(), loadCatalogues()]);
-  } catch (e) { logout(); }
-}
-
-if (token) initApp();
-
-// ─── Tabs ────────────────────────────────────────────────────────────────────
-const TAB_TITLES   = { users: 'Utilisateurs', catalogues: 'Catalogues' };
-const TAB_ACTIONS  = {
-  users:      () => `<button class="btn btn-primary" onclick="openCreateUser()">+ Ajouter</button>`,
-  catalogues: () => '',
-};
-
-function switchTab(el) {
-  const tab = el.dataset.tab;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tab-users').style.display       = tab === 'users'      ? '' : 'none';
-  document.getElementById('tab-catalogues').style.display  = tab === 'catalogues' ? '' : 'none';
-  document.getElementById('topbar-title').textContent      = TAB_TITLES[tab] || tab;
-  document.getElementById('topbar-actions').innerHTML      = TAB_ACTIONS[tab]?.() || '';
-}
-// Init topbar
-document.getElementById('topbar-actions').innerHTML = TAB_ACTIONS.users();
-
-// ─── USERS ───────────────────────────────────────────────────────────────────
-async function loadUsers() {
-  allUsers = await api('GET', '/auth/users');
-  renderUsers(allUsers);
-}
-
-function filterUsers() {
-  const q    = document.getElementById('user-q').value.toLowerCase();
-  const role = document.getElementById('user-role-filter').value;
-  renderUsers(allUsers.filter(u =>
-    (!q    || u.username.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)) &&
-    (!role || u.role === role)
-  ));
-}
-
-function renderUsers(users) {
-  const tbody = document.getElementById('users-body');
-  if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">👤</div>Aucun utilisateur trouvé</div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = users.map(u => {
-    const perms = u.permissions || {};
-    const cats  = perms.allowed_catalogues || [];
-    const initials = u.username.slice(0, 2).toUpperCase();
-    return `<tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:.6rem">
-          <div class="avatar">${initials}</div>
-          <div>
-            <div style="font-weight:600">${esc(u.username)}</div>
-            ${u.email ? `<div style="font-size:.75rem;color:var(--muted)">${esc(u.email)}</div>` : ''}
+        <div class="fg"><label>Heure (UTC) *</label>
+          <div style="display:flex;gap:.35rem">
+            <input id="ms3-hour" class="fc" type="number" min="0" max="23" value="2" style="width:60px">
+            <span style="line-height:2.2;color:var(--mu)">h</span>
+            <input id="ms3-min" class="fc" type="number" min="0" max="59" value="0" style="width:60px">
           </div>
         </div>
-      </td>
+      </div>
+      <div id="ms3-dow-field" class="fg" style="display:none"><label>Jour de la semaine</label>
+        <select id="ms3-dow" class="fs">
+          <option value="0">Lundi</option><option value="1">Mardi</option><option value="2">Mercredi</option>
+          <option value="3">Jeudi</option><option value="4">Vendredi</option><option value="5">Samedi</option><option value="6">Dimanche</option>
+        </select>
+      </div>
+      <div id="ms3-dom-field" class="fg" style="display:none"><label>Jour du mois (1–28)</label>
+        <input id="ms3-dom" class="fc" type="number" min="1" max="28" value="1">
+      </div>
+      <div id="ms3-interval-field" class="fg" style="display:none"><label>Tous les N jours</label>
+        <input id="ms3-interval" class="fc" type="number" min="1" value="7">
+      </div>
+      <label class="fcheck"><input type="checkbox" id="ms3-active" checked> Programmation active</label>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-schedule')">Annuler</button><button class="btn btn-primary" onclick="saveSchedule()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══ MODAL BLOCAGE ══ -->
+<div class="mbk" id="m-block" style="display:none" onclick="if(event.target===this)cm('m-block')">
+  <div class="mbox sm">
+    <div class="mhd"><h3 id="mb-title">Bloquer le compte</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-block')">✕</button></div>
+    <div class="mbd">
+      <div id="mb-err" class="alert a-er" style="display:none"></div>
+      <div class="alert a-wa" style="margin-bottom:.75rem">⚠ L'utilisateur recevra une erreur 403 à chaque requête tant qu'il est bloqué.</div>
+      <div class="fg"><label>Raison (optionnel)</label><input id="mb-reason" class="fc" placeholder="Violation des CGU, abus…"></div>
+      <div class="fg"><label>Bloquer jusqu'au (optionnel — vide = permanent)</label><input id="mb-until" class="fc" type="datetime-local"></div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-block')">Annuler</button><button class="btn btn-danger" onclick="saveBlock()">Confirmer le blocage</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+// ─── Config ────────────────────────────────────────────────────────────────
+const API    = '__API_BASE__';
+const WS_API = API.replace(/^http/, 'ws');
+
+// ─── État global ───────────────────────────────────────────────────────────
+let token = localStorage.getItem('as_token') || '';
+let allUsers = [], allCats = [], allClients = [];
+let editUsername = null, accessUsername = null;
+let visSlug = null, detailSlug = null;
+let detailTags = { genres: [], langues: [] };
+let activeSyncSlug = null;
+let editClientId = null, cltAccessClientId = null;
+const bgSyncs = new Map();
+
+// ─── Thème ─────────────────────────────────────────────────────────────────
+const H = document.documentElement;
+H.setAttribute('data-theme', localStorage.getItem('as_theme') || 'dark');
+function updateThemeBtn(){document.getElementById('tbtn').textContent=H.getAttribute('data-theme')==='dark'?'☀️ Thème clair':'🌙 Thème sombre';}
+function toggleTheme(){const n=H.getAttribute('data-theme')==='dark'?'light':'dark';H.setAttribute('data-theme',n);localStorage.setItem('as_theme',n);updateThemeBtn();}
+updateThemeBtn();
+
+// ─── API / Utils ───────────────────────────────────────────────────────────
+async function api(method,path,body){
+  const opts={method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`}};
+  if(body!==undefined) opts.body=JSON.stringify(body);
+  const r=await fetch(API+path,opts);
+  if(r.status===204) return null;
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw d.detail||JSON.stringify(d);
+  return d;
+}
+function toast(msg,type='info'){
+  const e=document.createElement('div');
+  e.className=`toast t-${type==='ok'?'ok':type==='er'?'er':type==='wa'?'wa':'info'}`;
+  e.innerHTML=`<span>${type==='ok'?'✓':type==='er'?'✕':type==='wa'?'⚠':'ℹ'}</span>${msg}`;
+  document.getElementById('toasts').appendChild(e);setTimeout(()=>e.remove(),3800);
+}
+function copyText(txt,msg){navigator.clipboard.writeText(txt).then(()=>toast(msg,'ok')).catch(()=>toast('Copie échouée','er'));}
+function om(id){document.getElementById(id).style.display='flex';}
+function cm(id){document.getElementById(id).style.display='none';}
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')['m-user','m-access','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block'].forEach(cm);});
+
+// ─── Auth ──────────────────────────────────────────────────────────────────
+document.getElementById('lp').onkeydown=e=>{if(e.key==='Enter')doLogin();};
+async function doLogin(){
+  const err=document.getElementById('lerr');err.style.display='none';
+  try{
+    const r=await fetch(API+'/auth/login',{method:'POST',body:new URLSearchParams({username:document.getElementById('lu').value.trim(),password:document.getElementById('lp').value})});
+    const d=await r.json();if(!r.ok) throw d.detail||'Identifiants incorrects';
+    token=d.access_token;localStorage.setItem('as_token',token);await initApp();
+  }catch(e){err.textContent=typeof e==='string'?e:'Identifiants incorrects';err.style.display='block';}
+}
+function logout(){localStorage.removeItem('as_token');token='';document.getElementById('login-page').style.display='flex';document.getElementById('shell').style.display='none';}
+async function initApp(){
+  try{
+    const me=await api('GET','/auth/me');
+    if(me.role!=='admin'){toast('Réservé aux administrateurs','er');logout();return;}
+    document.getElementById('me-lbl').textContent=`@ ${me.username}`;
+    document.getElementById('login-page').style.display='none';
+    document.getElementById('shell').style.display='flex';
+    await Promise.all([loadUsers(),loadCats(),loadApps()]);
+  }catch{logout();}
+}
+if(token) initApp();
+
+// ─── Tabs ──────────────────────────────────────────────────────────────────
+function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').click();}
+function switchTab(el){
+  const tab=el.dataset.tab;
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
+  ['users','catalogues','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',apps:'Applications',planning:'Planification'};
+  const actions={
+    users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
+    catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
+    apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
+    planning:'',
+  };
+  document.getElementById('tb-title').textContent=titles[tab]||tab;
+  document.getElementById('tb-actions').innerHTML=actions[tab]||'';
+  if(tab==='planning'){loadSchedules();loadHistory();}
+}
+document.getElementById('tb-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`;
+
+// ═══════════════════════════════ USERS ════════════════════════════════════
+async function loadUsers(){allUsers=await api('GET','/auth/users');renderUsers(allUsers);}
+function filterUsers(){
+  const q=document.getElementById('uq').value.toLowerCase(),r=document.getElementById('uf-role').value;
+  renderUsers(allUsers.filter(u=>(!q||(u.username+' '+(u.email||'')).toLowerCase().includes(q))&&(!r||u.role===r)));
+}
+function renderUsers(list){
+  const b=document.getElementById('utbody');
+  if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">👤</div>Aucun résultat</div></td></tr>`;return;}
+  b.innerHTML=list.map(u=>{
+    const p=u.permissions||{},cats=p.allowed_catalogues||[],blk=u.is_blocked,q=p.quota||{};
+    const quotaInfo=q.enabled?`<span class="quota-used ${q.max_syncs>0?'':''}">Quota: ${q.max_syncs}/${q.period==='day'?'j':q.period==='year'?'an':'mois'}</span>`:'';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:.55rem">
+        <div class="av">${esc(u.username).slice(0,2).toUpperCase()}</div>
+        <div><div style="font-weight:600">${esc(u.username)}</div>${u.email?`<div style="font-size:.72rem;color:var(--mu)">${esc(u.email)}</div>`:''}</div>
+      </div></td>
+      <td><span class="badge ${u.role==='admin'?'b-ac':'b-mu'}">${u.role}</span></td>
       <td>
-        <span class="badge ${u.role === 'admin' ? 'badge-accent' : 'badge-muted'}">
-          ${u.role}
-        </span>
+        <span class="badge ${u.is_active?'b-ok':'b-er'}">${u.is_active?'Actif':'Inactif'}</span>
+        ${blk?'<span class="badge b-block" style="margin-left:3px">🚫 Bloqué</span>':''}
       </td>
-      <td><span class="badge ${u.is_active ? 'badge-ok' : 'badge-danger'}">${u.is_active ? 'Actif' : 'Inactif'}</span></td>
+      <td><div style="display:flex;gap:.2rem;flex-wrap:wrap"><span class="pc ${p.can_sync?'on':''}">⟳ Sync</span><span class="pc ${p.can_delete?'on':''}">🗑 Suppr</span><span class="pc ${p.can_refresh?'on':''}">↺ Refresh</span>${quotaInfo}</div></td>
+      <td>${cats.length===0?'<span class="badge b-info">Tous</span>':cats.slice(0,3).map(c=>`<span class="tag">${esc(c)}</span>`).join('')+(cats.length>3?`<span class="tag">+${cats.length-3}</span>`:'')}</td>
+      <td><div class="actions">
+        <button class="btn btn-secondary btn-icon btn-sm" onclick="openEditUser('${esc(u.username)}')">✏️</button>
+        <button class="btn btn-secondary btn-icon btn-sm" onclick="openAccess('${esc(u.username)}')">🔑</button>
+        <button class="btn ${blk?'btn-ok':'btn-danger'} btn-icon btn-sm" title="${blk?'Débloquer':'Bloquer'}" onclick="${blk?`unblock('user','${esc(u.username)}')`:`openBlock('user','${esc(u.username)}')`}">${blk?'✓':'🚫'}</button>
+        <button class="btn btn-danger btn-icon btn-sm"   onclick="deleteUser('${esc(u.username)}')">🗑</button>
+      </div></td></tr>`;
+  }).join('');
+}
+function openCreateUser(){
+  editUsername=null;document.getElementById('mu-title').textContent='Nouvel utilisateur';document.getElementById('mu-pl').textContent='Mot de passe *';
+  ['mu-u','mu-e','mu-p'].forEach(i=>document.getElementById(i).value='');document.getElementById('mu-u').disabled=false;
+  document.getElementById('mu-r').value='user';document.getElementById('mu-a').checked=true;
+  ['mu-sync','mu-del','mu-ref'].forEach(i=>document.getElementById(i).checked=false);
+  document.getElementById('mu-err').style.display='none';om('m-user');
+}
+function openEditUser(username){
+  editUsername=username;const u=allUsers.find(x=>x.username===username);
+  document.getElementById('mu-title').textContent=`Modifier — ${username}`;document.getElementById('mu-pl').textContent='Mot de passe (vide = inchangé)';
+  document.getElementById('mu-u').value=u.username;document.getElementById('mu-u').disabled=true;
+  document.getElementById('mu-e').value=u.email||'';document.getElementById('mu-p').value='';
+  document.getElementById('mu-r').value=u.role;document.getElementById('mu-a').checked=u.is_active;
+  const p=u.permissions||{};document.getElementById('mu-sync').checked=!!p.can_sync;document.getElementById('mu-del').checked=!!p.can_delete;document.getElementById('mu-ref').checked=!!p.can_refresh;
+  // Quota
+  const q=p.quota||{};const qen=document.getElementById('mu-q-en');qen.checked=!!q.enabled;
+  document.getElementById('mu-q-max').value=q.max_syncs||10;document.getElementById('mu-q-period').value=q.period||'month';
+  document.getElementById('mu-quota-fields').style.display=q.enabled?'flex':'none';
+  // Blocage
+  if(u.is_blocked){const bb=document.createElement('div');bb.id='mu-blocked-banner';bb.className='blocked-banner';bb.innerHTML=`🚫 Ce compte est actuellement bloqué${u.blocked_reason?' ('+esc(u.blocked_reason)+')':''}${u.blocked_until?' jusqu\'au '+new Date(u.blocked_until).toLocaleString('fr'):''}`;const bd=document.getElementById('m-user').querySelector('.mbd');const ex=document.getElementById('mu-blocked-banner');if(ex)ex.remove();bd.insertBefore(bb,bd.firstChild);}else{const ex=document.getElementById('mu-blocked-banner');if(ex)ex.remove();}
+  document.getElementById('mu-err').style.display='none';om('m-user');
+}
+async function saveUser(){
+  const errEl=document.getElementById('mu-err');errEl.style.display='none';
+  try{
+    const qen=document.getElementById('mu-q-en').checked;
+    const quota={enabled:qen,period:document.getElementById('mu-q-period').value,max_syncs:parseInt(document.getElementById('mu-q-max').value)||10};
+    const perms={can_sync:document.getElementById('mu-sync').checked,can_delete:document.getElementById('mu-del').checked,can_refresh:document.getElementById('mu-ref').checked,quota};
+    if(editUsername){
+      const ex=allUsers.find(u=>u.username===editUsername)?.permissions||{};
+      perms.allowed_catalogues=ex.allowed_catalogues||[];perms.catalogue_content=ex.catalogue_content||{};
+      const body={is_active:document.getElementById('mu-a').checked,role:document.getElementById('mu-r').value,permissions:perms};
+      const email=document.getElementById('mu-e').value;if(email) body.email=email;
+      const pass=document.getElementById('mu-p').value;if(pass) body.password=pass;
+      await api('PUT',`/auth/users/${editUsername}`,body);toast('Utilisateur mis à jour','ok');
+    }else{
+      const pass=document.getElementById('mu-p').value;if(!pass) throw 'Le mot de passe est requis';
+      perms.allowed_catalogues=[];perms.catalogue_content={};
+      await api('POST','/auth/register',{username:document.getElementById('mu-u').value.trim(),password:pass,email:document.getElementById('mu-e').value||null,role:document.getElementById('mu-r').value,permissions:perms});
+      toast('Utilisateur créé','ok');
+    }
+    cm('m-user');await loadUsers();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+async function deleteUser(username){
+  if(!confirm(`Supprimer « ${username} » ?`))return;
+  try{await api('DELETE',`/auth/users/${username}`);toast(`${username} supprimé`,'ok');await loadUsers();}
+  catch(e){toast(String(e),'er');}
+}
+
+// ─── Accès catalogues Users ────────────────────────────────────────────────
+function openAccess(username){
+  accessUsername=username;const u=allUsers.find(x=>x.username===username);
+  document.getElementById('ma-title').textContent=`Accès — ${username}`;document.getElementById('ma-err').style.display='none';
+  const p=u?.permissions||{},allowed=p.allowed_catalogues||[];
+  document.getElementById('ma-all').checked=allowed.length===0;renderAccessList('ma-list','ma-all',allowed,p.catalogue_content||{});om('m-access');
+}
+function toggleAllCats(){document.getElementById('ma-list').style.display=document.getElementById('ma-all').checked?'none':'';}
+function renderAccessList(listId,allId,allowed,content){
+  const list=document.getElementById(listId);list.style.display=document.getElementById(allId).checked?'none':'';
+  list.innerHTML=allCats.map(cat=>{
+    const on=allowed.includes(cat.slug),ca=content[cat.slug]||{};
+    return `<div class="car">
+      <div class="cah" onclick="toggleCab('${cat.slug}-${listId}')">
+        <label class="fsw" onclick="event.stopPropagation()"><input type="checkbox" id="ca-${listId}-${cat.slug}" ${on?'checked':''} onchange="onCatToggle('${cat.slug}','${listId}')"></label>
+        <span style="font-weight:600;font-size:.84rem">${esc(cat.nom)}</span>
+        <span class="badge b-mu" style="margin-left:auto">${esc(cat.slug)}</span><span style="color:var(--mu)">▾</span>
+      </div>
+      <div class="cab ${on?'open':''}" id="cab-${cat.slug}-${listId}">${renderCR(cat,ca,listId)}</div>
+    </div>`;
+  }).join('');
+}
+function onCatToggle(slug,listId){document.getElementById(`cab-${slug}-${listId}`).classList.toggle('open',document.getElementById(`ca-${listId}-${slug}`).checked);}
+function toggleCab(id){document.getElementById('cab-'+id).classList.toggle('open');}
+function renderCR(cat,access,pfx){
+  const secs=[{key:'saisons',label:'🎬 Saisons',items:cat.saisons},{key:'films',label:'🎞 Films',items:cat.films},{key:'scans',label:'📖 Scans',items:cat.scans}].filter(s=>s.items?.length);
+  if(!secs.length) return '<p style="color:var(--mu);font-size:.8rem;margin:0">Aucun contenu.</p>';
+  return secs.map(s=>{
+    const al=access[s.key]||[],ia=al.length===0;
+    return `<div class="cs" style="margin-bottom:.6rem"><label>${s.label}</label><div class="pills">
+      <label class="pill"><input type="checkbox" class="cr-all-${pfx}" data-cat="${cat.slug}" data-type="${s.key}" ${ia?'checked':''} onchange="onAllPill(this,'${pfx}')">✓ Tous</label>
+      ${s.items.map(i=>`<label class="pill"><input type="checkbox" class="cr-item-${pfx}" data-cat="${cat.slug}" data-type="${s.key}" value="${esc(i.slug)}" ${(ia||al.includes(i.slug))?'checked':''}>${esc(i.nom||i.slug)}${i.lang?` <span style="opacity:.55;font-size:.68rem">(${i.lang})</span>`:''}</label>`).join('')}
+    </div></div>`;
+  }).join('');
+}
+function onAllPill(cb,pfx){document.querySelectorAll(`.cr-item-${pfx}[data-cat="${cb.dataset.cat}"][data-type="${cb.dataset.type}"]`).forEach(i=>i.checked=cb.checked);}
+
+function _gatherAccess(pfx){
+  let allowed=[],content={};
+  allCats.forEach(cat=>{
+    if(!document.getElementById(`ca-${pfx}-${cat.slug}`)?.checked) return;
+    allowed.push(cat.slug);content[cat.slug]={};
+    ['saisons','films','scans'].forEach(type=>{
+      const allCb=document.querySelector(`.cr-all-${pfx}[data-cat="${cat.slug}"][data-type="${type}"]`);
+      if(!allCb||allCb.checked){content[cat.slug][type]=[];return;}
+      content[cat.slug][type]=[...document.querySelectorAll(`.cr-item-${pfx}[data-cat="${cat.slug}"][data-type="${type}"]:checked`)].map(x=>x.value);
+    });
+  });
+  return{allowed,content};
+}
+
+async function saveAccess(){
+  const errEl=document.getElementById('ma-err');errEl.style.display='none';
+  try{
+    const u=allUsers.find(x=>x.username===accessUsername),ep=u?.permissions||{};
+    const isAll=document.getElementById('ma-all').checked;
+    let allowed=[],content={};
+    if(!isAll){const g=_gatherAccess('ma-list');allowed=g.allowed;content=g.content;}
+    await api('PUT',`/auth/users/${accessUsername}`,{permissions:{...ep,allowed_catalogues:allowed,catalogue_content:content}});
+    toast('Accès mis à jour','ok');cm('m-access');await loadUsers();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+
+// ═══════════════════════════ CATALOGUES ══════════════════════════════════
+async function loadCats(){
+  allCats=await api('GET','/admin/api/catalogues');
+  const genres=[...new Set(allCats.flatMap(c=>c.genres||[]))].sort();
+  const sel=document.getElementById('cf-genre');
+  sel.innerHTML='<option value="">Tous les genres</option>'+genres.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  filterCats();
+}
+function catVisType(c){const v=c.visibility||{};if(!v.is_public)return'prive';return[v.public_saisons,v.public_films,v.public_scans].some(l=>l?.length)?'partiel':'public';}
+function timeAgo(iso){
+  if(!iso)return'—';const s=Math.floor((Date.now()-new Date(iso))/1000);
+  if(s<60)return'À l\'instant';if(s<3600)return`${Math.floor(s/60)} min`;
+  if(s<86400)return`${Math.floor(s/3600)} h`;if(s<86400*7)return`${Math.floor(s/86400)} j`;
+  return new Date(iso).toLocaleDateString('fr');
+}
+function isStale(c){if(c.etat!=='en_cours')return false;if(!c.episodes_synced)return true;return c.updated_at&&(Date.now()-new Date(c.updated_at))>7*86400*1000;}
+function filterCats(){
+  const q=document.getElementById('cq').value.toLowerCase(),vis=document.getElementById('cf-vis').value;
+  const et=document.getElementById('cf-etat').value,sy=document.getElementById('cf-sync').value,gen=document.getElementById('cf-genre').value;
+  renderCats(allCats.filter(c=>(!q||(c.nom+c.slug).toLowerCase().includes(q))&&(!vis||catVisType(c)===vis)&&(!et||c.etat===et)&&(!sy||(sy==='yes'?c.episodes_synced:!c.episodes_synced))&&(!gen||(c.genres||[]).includes(gen))));
+}
+function renderCats(list){
+  const b=document.getElementById('ctbody');
+  if(!list.length){b.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">📚</div>Aucun catalogue</div></td></tr>`;return;}
+  const tl={anime:'🎬 Anime',scan:'📖 Scan',film:'🎞 Film',autre:'📦 Autre'};
+  const eb={en_cours:'b-info',termine:'b-ok',abandonne:'b-mu'},el={en_cours:'En cours',termine:'Terminé',abandonne:'Abandonné'};
+  b.innerHTML=list.map(c=>{
+    const st=isStale(c),bg=bgSyncs.get(c.slug),isSyncing=bg&&!bg.done;
+    const nb=[c.saisons.length&&`${c.saisons.length} saison${c.saisons.length>1?'s':''}`,c.films.length&&`${c.films.length} film${c.films.length>1?'s':''}`,c.scans.length&&`${c.scans.length} scan${c.scans.length>1?'s':''}`].filter(Boolean).join(' · ');
+    return `<tr ${st?'style="background:rgba(245,158,11,.04)"':''}>
       <td>
-        <div style="display:flex;gap:.25rem;flex-wrap:wrap">
-          <span class="perm-chip ${perms.can_sync    ? 'on' : 'off'}">⟳ Sync</span>
-          <span class="perm-chip ${perms.can_delete  ? 'on' : 'off'}">🗑 Suppr</span>
-          <span class="perm-chip ${perms.can_refresh ? 'on' : 'off'}">↺ Refresh</span>
-        </div>
+        <div style="font-weight:600">${esc(c.nom)}</div><div style="font-size:.73rem;color:var(--mu)">${esc(c.slug)}</div>
+        ${st?'<span class="badge b-wa" style="margin-top:2px">⚠ MàJ recommandée</span>':''}
+        ${isSyncing?`<span class="badge b-info" style="margin-top:2px">${bg.state==='paused'?'⏸ En pause':'⟳ En cours'} ${bg.pct}%</span>`:''}
       </td>
-      <td>
-        ${cats.length === 0
-          ? '<span class="badge badge-info">Tous</span>'
-          : cats.slice(0,3).map(c => `<span class="tag">${esc(c)}</span>`).join('') +
-            (cats.length > 3 ? `<span class="tag">+${cats.length - 3}</span>` : '')
-        }
-      </td>
-      <td>
-        <div class="actions">
-          <button class="btn btn-secondary btn-icon btn-sm" title="Modifier" onclick="openEditUser('${esc(u.username)}')">✏️</button>
-          <button class="btn btn-secondary btn-icon btn-sm" title="Accès catalogues" onclick="openAccess('${esc(u.username)}')">🔑</button>
-          <button class="btn btn-danger btn-icon btn-sm" title="Supprimer" onclick="deleteUser('${esc(u.username)}')">🗑</button>
-        </div>
-      </td>
+      <td><span class="badge b-mu">${tl[c.type_contenu]||c.type_contenu}</span></td>
+      <td style="font-size:.79rem;color:var(--tx2)">${nb||'—'}</td>
+      <td><span class="badge ${eb[c.etat]||'b-mu'}">${el[c.etat]||c.etat}</span></td>
+      <td><span class="badge ${c.episodes_synced?'b-ok':'b-er'}">${c.episodes_synced?'✓ Oui':'✗ Non'}</span></td>
+      <td style="font-size:.78rem;color:var(--mu);white-space:nowrap">${timeAgo(c.updated_at)}</td>
+      <td><div class="actions">
+        <button class="btn btn-info btn-icon btn-sm"      title="Contenu"     onclick="openContent('${esc(c.slug)}')">👁</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier"    onclick="openDetail('${esc(c.slug)}')">✏️</button>
+        <button class="btn btn-warn btn-icon btn-sm"      title="Rafraîchir"  onclick="doRefresh('${esc(c.slug)}')">↺</button>
+        <button class="btn ${isSyncing?'btn-info':'btn-ok'} btn-icon btn-sm"  title="${isSyncing?'Suivre':'Sync'}" onclick="openSync('${esc(c.slug)}')">⟳</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Visibilité"  onclick="openVis('${esc(c.slug)}')">🔒</button>
+      </div></td>
     </tr>`;
   }).join('');
 }
 
-// ── Ouvrir modal utilisateur ──
-function openCreateUser() {
-  editUsername = null;
-  document.getElementById('mu-title').textContent = 'Nouvel utilisateur';
-  document.getElementById('mu-pass-label').textContent = 'Mot de passe *';
-  document.getElementById('mu-username').value  = '';
-  document.getElementById('mu-username').disabled = false;
-  document.getElementById('mu-email').value     = '';
-  document.getElementById('mu-password').value  = '';
-  document.getElementById('mu-role').value      = 'user';
-  document.getElementById('mu-active').checked  = true;
-  document.getElementById('mu-sync').checked    = false;
-  document.getElementById('mu-delete').checked  = false;
-  document.getElementById('mu-refresh').checked = false;
-  document.getElementById('mu-err').style.display = 'none';
-  openModal('modal-user');
+// ─── Ajouter + recherche ─────────────────────────────────────────────────
+function openAddCat(){
+  document.getElementById('add-slug').value='';['add-err','add-ok','add-loading','sr-loading'].forEach(i=>document.getElementById(i).style.display='none');
+  document.getElementById('sr-results').innerHTML='';document.getElementById('sr-q').value='';document.getElementById('add-btn').disabled=false;om('m-add');
+}
+async function searchCatalogues(){
+  const q=document.getElementById('sr-q').value.trim();if(!q){document.getElementById('sr-results').innerHTML='';return;}
+  const btn=document.getElementById('sr-btn'),res=document.getElementById('sr-results'),load=document.getElementById('sr-loading');
+  btn.disabled=true;load.style.display='';res.innerHTML='';
+  try{
+    let combined=[];const found=new Set();
+    try{const db=await api('GET',`/catalogues/rechercher?q=${encodeURIComponent(q)}`);(db||[]).forEach(r=>{combined.push(r);found.add(r.slug);});}catch{}
+    if(combined.length<5){try{const site=await api('GET',`/catalogues/site/rechercher?q=${encodeURIComponent(q)}`);(site||[]).forEach(r=>{if(!found.has(r.slug)){combined.push(r);found.add(r.slug);}});}catch{}}
+    if(!combined.length){res.innerHTML='<p style="color:var(--mu);font-size:.82rem;padding:.4rem 0">Aucun résultat.</p>';return;}
+    res.innerHTML=combined.map(r=>`
+      <div class="sr-item" onclick="selectSearchResult('${esc(r.slug)}','${esc(r.nom||'')}',this)">
+        ${r.image?`<img class="sr-img" src="${esc(r.image)}" onerror="this.style.display='none'" loading="lazy">`:'<div class="sr-img" style="display:flex;align-items:center;justify-content:center;color:var(--mu)">🎬</div>'}
+        <div style="flex:1;min-width:0"><div class="sr-nom">${esc(r.nom||r.slug)}</div><div class="sr-slug">${esc(r.slug)}</div>${r.type_contenu?`<span class="badge b-mu" style="margin-top:2px;font-size:.65rem">${esc(r.type_contenu)}</span>`:''}</div>
+        <button class="btn btn-primary btn-sm">Sélectionner</button>
+      </div>`).join('');
+  }finally{btn.disabled=false;load.style.display='none';}
+}
+function selectSearchResult(slug,nom,el){document.querySelectorAll('.sr-item').forEach(i=>i.classList.remove('selected'));el.classList.add('selected');document.getElementById('add-slug').value=slug;toast(`Slug : ${slug}`,'info');}
+async function addCatalogue(){
+  const raw=document.getElementById('add-slug').value.trim();const errEl=document.getElementById('add-err'),okEl=document.getElementById('add-ok');errEl.style.display='none';okEl.style.display='none';
+  if(!raw){errEl.textContent='Entrez un slug ou sélectionnez un résultat.';errEl.style.display='block';return;}
+  let slug=raw;const m=raw.match(/\/catalogue\/([^/]+)/);if(m)slug=m[1];
+  document.getElementById('add-btn').disabled=true;document.getElementById('add-loading').style.display='block';
+  try{
+    const r=await fetch(API+`/catalogues/${slug}`,{headers:{Authorization:`Bearer ${token}`}});
+    const d=await r.json().catch(()=>({}));if(!r.ok) throw d.detail||`Erreur ${r.status}`;
+    okEl.textContent=`✓ « ${d.nom||slug} » ajouté.`;okEl.style.display='block';toast(`${d.nom||slug} ajouté`,'ok');await loadCats();
+  }catch(e){errEl.textContent=typeof e==='string'?e:String(e);errEl.style.display='block';}
+  finally{document.getElementById('add-loading').style.display='none';document.getElementById('add-btn').disabled=false;}
 }
 
-function openEditUser(username) {
-  editUsername = username;
-  const u = allUsers.find(x => x.username === username);
-  document.getElementById('mu-title').textContent = `Modifier — ${username}`;
-  document.getElementById('mu-pass-label').textContent = 'Mot de passe (vide = inchangé)';
-  document.getElementById('mu-username').value    = u.username;
-  document.getElementById('mu-username').disabled = true;
-  document.getElementById('mu-email').value       = u.email || '';
-  document.getElementById('mu-password').value    = '';
-  document.getElementById('mu-role').value        = u.role;
-  document.getElementById('mu-active').checked    = u.is_active;
-  const p = u.permissions || {};
-  document.getElementById('mu-sync').checked    = !!p.can_sync;
-  document.getElementById('mu-delete').checked  = !!p.can_delete;
-  document.getElementById('mu-refresh').checked = !!p.can_refresh;
-  document.getElementById('mu-err').style.display = 'none';
-  openModal('modal-user');
+// ─── Rafraîchir ───────────────────────────────────────────────────────────
+async function doRefresh(slug){
+  if(!confirm(`Rafraîchir « ${slug} » ?`))return;
+  try{toast(`Rafraîchissement de ${slug}…`,'info');await api('POST',`/catalogues/${slug}/rafraichir`);toast(`${slug} rafraîchi`,'ok');await loadCats();}
+  catch(e){toast(String(e),'er');}
 }
 
-async function saveUser() {
-  const errEl = document.getElementById('mu-err');
-  errEl.style.display = 'none';
-  try {
-    const perms = {
-      can_sync:    document.getElementById('mu-sync').checked,
-      can_delete:  document.getElementById('mu-delete').checked,
-      can_refresh: document.getElementById('mu-refresh').checked,
-    };
-    if (editUsername) {
-      // Préserver les accès catalogues existants
-      const existing = allUsers.find(u => u.username === editUsername);
-      const existingPerms = existing?.permissions || {};
-      perms.allowed_catalogues = existingPerms.allowed_catalogues || [];
-      perms.catalogue_content  = existingPerms.catalogue_content  || {};
-      const body = {
-        is_active:   document.getElementById('mu-active').checked,
-        role:        document.getElementById('mu-role').value,
-        permissions: perms,
-      };
-      const email = document.getElementById('mu-email').value;
-      if (email) body.email = email;
-      const pass = document.getElementById('mu-password').value;
-      if (pass) body.password = pass;
-      await api('PUT', `/auth/users/${editUsername}`, body);
-      toast('Utilisateur mis à jour', 'ok');
-    } else {
-      const pass = document.getElementById('mu-password').value;
-      if (!pass) throw 'Le mot de passe est requis';
-      perms.allowed_catalogues = [];
-      perms.catalogue_content  = {};
-      await api('POST', '/auth/register', {
-        username:    document.getElementById('mu-username').value.trim(),
-        password:    pass,
-        email:       document.getElementById('mu-email').value || null,
-        role:        document.getElementById('mu-role').value,
-        permissions: perms,
-      });
-      toast('Utilisateur créé', 'ok');
-    }
-    closeModal('modal-user');
-    await loadUsers();
-  } catch (e) {
-    errEl.textContent = typeof e === 'string' ? e : JSON.stringify(e);
-    errEl.style.display = 'block';
-  }
+// ─── Détail catalogue ─────────────────────────────────────────────────────
+function addTag(field,event){
+  if(event.key!=='Enter'&&event.key!==',')return;event.preventDefault();
+  const inp=document.getElementById(field==='genres'?'md-gi':'md-li'),val=inp.value.trim().replace(/,$/,'');
+  if(!val||detailTags[field].includes(val)){inp.value='';return;}detailTags[field].push(val);renderTags(field);inp.value='';
+}
+function removeTag(field,idx){detailTags[field].splice(idx,1);renderTags(field);}
+function renderTags(field){
+  const boxId=field==='genres'?'md-genres-box':'md-langues-box',inpId=field==='genres'?'md-gi':'md-li';
+  const box=document.getElementById(boxId),inp=document.getElementById(inpId);
+  [...box.querySelectorAll('.etag')].forEach(e=>e.remove());
+  detailTags[field].forEach((t,i)=>{const el=document.createElement('span');el.className='etag';el.innerHTML=`${esc(t)}<button onclick="removeTag('${field}',${i})">×</button>`;box.insertBefore(el,inp);});
+}
+async function openDetail(slug){
+  detailSlug=slug;document.getElementById('md-title').textContent=`Modifier — ${slug}`;document.getElementById('md-err').style.display='none';
+  try{
+    const d=await api('GET',`/admin/api/catalogues/${slug}`);
+    document.getElementById('md-slug').value=d.slug||'';document.getElementById('md-url').value=d.url||'';
+    document.getElementById('md-nom').value=d.nom||'';document.getElementById('md-alt').value=d.titre_alternatif||'';
+    document.getElementById('md-syn').value=d.synopsis||'';document.getElementById('md-etat').value=d.etat||'en_cours';document.getElementById('md-type').value=d.type_contenu||'anime';
+    document.getElementById('md-created').textContent=d.created_at?new Date(d.created_at).toLocaleDateString('fr'):'—';
+    document.getElementById('md-updated').textContent=d.updated_at?new Date(d.updated_at).toLocaleString('fr'):'—';
+    detailTags.genres=[...(d.genres||[])];detailTags.langues=[...(d.langues||[])];renderTags('genres');renderTags('langues');om('m-detail');
+  }catch(e){toast(String(e),'er');}
+}
+async function saveDetail(){
+  const errEl=document.getElementById('md-err');errEl.style.display='none';
+  try{
+    await api('PUT',`/admin/api/catalogues/${detailSlug}`,{nom:document.getElementById('md-nom').value.trim()||undefined,titre_alternatif:document.getElementById('md-alt').value.trim()||undefined,synopsis:document.getElementById('md-syn').value.trim()||undefined,etat:document.getElementById('md-etat').value,type_contenu:document.getElementById('md-type').value,genres:detailTags.genres,langues:detailTags.langues});
+    toast('Catalogue mis à jour','ok');cm('m-detail');await loadCats();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
 }
 
-async function deleteUser(username) {
-  if (!confirm(`Supprimer « ${username} » ? Cette action est irréversible.`)) return;
-  try {
-    await api('DELETE', `/auth/users/${username}`);
-    toast(`${username} supprimé`, 'ok');
-    await loadUsers();
-  } catch (e) { toast(String(e), 'err'); }
+// ─── Viewer contenu ───────────────────────────────────────────────────────
+async function openContent(slug){
+  const cat=allCats.find(c=>c.slug===slug)||{nom:slug};
+  document.getElementById('mc-title').textContent=`Contenu — ${cat.nom}`;document.getElementById('mc-sync-badge').textContent='';
+  document.getElementById('mc-body').innerHTML='<div class="empty"><div class="ic">⏳</div>Chargement…</div>';om('m-content');
+  try{
+    const d=await api('GET',`/admin/api/catalogues/${slug}/contenu`);
+    const sb=document.getElementById('mc-sync-badge');
+    if(d.episodes_synced){sb.textContent='✓ Synchronisé';sb.className='badge b-ok';}else{sb.textContent='✗ Non synchronisé';sb.className='badge b-er';}
+    renderContentView(d);
+  }catch(e){document.getElementById('mc-body').innerHTML=`<div class="empty"><div class="ic">⚠</div>${esc(String(e))}</div>`;}
 }
-
-// ─── ACCÈS CATALOGUES (modal-access) ─────────────────────────────────────────
-function openAccess(username) {
-  accessUsername = username;
-  const u = allUsers.find(x => x.username === username);
-  document.getElementById('ma-title').textContent = `Accès aux catalogues — ${username}`;
-  document.getElementById('ma-err').style.display = 'none';
-
-  const perms     = u?.permissions || {};
-  const allowed   = perms.allowed_catalogues || [];
-  const isAll     = allowed.length === 0;
-  const content   = perms.catalogue_content  || {};
-
-  document.getElementById('ma-all-cats').checked = isAll;
-  renderAccessList(allowed, content);
-  openModal('modal-access');
+function renderContentView(d){
+  const ns=d.saisons.length,nf=d.films.length,nsc=d.scans.length;
+  document.getElementById('mc-body').innerHTML=`
+    <div class="ctabs">
+      <div class="ctab active" onclick="showCTab(this,'ct-saisons')">🎬 Saisons (${ns})</div>
+      <div class="ctab" onclick="showCTab(this,'ct-films')">🎞 Films (${nf})</div>
+      <div class="ctab" onclick="showCTab(this,'ct-scans')">📖 Scans (${nsc})</div>
+    </div>
+    <div id="ct-saisons" class="ctab-content active">${renderSaisonsContent(d.saisons)}</div>
+    <div id="ct-films"   class="ctab-content">${renderFilmsContent(d.films)}</div>
+    <div id="ct-scans"  class="ctab-content">${renderScansContent(d.scans)}</div>`;
 }
-
-function toggleAllCats() {
-  const isAll = document.getElementById('ma-all-cats').checked;
-  document.getElementById('ma-cats-list').style.display = isAll ? 'none' : '';
-}
-
-function renderAccessList(allowedCats, contentAccess) {
-  const list  = document.getElementById('ma-cats-list');
-  const isAll = document.getElementById('ma-all-cats').checked;
-  list.style.display = isAll ? 'none' : '';
-
-  list.innerHTML = allCats.map(cat => {
-    const enabled  = allowedCats.includes(cat.slug);
-    const catAccess = contentAccess[cat.slug] || {};
-    return `<div class="cat-access-row">
-      <div class="cat-access-head" onclick="toggleCatRow('${cat.slug}')">
-        <label class="form-switch" onclick="event.stopPropagation()">
-          <input type="checkbox" id="ca-${cat.slug}" ${enabled ? 'checked' : ''}
-                 onchange="onCatToggle('${cat.slug}')">
-        </label>
-        <span style="font-weight:600;font-size:.875rem">${esc(cat.nom)}</span>
-        <span class="badge badge-muted" style="margin-left:auto">${cat.slug}</span>
-        <span style="color:var(--muted);font-size:.85rem">▾</span>
-      </div>
-      <div class="cat-access-body ${enabled ? 'open' : ''}" id="cab-${cat.slug}">
-        ${renderContentRestrictions(cat, catAccess)}
-      </div>
-    </div>`;
+function showCTab(el,id){document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.ctab-content').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById(id).classList.add('active');}
+function renderSaisonsContent(saisons){
+  if(!saisons.length) return '<div class="empty"><div class="ic">🎬</div>Aucune saison</div>';
+  return saisons.map((s,idx)=>{
+    const hasEps=s.episodes.length>0,langBadge=s.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(s.lang.toUpperCase())}</span>`:'';
+    return `<div class="citem"><div class="citem-head" onclick="toggleCItem('sei-${idx}')"><span class="ci-nom">${esc(s.nom)}</span>${langBadge}<span class="ci-count">${hasEps?`${s.episodes.length} éps`:(s.total_episodes?`${s.total_episodes} éps (non chargés)`:'Aucun épisode')}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
+    <div class="citem-body ${hasEps?'':'unsynced'}" id="sei-${idx}">${hasEps?renderEpChips(s.episodes,'ep'):'<p style="margin:0">⚠ Épisodes non synchronisés.</p>'}</div></div>`;
   }).join('');
 }
-
-function onCatToggle(slug) {
-  const checked = document.getElementById('ca-' + slug).checked;
-  const body    = document.getElementById('cab-' + slug);
-  if (checked) body.classList.add('open'); else body.classList.remove('open');
-}
-
-function toggleCatRow(slug) {
-  document.getElementById('cab-' + slug).classList.toggle('open');
-}
-
-function renderContentRestrictions(cat, access) {
-  const sections = [
-    { key: 'saisons', label: '🎬 Saisons', items: cat.saisons },
-    { key: 'films',   label: '🎞 Films',   items: cat.films   },
-    { key: 'scans',   label: '📖 Scans',   items: cat.scans   },
-  ].filter(s => s.items && s.items.length);
-
-  if (!sections.length) return '<p style="color:var(--muted);font-size:.825rem;margin:0">Aucun contenu dans ce catalogue.</p>';
-
-  return sections.map(s => {
-    const allowed = access[s.key] || [];
-    const isAll   = allowed.length === 0;
-    return `<div class="content-section">
-      <label>${s.label}</label>
-      <div class="content-pills">
-        <label class="pill-check">
-          <input type="checkbox" class="cr-all" data-cat="${cat.slug}" data-type="${s.key}"
-                 ${isAll ? 'checked' : ''} onchange="onAllCheck(this)">
-          ✓ Tous
-        </label>
-        ${s.items.map(item => `
-          <label class="pill-check">
-            <input type="checkbox" class="cr-item" data-cat="${cat.slug}" data-type="${s.key}"
-                   value="${esc(item.slug)}"
-                   ${(isAll || allowed.includes(item.slug)) ? 'checked' : ''}>
-            ${esc(item.nom || item.slug)}${item.lang ? ` <span style="opacity:.6;font-size:.7rem">(${item.lang})</span>` : ''}
-          </label>`).join('')}
-      </div>
-    </div>`;
+function renderFilmsContent(films){
+  if(!films.length) return '<div class="empty"><div class="ic">🎞</div>Aucun film</div>';
+  return films.map((f,idx)=>{
+    const hasVids=f.lecteurs.length>0,langBadge=f.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(f.lang.toUpperCase())}</span>`:'';
+    return `<div class="citem"><div class="citem-head" onclick="toggleCItem('fi-${idx}')"><span class="ci-nom">${esc(f.nom)}</span>${langBadge}<span class="ci-count">${hasVids?`${f.videos_count} lecteur(s)`:'Non synchronisé'}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
+    <div class="citem-body ${hasVids?'':'unsynced'}" id="fi-${idx}">${hasVids?'<div>Lecteurs : '+f.lecteurs.map(l=>`<span class="lecteur-pill">🎬 ${esc(l)}</span>`).join('')+'</div>':'<p style="margin:0">⚠ Vidéos non synchronisées.</p>'}</div></div>`;
   }).join('');
 }
+function renderScansContent(scans){
+  if(!scans.length) return '<div class="empty"><div class="ic">📖</div>Aucun scan</div>';
+  return scans.map((sc,idx)=>{
+    const hasChaps=sc.chapitres.length>0,langBadge=sc.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(sc.lang.toUpperCase())}</span>`:'';
+    return `<div class="citem"><div class="citem-head" onclick="toggleCItem('sci-${idx}')"><span class="ci-nom">${esc(sc.nom)}</span>${langBadge}<span class="ci-count">${hasChaps?`${sc.total_chapitres} chapitres`:'Non synchronisé'}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
+    <div class="citem-body ${hasChaps?'':'unsynced'}" id="sci-${idx}">${hasChaps?renderEpChips(sc.chapitres,'chap'):'<p style="margin:0">⚠ Chapitres non synchronisés.</p>'}</div></div>`;
+  }).join('');
+}
+function renderEpChips(items,cls){
+  const MAX=120,chips=items.slice(0,MAX).map(e=>`<span class="ep-chip ${cls}">${e.numero}</span>`).join('');
+  const more=items.length>MAX?`<span class="ep-more" onclick="this.outerHTML='${items.slice(MAX).map(e=>`<span class=\\"ep-chip ${cls}\\">${e.numero}</span>`).join('')}'">… +${items.length-MAX} de plus</span>`:'';
+  return `<div class="ep-grid">${chips}${more}</div>`;
+}
+function toggleCItem(id){document.getElementById(id).classList.toggle('open');}
 
-function onAllCheck(cb) {
-  const cat  = cb.dataset.cat;
-  const type = cb.dataset.type;
-  const items = document.querySelectorAll(`.cr-item[data-cat="${cat}"][data-type="${type}"]`);
-  items.forEach(i => i.checked = cb.checked);
+// ─── Visibilité ────────────────────────────────────────────────────────────
+function openVis(slug){
+  visSlug=slug;const cat=allCats.find(c=>c.slug===slug);
+  const v=cat.visibility||{is_public:true,public_saisons:[],public_films:[],public_scans:[]};
+  document.getElementById('mv-title').textContent=`Visibilité — ${cat.nom}`;
+  const sec=(key,label,items)=>{if(!items?.length)return'';const al=v['public_'+key]||[],ia=al.length===0;
+    return `<div class="cs" style="margin-bottom:.65rem"><label>${label}</label><div class="pills"><label class="pill"><input type="checkbox" id="va-${key}" ${ia?'checked':''} onchange="onVisAll('${key}')">✓ Tous</label>${items.map(i=>`<label class="pill"><input type="checkbox" class="vi" data-type="${key}" value="${esc(i.slug)}" ${(ia||al.includes(i.slug))?'checked':''}>${esc(i.nom||i.slug)}${i.lang?` <span style="opacity:.55">(${i.lang})</span>`:''}</label>`).join('')}</div></div>`;};
+  document.getElementById('mv-body').innerHTML=`
+    <div class="fg" style="margin-bottom:.75rem">
+      <label class="fsw"><input type="checkbox" id="vp" ${v.is_public!==false?'checked':''} onchange="document.getElementById('vc').style.display=this.checked?'':'none'"><span style="font-weight:600">Catalogue accessible publiquement</span></label>
+    </div>
+    <div id="vc" ${v.is_public===false?'style="display:none"':''}>
+      <p style="font-size:.76rem;color:var(--mu);margin-bottom:.6rem">Contenu visible sans authentification (vide = tout).</p>
+      ${sec('saisons','🎬 Saisons',cat.saisons)}${sec('films','🎞 Films',cat.films)}${sec('scans','📖 Scans',cat.scans)}
+    </div>`;
+  om('m-vis');
+}
+function onVisAll(type){const c=document.getElementById('va-'+type).checked;document.querySelectorAll(`.vi[data-type="${type}"]`).forEach(i=>i.checked=c);}
+async function saveVisibility(){
+  const ip=document.getElementById('vp').checked;
+  const gi=type=>{const a=document.getElementById('va-'+type);if(!ip||!a||a.checked)return[];return[...document.querySelectorAll(`.vi[data-type="${type}"]:checked`)].map(x=>x.value);};
+  try{await api('PUT',`/admin/api/catalogues/${visSlug}/visibility`,{is_public:ip,public_saisons:gi('saisons'),public_films:gi('films'),public_scans:gi('scans')});toast('Visibilité mise à jour','ok');cm('m-vis');await loadCats();}
+  catch(e){toast(String(e),'er');}
 }
 
-async function saveAccess() {
-  const errEl = document.getElementById('ma-err');
-  errEl.style.display = 'none';
-  try {
-    const u          = allUsers.find(x => x.username === accessUsername);
-    const existPerms = u?.permissions || {};
-    const isAll      = document.getElementById('ma-all-cats').checked;
+// ═══════════════════════════════ SYNC ═════════════════════════════════════
+const STATE_LABELS={starting:'Démarrage…',running:'En cours',paused:'En pause',cancelling:'Annulation…',cancelled:'Annulé',done:'Terminé',error:'Erreur'};
+const STATE_BADGES={starting:'b-info',running:'b-info',paused:'b-wa',cancelling:'b-er',cancelled:'b-mu',done:'b-ok',error:'b-er'};
+const BAR_CLS={paused:'paused',done:'done',error:'er',cancelled:'cancelled',cancelling:'er'};
 
-    let allowedCats = [];
-    let catContent  = {};
-
-    if (!isAll) {
-      allCats.forEach(cat => {
-        const enabled = document.getElementById('ca-' + cat.slug)?.checked;
-        if (!enabled) return;
-        allowedCats.push(cat.slug);
-
-        const types = ['saisons','films','scans'];
-        catContent[cat.slug] = {};
-        types.forEach(type => {
-          const allCb = document.querySelector(`.cr-all[data-cat="${cat.slug}"][data-type="${type}"]`);
-          if (!allCb) { catContent[cat.slug][type] = []; return; }
-          if (allCb.checked) {
-            catContent[cat.slug][type] = [];
-          } else {
-            catContent[cat.slug][type] = [...document.querySelectorAll(
-              `.cr-item[data-cat="${cat.slug}"][data-type="${type}"]:checked`
-            )].map(x => x.value);
-          }
-        });
-      });
-    }
-
-    const perms = {
-      ...existPerms,
-      allowed_catalogues: allowedCats,
-      catalogue_content:  catContent,
-    };
-    await api('PUT', `/auth/users/${accessUsername}`, { permissions: perms });
-    toast('Accès mis à jour', 'ok');
-    closeModal('modal-access');
-    await loadUsers();
-  } catch (e) {
-    errEl.textContent = typeof e === 'string' ? e : JSON.stringify(e);
-    errEl.style.display = 'block';
-  }
-}
-
-// ─── CATALOGUES ───────────────────────────────────────────────────────────────
-async function loadCatalogues() {
-  allCats = await api('GET', '/admin/api/catalogues');
-  // Alimenter le filtre genre
-  const genres = [...new Set(allCats.flatMap(c => c.genres || []))].sort();
-  const sel = document.getElementById('cat-genre');
-  genres.forEach(g => {
-    const o = document.createElement('option');
-    o.value = g; o.textContent = g;
-    sel.appendChild(o);
-  });
-  filterCatalogues();
-}
-
-function catVisClass(cat) {
-  const v = cat.visibility || {};
-  if (!v.is_public) return 'prive';
-  const hasRestriction = [v.public_saisons, v.public_films, v.public_scans].some(l => l?.length);
-  return hasRestriction ? 'partiel' : 'public';
-}
-
-function filterCatalogues() {
-  const q     = document.getElementById('cat-q').value.toLowerCase();
-  const vis   = document.getElementById('cat-vis').value;
-  const genre = document.getElementById('cat-genre').value;
-  const filtered = allCats.filter(c =>
-    (!q     || c.nom.toLowerCase().includes(q) || c.slug.includes(q)) &&
-    (!vis   || catVisClass(c) === vis) &&
-    (!genre || (c.genres || []).includes(genre))
-  );
-  renderCatalogues(filtered);
-}
-
-function renderCatalogues(cats) {
-  const tbody = document.getElementById('cats-body');
-  if (!cats.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📚</div>Aucun catalogue trouvé</div></td></tr>`;
+// FIX barre de progression : connexion directe en WS sans passer par HTTP POST.
+// Le serveur s'abonne AVANT de créer la tâche → aucun événement n'est manqué.
+async function openSync(slug){
+  const existing=bgSyncs.get(slug);
+  if(existing&&!existing.done){
+    // Sync déjà en cours : ouvrir le modal et reconnecter si besoin
+    activeSyncSlug=slug;renderSyncModal(slug);om('m-sync');
+    if(!existing.ws||existing.ws.readyState>1) connectSyncWS(slug);
     return;
   }
-  tbody.innerHTML = cats.map(cat => {
-    const visClass = catVisClass(cat);
-    const visLabel = { public:'Public', prive:'Privé', partiel:'Partiel' }[visClass];
-    const visBadge = { public:'badge-ok', prive:'badge-danger', partiel:'badge-warn' }[visClass];
-    const genres   = (cat.genres || []).slice(0,3);
-    const moreG    = (cat.genres || []).length - genres.length;
-    const typeMap  = { anime:'🎬 Anime', scan:'📖 Scan', film:'🎞 Film', autre:'📦 Autre' };
+  const state={ws:null,events:[],pct:0,total:0,done_items:0,state:'starting',currentItem:'',done:false};
+  bgSyncs.set(slug,state);activeSyncSlug=slug;renderSyncModal(slug);om('m-sync');
+  connectSyncWS(slug);
+}
+
+function connectSyncWS(slug){
+  const state=bgSyncs.get(slug);if(state.ws){try{state.ws.close();}catch{}}
+  const ws=new WebSocket(`${WS_API}/catalogues/${slug}/sync-content/ws?token=${encodeURIComponent(token)}`);
+  state.ws=ws;
+  ws.onmessage=e=>{try{onSyncEvent(slug,JSON.parse(e.data));}catch{}};
+  ws.onerror=()=>{if(!state.done){state.state='error';state.done=true;updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);}};
+  ws.onclose=()=>{if(!state.done){updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);}};
+}
+
+function onSyncEvent(slug,ev){
+  const s=bgSyncs.get(slug);if(!s)return;
+  switch(ev.type){
+    case 'started':s.state='running';addSyncLog(slug,'▶ Démarrage…','run');break;
+    case 'progress_init':s.total=(ev.nb_saisons||0)+(ev.nb_films||0)+(ev.nb_scans||0);addSyncLog(slug,`ℹ ${ev.nb_saisons||0} saison(s) · ${ev.nb_films||0} film(s) · ${ev.nb_scans||0} scan(s)`,'run');break;
+    case 'saison_start':case 'film_start':case 'scan_start':s.currentItem=ev.nom||ev.slug||'';addSyncLog(slug,`  ⟳ ${s.currentItem}…`,'run');break;
+    case 'saison_done':s.done_items++;s.pct=pctCalc(s);addSyncLog(slug,`  ✓ ${ev.nom} — ${ev.episodes_count??'?'} épisodes`,'ok');break;
+    case 'film_done':s.done_items++;s.pct=pctCalc(s);addSyncLog(slug,`  ✓ ${ev.nom} (film)`,'ok');break;
+    case 'scan_done':s.done_items++;s.pct=pctCalc(s);addSyncLog(slug,`  ✓ ${ev.nom} — ${ev.chapitres_count??'?'} chapitres`,'ok');break;
+    case 'saison_skip':case 'film_skip':case 'scan_skip':s.done_items++;s.pct=pctCalc(s);addSyncLog(slug,`  ↷ ${ev.nom} (déjà sync.)`,'skip');break;
+    case 'saison_error':case 'film_error':case 'scan_error':s.done_items++;s.pct=pctCalc(s);addSyncLog(slug,`  ✕ ${ev.nom} — erreur`,'er');break;
+    case 'paused':s.state='paused';addSyncLog(slug,'⏸ '+ev.message,'pause');break;
+    case 'resumed':s.state='running';addSyncLog(slug,'▶ Reprise…','run');break;
+    case 'cancelling':s.state='cancelling';addSyncLog(slug,'⚠ '+ev.message,'cancel');break;
+    case 'cancelled':s.state='cancelled';s.done=true;addSyncLog(slug,'✕ Annulé.','cancel');loadCats();break;
+    case 'completed':s.state='done';s.pct=100;s.done=true;addSyncLog(slug,`✓ Terminé — ${ev.total_episodes??''} éps`,'ok');loadCats();break;
+    case 'error':s.state='error';s.done=true;addSyncLog(slug,`✕ ${ev.message||ev.reason||'Erreur'}`,'er');break;
+    case 'info':addSyncLog(slug,`ℹ ${ev.message||''}`,'run');break;
+  }
+  updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);
+}
+function pctCalc(s){return s.total>0?Math.round(s.done_items/s.total*100):0;}
+function addSyncLog(slug,text,cls=''){
+  const s=bgSyncs.get(slug);if(s)s.events.push({text,cls});
+  if(activeSyncSlug===slug){const log=document.getElementById('ms-log');if(log){const el=document.createElement('div');el.className=`sl-${cls==='ok'?'ok':cls==='skip'?'skip':cls==='er'?'er':cls==='pause'?'pause':cls==='cancel'?'cancel':'run'}`;el.textContent=text;log.appendChild(el);log.scrollTop=log.scrollHeight;}}
+}
+function renderSyncModal(slug){
+  const s=bgSyncs.get(slug);if(!s)return;const st=s.state,done=s.done;
+  document.getElementById('ms-title').textContent=`Synchronisation — ${slug}`;
+  const badge=document.getElementById('ms-state-badge');badge.textContent=STATE_LABELS[st]||st;badge.className=`badge ${STATE_BADGES[st]||'b-mu'}`;
+  document.getElementById('ms-label').textContent=done?STATE_LABELS[st]:(s.currentItem?`En cours : ${s.currentItem}`:STATE_LABELS[st]);
+  document.getElementById('ms-pct').textContent=s.pct+'%';
+  const bar=document.getElementById('ms-bar');bar.style.width=s.pct+'%';bar.className='prog-fill '+(BAR_CLS[st]||'');
+  const $=id=>document.getElementById(id);
+  $('ms-btn-pause').style.display=(!done&&st==='running')?'':'none';
+  $('ms-btn-resume').style.display=(!done&&st==='paused')?'':'none';
+  $('ms-btn-cancel').style.display=(!done&&st!=='cancelling')?'':'none';$('ms-btn-cancel').disabled=st==='cancelling';
+  $('ms-btn-fond').style.display=!done?'':'none';$('ms-btn-close').style.display=done?'':'none';
+  const log=document.getElementById('ms-log');
+  if(log&&log.children.length===0&&s.events.length>0){s.events.forEach(ev=>{const el=document.createElement('div');el.className=`sl-${ev.cls==='ok'?'ok':ev.cls==='skip'?'skip':ev.cls==='er'?'er':ev.cls==='pause'?'pause':ev.cls==='cancel'?'cancel':'run'}`;el.textContent=ev.text;log.appendChild(el);});log.scrollTop=log.scrollHeight;}
+}
+async function syncPause(){if(activeSyncSlug)try{await api('POST',`/catalogues/${activeSyncSlug}/sync-content/pause`);}catch(e){toast(String(e),'er');}}
+async function syncResume(){if(activeSyncSlug)try{await api('POST',`/catalogues/${activeSyncSlug}/sync-content/resume`);}catch(e){toast(String(e),'er');}}
+async function syncCancel(){if(!activeSyncSlug||!confirm('Annuler ?'))return;try{await api('DELETE',`/catalogues/${activeSyncSlug}/sync-content`);}catch(e){toast(String(e),'er');}}
+function syncFond(){cm('m-sync');activeSyncSlug=null;toast('Sync en arrière-plan','info');}
+function updateBgBar(){
+  const active=[...bgSyncs.entries()].filter(([,s])=>!s.done);
+  const badge=document.getElementById('sync-badge');badge.textContent=active.length?`⟳ ${active.length} sync en cours`:'';badge.style.display=active.length?'':'none';
+  const bar=document.getElementById('bg-bar'),list=document.getElementById('bg-list');
+  if(!active.length){if(bar)bar.style.display='none';return;}if(bar)bar.style.display='block';
+  if(list)list.innerHTML=active.map(([slug,s])=>{const ip=s.state==='paused';
+    return `<div class="bg-item"><span class="badge ${STATE_BADGES[s.state]||'b-mu'}" style="font-size:.65rem">${STATE_LABELS[s.state]||s.state}</span><span class="bi-slug">${esc(slug)}</span><div class="mini-prog"><div class="mini-fill ${ip?'paused':''}" style="width:${s.pct}%"></div></div><span class="bi-pct">${s.pct}%</span>
+    <button class="btn btn-info btn-sm" onclick="openSync('${esc(slug)}')">Suivre</button>
+    <button class="btn btn-warn btn-sm" onclick="${ip?`bgResume('${esc(slug)}')`:`bgPause('${esc(slug)}')`}">${ip?'▶':'⏸'}</button>
+    <button class="btn btn-danger btn-sm" onclick="bgCancel('${esc(slug)}')">✕</button></div>`;
+  }).join('');
+  filterCats();
+}
+async function bgPause(slug){try{await api('POST',`/catalogues/${slug}/sync-content/pause`);}catch(e){toast(String(e),'er');}}
+async function bgResume(slug){try{await api('POST',`/catalogues/${slug}/sync-content/resume`);}catch(e){toast(String(e),'er');}}
+async function bgCancel(slug){if(!confirm(`Annuler sync « ${slug} » ?`))return;try{await api('DELETE',`/catalogues/${slug}/sync-content`);}catch(e){toast(String(e),'er');}}
+
+// ═══════════════════════════ APPLICATIONS ════════════════════════════════
+
+async function loadApps(){allClients=await api('GET','/admin/api/clients');filterApps();}
+
+function filterApps(){
+  const q=document.getElementById('aq').value.toLowerCase(),st=document.getElementById('af-status').value;
+  renderApps(allClients.filter(c=>(!q||c.name.toLowerCase().includes(q))&&(!st||(st==='active'?c.is_active:!c.is_active))));
+}
+
+function renderApps(list){
+  const b=document.getElementById('atbody');
+  if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">🔌</div>Aucune application</div></td></tr>`;return;}
+  b.innerHTML=list.map(c=>{
+    const p=c.permissions||{},cats=p.allowed_catalogues||[],blk=c.is_blocked,q=p.quota||{};
+    const quotaInfo=q.enabled?`<span class="quota-used">Quota: ${q.max_syncs}/${q.period==='day'?'j':q.period==='year'?'an':'mois'}</span>`:'';
     return `<tr>
+      <td><div style="display:flex;align-items:center;gap:.55rem">
+        <div class="avc">${esc(c.name).slice(0,2).toUpperCase()}</div>
+        <div><div style="font-weight:600">${esc(c.name)}</div>${c.description?`<div style="font-size:.72rem;color:var(--mu)">${esc(c.description)}</div>`:''}</div>
+      </div></td>
+      <td><span class="mono" style="font-size:.72rem">${esc(c.client_id)}</span></td>
       <td>
-        <div style="font-weight:600">${esc(cat.nom)}</div>
-        <div style="font-size:.75rem;color:var(--muted)">${esc(cat.slug)}</div>
+        <span class="badge ${c.is_active?'b-ok':'b-er'}">${c.is_active?'Actif':'Inactif'}</span>
+        ${blk?'<span class="badge b-block" style="margin-left:3px">🚫 Bloqué</span>':''}
       </td>
-      <td><span class="badge badge-muted">${typeMap[cat.type_contenu] || cat.type_contenu}</span></td>
-      <td style="font-size:.8rem;color:var(--text2)">
-        ${cat.saisons.length ? `<span>${cat.saisons.length} saison${cat.saisons.length>1?'s':''}</span>` : ''}
-        ${cat.films.length   ? `<span style="margin-left:.4rem">${cat.films.length} film${cat.films.length>1?'s':''}</span>` : ''}
-        ${cat.scans.length   ? `<span style="margin-left:.4rem">${cat.scans.length} scan${cat.scans.length>1?'s':''}</span>` : ''}
-      </td>
-      <td>
-        ${genres.map(g => `<span class="tag">${esc(g)}</span>`).join('')}
-        ${moreG > 0 ? `<span class="tag">+${moreG}</span>` : ''}
-      </td>
-      <td><span class="badge ${visBadge}">${visLabel}</span></td>
-      <td>
-        <button class="btn btn-secondary btn-sm" onclick="openVisibility('${esc(cat.slug)}')">
-          ⚙ Visibilité
-        </button>
-      </td>
+      <td><div style="display:flex;gap:.2rem;flex-wrap:wrap"><span class="pc ${p.can_sync?'on':''}">⟳ Sync</span><span class="pc ${p.can_delete?'on':''}">🗑 Suppr</span><span class="pc ${p.can_refresh?'on':''}">↺ Refresh</span>${quotaInfo}</div></td>
+      <td>${cats.length===0?'<span class="badge b-info">Tous</span>':cats.slice(0,3).map(s=>`<span class="tag">${esc(s)}</span>`).join('')+(cats.length>3?`<span class="tag">+${cats.length-3}</span>`:'')}</td>
+      <td><div class="actions">
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier"          onclick="openEditClient('${esc(c.client_id)}')">✏️</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Accès catalogues"  onclick="openClientAccess('${esc(c.client_id)}')">🔑</button>
+        <button class="btn btn-warn btn-icon btn-sm"      title="Régénérer secret"  onclick="regenerateSecret('${esc(c.client_id)}')">🔄</button>
+        <button class="btn ${blk?'btn-ok':'btn-danger'} btn-icon btn-sm" title="${blk?'Débloquer':'Bloquer'}" onclick="${blk?`unblock('client','${esc(c.client_id)}')`:`openBlock('client','${esc(c.client_id)}')`}">${blk?'✓':'🚫'}</button>
+        <button class="btn btn-danger btn-icon btn-sm"   title="Supprimer"          onclick="deleteClient('${esc(c.client_id)}')">🗑</button>
+      </div></td>
     </tr>`;
   }).join('');
 }
 
-// ─── VISIBILITÉ ───────────────────────────────────────────────────────────────
-function openVisibility(slug) {
-  visSlug  = slug;
-  const cat = allCats.find(c => c.slug === slug);
-  const v   = cat.visibility || { is_public:true, public_saisons:[], public_films:[], public_scans:[] };
-  document.getElementById('mv-title').textContent = `Visibilité — ${cat.nom}`;
-
-  const contentSection = (key, label, items) => {
-    if (!items?.length) return '';
-    const allowed = v['public_' + key] || [];
-    const isAll   = allowed.length === 0;
-    return `<div class="content-section" id="vis-sec-${key}">
-      <label>${label}</label>
-      <div class="content-pills">
-        <label class="pill-check">
-          <input type="checkbox" id="vis-all-${key}" ${isAll ? 'checked' : ''}
-                 onchange="onVisAllCheck('${key}')"> ✓ Tous
-        </label>
-        ${items.map(item => `
-          <label class="pill-check">
-            <input type="checkbox" class="vis-item" data-type="${key}"
-                   value="${esc(item.slug)}" ${(isAll || allowed.includes(item.slug)) ? 'checked' : ''}>
-            ${esc(item.nom || item.slug)}${item.lang ? ` <span style="opacity:.6;font-size:.7rem">(${item.lang})</span>` : ''}
-          </label>`).join('')}
-      </div>
-    </div>`;
-  };
-
-  document.getElementById('mv-body').innerHTML = `
-    <div class="vis-section">
-      <label class="form-switch">
-        <input type="checkbox" id="vis-public" ${v.is_public !== false ? 'checked' : ''}
-               onchange="document.getElementById('vis-content').style.display=this.checked?'':'none'">
-        <span style="font-weight:600">Catalogue accessible publiquement</span>
-      </label>
-      <p style="font-size:.8rem;color:var(--muted);margin:.4rem 0 0 2.6rem">
-        Si désactivé, seuls les utilisateurs authentifiés et autorisés verront ce catalogue.
-      </p>
-    </div>
-    <div id="vis-content" ${v.is_public === false ? 'style="display:none"' : ''}>
-      <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">
-        Sélectionnez le contenu visible sans authentification (« Tous » = tout visible).
-      </p>
-      ${contentSection('saisons', '🎬 Saisons', cat.saisons)}
-      ${contentSection('films',   '🎞  Films',  cat.films)}
-      ${contentSection('scans',   '📖 Scans',  cat.scans)}
-    </div>
-  `;
-  openModal('modal-vis');
+function openCreateClient(){
+  editClientId=null;document.getElementById('mc2-title').textContent='Nouvelle application';
+  document.getElementById('mc2-name').value='';document.getElementById('mc2-desc').value='';
+  document.getElementById('mc2-active').checked=true;
+  ['mc2-sync','mc2-del','mc2-ref'].forEach(i=>document.getElementById(i).checked=false);
+  document.getElementById('mc2-err').style.display='none';om('m-client');
+}
+function openEditClient(cid){
+  editClientId=cid;const c=allClients.find(x=>x.client_id===cid);
+  document.getElementById('mc2-title').textContent=`Modifier — ${c.name}`;
+  document.getElementById('mc2-name').value=c.name||'';document.getElementById('mc2-desc').value=c.description||'';
+  document.getElementById('mc2-active').checked=c.is_active;
+  const p=c.permissions||{};document.getElementById('mc2-sync').checked=!!p.can_sync;document.getElementById('mc2-del').checked=!!p.can_delete;document.getElementById('mc2-ref').checked=!!p.can_refresh;
+  // Quota
+  const q=p.quota||{};const qen=document.getElementById('mc2-q-en');qen.checked=!!q.enabled;
+  document.getElementById('mc2-q-max').value=q.max_syncs||10;document.getElementById('mc2-q-period').value=q.period||'month';
+  document.getElementById('mc2-quota-fields').style.display=q.enabled?'flex':'none';
+  // Blocage
+  if(c.is_blocked){const bb=document.createElement('div');bb.id='mc2-blocked-banner';bb.className='blocked-banner';bb.innerHTML=`🚫 Cette application est actuellement bloquée${c.blocked_reason?' ('+esc(c.blocked_reason)+')':''}`;const bd=document.getElementById('m-client').querySelector('.mbd');const ex=document.getElementById('mc2-blocked-banner');if(ex)ex.remove();bd.insertBefore(bb,bd.firstChild);}else{const ex=document.getElementById('mc2-blocked-banner');if(ex)ex.remove();}
+  document.getElementById('mc2-err').style.display='none';om('m-client');
+}
+async function saveClient(){
+  const errEl=document.getElementById('mc2-err');errEl.style.display='none';
+  const name=document.getElementById('mc2-name').value.trim();if(!name){errEl.textContent='Le nom est requis.';errEl.style.display='block';return;}
+  const qen2=document.getElementById('mc2-q-en').checked;
+  const quota2={enabled:qen2,period:document.getElementById('mc2-q-period').value,max_syncs:parseInt(document.getElementById('mc2-q-max').value)||10};
+  const perms={can_sync:document.getElementById('mc2-sync').checked,can_delete:document.getElementById('mc2-del').checked,can_refresh:document.getElementById('mc2-ref').checked,quota:quota2};
+  try{
+    if(editClientId){
+      const ex=allClients.find(c=>c.client_id===editClientId)?.permissions||{};
+      perms.allowed_catalogues=ex.allowed_catalogues||[];perms.catalogue_content=ex.catalogue_content||{};
+      await api('PUT',`/admin/api/clients/${editClientId}`,{name,description:document.getElementById('mc2-desc').value.trim()||null,is_active:document.getElementById('mc2-active').checked,permissions:perms});
+      toast('Application mise à jour','ok');cm('m-client');await loadApps();
+    }else{
+      const r=await api('POST','/admin/api/clients',{name,description:document.getElementById('mc2-desc').value.trim()||null,permissions:perms});
+      cm('m-client');showSecretModal(r.client_id,r.client_secret,true);
+    }
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+async function deleteClient(cid){
+  const c=allClients.find(x=>x.client_id===cid);if(!confirm(`Supprimer « ${c?.name||cid} » ?`))return;
+  try{await api('DELETE',`/admin/api/clients/${cid}`);toast('Application supprimée','ok');await loadApps();}
+  catch(e){toast(String(e),'er');}
+}
+async function regenerateSecret(cid){
+  if(!confirm('Régénérer le secret ? L\'ancien secret sera immédiatement révoqué.'))return;
+  try{const r=await api('POST',`/admin/api/clients/${cid}/regenerate-secret`);showSecretModal(r.client_id,r.client_secret,false);}
+  catch(e){toast(String(e),'er');}
+}
+function showSecretModal(cid,secret,isNew){
+  document.getElementById('ms2-title').textContent=isNew?'Application créée — Secret':'Secret régénéré';
+  document.getElementById('ms2-cid').textContent=cid;
+  document.getElementById('ms2-secret').textContent=secret;
+  om('m-secret');
 }
 
-function onVisAllCheck(type) {
-  const allChecked = document.getElementById('vis-all-' + type).checked;
-  document.querySelectorAll(`.vis-item[data-type="${type}"]`).forEach(i => i.checked = allChecked);
+// ─── Quota UI toggle ─────────────────────────────────────────────────────
+function toggleQuotaUI(pfx){
+  const en=document.getElementById(pfx+'-q-en').checked;
+  document.getElementById(pfx+'-quota-fields').style.display=en?'flex':'none';
 }
 
-async function saveVisibility() {
-  const isPublic = document.getElementById('vis-public').checked;
-  const getItems = type => {
-    if (!isPublic) return [];
-    const allCb = document.getElementById('vis-all-' + type);
-    if (!allCb || allCb.checked) return [];
-    return [...document.querySelectorAll(`.vis-item[data-type="${type}"]:checked`)].map(x => x.value);
-  };
-  try {
-    await api('PUT', `/admin/api/catalogues/${visSlug}/visibility`, {
-      is_public:      isPublic,
-      public_saisons: getItems('saisons'),
-      public_films:   getItems('films'),
-      public_scans:   getItems('scans'),
-    });
-    toast('Visibilité mise à jour', 'ok');
-    closeModal('modal-vis');
-    await loadCatalogues();
-  } catch (e) { toast(String(e), 'err'); }
+// ─── Blocage ──────────────────────────────────────────────────────────────
+let _blockTarget=null; // {type:'user'|'client', id: username|client_id}
+
+function openBlock(type,id){
+  _blockTarget={type,id};
+  document.getElementById('mb-title').textContent=type==='user'?`Bloquer @${id}`:`Bloquer ${id}`;
+  document.getElementById('mb-reason').value='';document.getElementById('mb-until').value='';
+  document.getElementById('mb-err').style.display='none';om('m-block');
+}
+async function saveBlock(){
+  if(!_blockTarget)return;
+  const errEl=document.getElementById('mb-err');errEl.style.display='none';
+  const reason=document.getElementById('mb-reason').value.trim()||null;
+  const until=document.getElementById('mb-until').value;
+  const blockedUntil=until?new Date(until).toISOString():null;
+  const body={is_blocked:true,blocked_reason:reason,blocked_until:blockedUntil};
+  try{
+    if(_blockTarget.type==='user'){await api('PUT',`/auth/users/${_blockTarget.id}`,body);}
+    else{await api('PUT',`/admin/api/clients/${_blockTarget.id}`,body);}
+    toast(`${_blockTarget.id} bloqué`,'wa');cm('m-block');
+    if(_blockTarget.type==='user')await loadUsers();else await loadApps();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+async function unblock(type,id){
+  if(!confirm(`Débloquer « ${id} » ?`))return;
+  const body={is_blocked:false,blocked_reason:null,blocked_until:null};
+  try{
+    if(type==='user'){await api('PUT',`/auth/users/${id}`,body);await loadUsers();}
+    else{await api('PUT',`/admin/api/clients/${id}`,body);await loadApps();}
+    toast(`${id} débloqué`,'ok');
+  }catch(e){toast(String(e),'er');}
 }
 
-// ─── Modals helpers ───────────────────────────────────────────────────────────
-function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none';  }
+// ─── Accès catalogues Clients ─────────────────────────────────────────────
+function openClientAccess(cid){
+  cltAccessClientId=cid;const c=allClients.find(x=>x.client_id===cid);
+  document.getElementById('mca-title').textContent=`Accès catalogues — ${c?.name||cid}`;document.getElementById('mca-err').style.display='none';
+  const p=c?.permissions||{},allowed=p.allowed_catalogues||[];
+  document.getElementById('mca-all').checked=allowed.length===0;
+  renderAccessList('mca-list','mca-all',allowed,p.catalogue_content||{});om('m-clt-access');
+}
+function toggleAllCatsClt(){document.getElementById('mca-list').style.display=document.getElementById('mca-all').checked?'none':'';}
+async function saveClientAccess(){
+  const errEl=document.getElementById('mca-err');errEl.style.display='none';
+  try{
+    const c=allClients.find(x=>x.client_id===cltAccessClientId),ep=c?.permissions||{};
+    const isAll=document.getElementById('mca-all').checked;
+    let allowed=[],content={};
+    if(!isAll){const g=_gatherAccess('mca-list');allowed=g.allowed;content=g.content;}
+    await api('PUT',`/admin/api/clients/${cltAccessClientId}`,{permissions:{...ep,allowed_catalogues:allowed,catalogue_content:content}});
+    toast('Accès mis à jour','ok');cm('m-clt-access');await loadApps();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
 
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') ['modal-user','modal-access','modal-vis'].forEach(closeModal);
-});
+// ═══════════════════════ PLANIFICATION ══════════════════════════════════
 
-// ─── Util ─────────────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let allSchedules=[], allHistory=[], editScheduleId=null;
+
+const FREQ_LABELS={daily:'Quotidien',weekly:'Hebdomadaire',biweekly:'Bi-hebdomadaire',monthly:'Mensuel',custom:'Personnalisé'};
+const DAYS=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+function freqLabel(s){
+  const h=String(s.hour||0).padStart(2,'0'),m2=String(s.minute||0).padStart(2,'0'),t=`${h}h${m2}`;
+  switch(s.frequency){
+    case 'daily':   return `Quotidien à ${t} UTC`;
+    case 'weekly':  return `Chaque ${DAYS[s.day_of_week||0]} à ${t} UTC`;
+    case 'biweekly':return `Toutes les 2 sem. (${DAYS[s.day_of_week||0]}) à ${t} UTC`;
+    case 'monthly': return `Mensuel le ${s.day_of_month||1} à ${t} UTC`;
+    case 'custom':  return `Tous les ${s.interval_days||7} j. à ${t} UTC`;
+    default:return s.frequency;
+  }
+}
+
+function fmtDuration(s){if(!s)return'—';if(s<60)return`${s}s`;if(s<3600)return`${Math.floor(s/60)}m ${s%60}s`;return`${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;}
+
+async function loadSchedules(){
+  try{allSchedules=await api('GET','/admin/api/schedules');renderSchedules();}
+  catch(e){toast(String(e),'er');}
+}
+function renderSchedules(){
+  const b=document.getElementById('stbody');
+  if(!allSchedules.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">📅</div>Aucune programmation</div></td></tr>`;return;}
+  b.innerHTML=allSchedules.map(s=>{
+    const next=s.next_run?new Date(s.next_run).toLocaleString('fr'):'—';
+    const last=s.last_run?new Date(s.last_run).toLocaleString('fr'):'Jamais';
+    return `<tr>
+      <td><div style="font-weight:600">${esc(s.slug)}</div>${s.description?`<div style="font-size:.72rem;color:var(--mu)">${esc(s.description)}</div>`:''}</td>
+      <td style="font-size:.82rem">${esc(freqLabel(s))}</td>
+      <td style="font-size:.78rem;color:var(--info)">${next}</td>
+      <td style="font-size:.78rem;color:var(--mu)">${last}</td>
+      <td><span class="badge ${s.active?'b-ok':'b-mu'}">${s.active?'Actif':'Inactif'}</span></td>
+      <td><div class="actions">
+        <button class="btn btn-ok btn-icon btn-sm"       title="Lancer maintenant" onclick="runScheduleNow('${esc(s.id)}','${esc(s.slug)}')">▶</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier"          onclick="openEditSchedule('${esc(s.id)}')">✏️</button>
+        <button class="btn btn-warn btn-icon btn-sm"      title="${s.active?'Désactiver':'Activer'}" onclick="toggleSchedule('${esc(s.id)}',${!s.active})">${s.active?'⏸':'▶'}</button>
+        <button class="btn btn-danger btn-icon btn-sm"    title="Supprimer"         onclick="deleteSchedule('${esc(s.id)}')">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function onFreqChange(){
+  const freq=document.getElementById('ms3-freq').value;
+  document.getElementById('ms3-dow-field').style.display=['weekly','biweekly'].includes(freq)?'block':'none';
+  document.getElementById('ms3-dom-field').style.display=freq==='monthly'?'block':'none';
+  document.getElementById('ms3-interval-field').style.display=freq==='custom'?'block':'none';
+}
+
+function openCreateSchedule(){
+  editScheduleId=null;document.getElementById('ms3-title').textContent='Nouvelle programmation';
+  document.getElementById('ms3-slug').value='';document.getElementById('ms3-desc').value='';
+  document.getElementById('ms3-freq').value='weekly';document.getElementById('ms3-hour').value='2';document.getElementById('ms3-min').value='0';
+  document.getElementById('ms3-dow').value='0';document.getElementById('ms3-dom').value='1';document.getElementById('ms3-interval').value='7';
+  document.getElementById('ms3-active').checked=true;document.getElementById('ms3-err').style.display='none';
+  // Alimenter la datalist
+  const dl=document.getElementById('ms3-cat-list');dl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
+  onFreqChange();om('m-schedule');
+}
+function openEditSchedule(sid){
+  const s=allSchedules.find(x=>x.id===sid);if(!s)return;
+  editScheduleId=sid;document.getElementById('ms3-title').textContent=`Modifier — ${s.slug}`;
+  document.getElementById('ms3-slug').value=s.slug;document.getElementById('ms3-desc').value=s.description||'';
+  document.getElementById('ms3-freq').value=s.frequency||'daily';document.getElementById('ms3-hour').value=s.hour??2;document.getElementById('ms3-min').value=s.minute??0;
+  document.getElementById('ms3-dow').value=s.day_of_week??0;document.getElementById('ms3-dom').value=s.day_of_month??1;document.getElementById('ms3-interval').value=s.interval_days??7;
+  document.getElementById('ms3-active').checked=s.active!==false;document.getElementById('ms3-err').style.display='none';
+  const dl=document.getElementById('ms3-cat-list');dl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
+  onFreqChange();om('m-schedule');
+}
+async function saveSchedule(){
+  const errEl=document.getElementById('ms3-err');errEl.style.display='none';
+  const freq=document.getElementById('ms3-freq').value,slug=document.getElementById('ms3-slug').value.trim();
+  if(!slug){errEl.textContent='Le slug est requis.';errEl.style.display='block';return;}
+  const body={slug,description:document.getElementById('ms3-desc').value.trim()||null,frequency:freq,hour:parseInt(document.getElementById('ms3-hour').value)||0,minute:parseInt(document.getElementById('ms3-min').value)||0,active:document.getElementById('ms3-active').checked};
+  if(['weekly','biweekly'].includes(freq)) body.day_of_week=parseInt(document.getElementById('ms3-dow').value);
+  if(freq==='monthly') body.day_of_month=parseInt(document.getElementById('ms3-dom').value)||1;
+  if(freq==='custom') body.interval_days=parseInt(document.getElementById('ms3-interval').value)||7;
+  try{
+    if(editScheduleId){await api('PUT',`/admin/api/schedules/${editScheduleId}`,body);toast('Programmation mise à jour','ok');}
+    else{await api('POST','/admin/api/schedules',body);toast('Programmation créée','ok');}
+    cm('m-schedule');await loadSchedules();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+async function deleteSchedule(sid){
+  if(!confirm('Supprimer cette programmation ?'))return;
+  try{await api('DELETE',`/admin/api/schedules/${sid}`);toast('Supprimé','ok');await loadSchedules();}
+  catch(e){toast(String(e),'er');}
+}
+async function toggleSchedule(sid,active){
+  try{await api('PUT',`/admin/api/schedules/${sid}`,{active});await loadSchedules();}
+  catch(e){toast(String(e),'er');}
+}
+async function runScheduleNow(sid,slug){
+  if(!confirm(`Lancer la sync de « ${slug} » maintenant ?`))return;
+  try{
+    await api('POST',`/admin/api/schedules/${sid}/run`);
+    toast(`Sync de ${slug} démarrée`,'ok');
+    // Ouvrir le modal de suivi
+    await openSync(slug);
+  }catch(e){toast(String(e),'er');}
+}
+
+// ─── Historique ───────────────────────────────────────────────────────────
+async function loadHistory(){
+  try{allHistory=await api('GET','/admin/api/history');filterHistory();}
+  catch(e){toast(String(e),'er');}
+}
+function filterHistory(){
+  const q=document.getElementById('hq').value.toLowerCase(),st=document.getElementById('hf-status').value,tr=document.getElementById('hf-trig').value;
+  const list=allHistory.filter(h=>(!q||h.slug.includes(q))&&(!st||h.status===st)&&(!tr||(tr==='schedule'?h.triggered_by.startsWith('schedule'):!h.triggered_by.startsWith('schedule'))));
+  renderHistory(list);
+}
+function renderHistory(list){
+  const b=document.getElementById('htbody');
+  if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">🕒</div>Aucune sync enregistrée</div></td></tr>`;return;}
+  const scls={completed:'sc-completed',cancelled:'sc-cancelled',error:'sc-error'};
+  const slbl={completed:'✓ Terminé',cancelled:'↷ Annulé',error:'✕ Erreur'};
+  b.innerHTML=list.map(h=>{
+    const by=h.triggered_by||'';
+    const byLabel=by.startsWith('schedule:')?`📅 ${by.split(':')[1]||'auto'}`:(by?`👤 ${by}`:'Manuel');
+    const started=h.started_at?new Date(h.started_at).toLocaleString('fr'):'—';
+    return `<tr>
+      <td><span style="font-weight:600;font-family:monospace;font-size:.82rem">${esc(h.slug)}</span></td>
+      <td style="font-size:.78rem;color:var(--mu)">${esc(byLabel)}</td>
+      <td style="font-size:.78rem;color:var(--mu);white-space:nowrap">${started}</td>
+      <td style="font-size:.78rem">${fmtDuration(h.duration_s)}</td>
+      <td><span class="status-chip ${scls[h.status]||''}">${slbl[h.status]||h.status}</span></td>
+      <td style="font-size:.78rem;color:var(--mu)">${h.total_items??'—'} éléments</td>
+    </tr>`;
+  }).join('');
 }
 </script>
 </body>
-</html>
-"""
+</html>"""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1128,6 +1459,6 @@ async def admin_ui():
 
 
 if __name__ == "__main__":
-    print(f"  Admin UI  : http://localhost:{ADMIN_PORT}")
-    print(f"  API cible : {API_BASE}")
+    print(f"  Interface admin : http://localhost:{ADMIN_PORT}")
+    print(f"  API principale  : {API_BASE}")
     uvicorn.run("admin_main:app", host="0.0.0.0", port=ADMIN_PORT, reload=True)

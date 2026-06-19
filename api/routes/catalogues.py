@@ -33,6 +33,7 @@ from params import BASE_SAMA_URL
 from api.dependencies import (
     get_current_user, get_optional_user, require_admin,
     check_can_sync, check_can_delete, check_can_refresh, check_catalogue_access,
+    check_quota, increment_quota,
     decode_ws_token,
 )
 from fastapi import Depends
@@ -196,6 +197,33 @@ async def rafraichir(slug: str, user: dict = Depends(get_current_user)):
     return catalogue
 
 
+@router.post("/{slug}/sync-content/pause", summary="Met la sync en pause")
+async def pause_sync(slug: str, user: dict = Depends(get_current_user)):
+    check_can_sync(user)
+    if not sync_manager.is_active(slug):
+        raise HTTPException(status_code=404, detail=f"Aucune sync active pour '{slug}'")
+    await sync_manager.pause(slug)
+    return {"status": "pausing", "slug": slug}
+
+
+@router.post("/{slug}/sync-content/resume", summary="Reprend une sync en pause")
+async def resume_sync(slug: str, user: dict = Depends(get_current_user)):
+    check_can_sync(user)
+    if not sync_manager.is_active(slug):
+        raise HTTPException(status_code=404, detail=f"Aucune sync active pour '{slug}'")
+    await sync_manager.resume(slug)
+    return {"status": "resumed", "slug": slug}
+
+
+@router.delete("/{slug}/sync-content", summary="Annule la sync en cours")
+async def cancel_sync(slug: str, user: dict = Depends(get_current_user)):
+    check_can_sync(user)
+    if not sync_manager.is_active(slug):
+        raise HTTPException(status_code=404, detail=f"Aucune sync active pour '{slug}'")
+    await sync_manager.cancel(slug)
+    return {"status": "cancelling", "slug": slug}
+
+
 @router.get("/{slug}/sync-content/status", summary="État de la sync pour ce slug")
 async def sync_status(slug: str):
     """
@@ -298,6 +326,7 @@ async def ws_sync_episodes(
     try:
         check_can_sync(ws_user)
         check_catalogue_access(ws_user, slug)
+        await check_quota(ws_user)
     except HTTPException as e:
         await websocket.send_json({"type": "error", "reason": e.detail, "slug": slug})
         await websocket.close(code=4003)
@@ -315,8 +344,10 @@ async def ws_sync_episodes(
                 await websocket.send_json({"type": "error", "reason": reason, "slug": slug})
                 return
 
-            # Démarrer la sync
-            task = asyncio.create_task(sync_manager.run_sync(slug))
+            # Incrémenter le quota avant de démarrer
+            await increment_quota(ws_user)
+            triggered_by = ws_user.get("username") or ws_user.get("client_id", "manual")
+            task = asyncio.create_task(sync_manager.run_sync(slug, triggered_by=triggered_by))
             sync_manager.register(slug, task)
         else:
             # Sync déjà en cours : on informe juste qu'on s'y abonne

@@ -190,6 +190,18 @@ async def mark_content_synced(slug: str) -> None:
     )
 
 
+_META_FIELDS = {"nom", "titre_alternatif", "synopsis", "genres", "langues", "etat", "type_contenu"}
+
+async def update_catalogue_metadata(slug: str, fields: dict) -> bool:
+    """Met à jour les champs de métadonnées éditables d'un catalogue."""
+    clean = {k: v for k, v in fields.items() if k in _META_FIELDS and v is not None}
+    if not clean:
+        return True
+    clean["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await _col().update_one({"slug": slug}, {"$set": clean})
+    return result.matched_count > 0
+
+
 async def update_catalogue_visibility(slug: str, visibility: dict) -> bool:
     """Met à jour les paramètres de visibilité/accès public d'un catalogue."""
     result = await _col().update_one(

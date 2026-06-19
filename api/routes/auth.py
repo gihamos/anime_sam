@@ -11,15 +11,22 @@ DELETE /auth/users/{username}     → supprime un utilisateur (admin)
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 
 from models.user import UserCreate, UserUpdate, UserPublic, UserInDB
 from api.dependencies import (
     get_current_user, require_admin,
-    hash_password, verify_password, create_access_token,
+    hash_password, verify_password, create_access_token, create_client_token,
 )
 import db.user_repository as user_repo
+import db.clients_repository as clients_repo
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
+
+
+class ClientTokenRequest(BaseModel):
+    client_id:     str
+    client_secret: str
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +46,21 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=403, detail="Compte désactivé")
 
     token = create_access_token(user["username"])
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/client-token", summary="Token pour une application tierce (client_id + secret)")
+async def client_token_endpoint(body: ClientTokenRequest):
+    """
+    Authentifie une application tierce via client_id + client_secret.
+    Retourne un JWT Bearer utilisable sur tous les endpoints protégés.
+    """
+    doc = await clients_repo.find_by_client_id(body.client_id)
+    if not doc or not verify_password(body.client_secret, doc.get("client_secret_hash", "")):
+        raise HTTPException(status_code=401, detail="client_id ou client_secret invalide")
+    if not doc.get("is_active", True):
+        raise HTTPException(status_code=403, detail="Application désactivée")
+    token = create_client_token(body.client_id)
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -105,10 +127,14 @@ async def update_user(
         raise HTTPException(404, f"Utilisateur '{username}' introuvable")
 
     fields: dict = {}
-    if body.email       is not None: fields["email"]       = body.email
-    if body.is_active   is not None: fields["is_active"]   = body.is_active
-    if body.role        is not None: fields["role"]        = body.role
-    if body.permissions is not None: fields["permissions"] = body.permissions.model_dump()
+    if body.email          is not None: fields["email"]          = body.email
+    if body.is_active      is not None: fields["is_active"]      = body.is_active
+    if body.is_blocked     is not None: fields["is_blocked"]     = body.is_blocked
+    if body.blocked_reason is not None: fields["blocked_reason"] = body.blocked_reason
+    if body.blocked_until  is not None: fields["blocked_until"]  = body.blocked_until
+    if body.role           is not None: fields["role"]           = body.role
+    if body.permissions    is not None: fields["permissions"]    = body.permissions.model_dump()
+    if body.password       is not None: fields["hashed_password"] = hash_password(body.password)
 
     if fields:
         await user_repo.update_user(username, fields)

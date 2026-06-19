@@ -1,17 +1,16 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi.middleware.cors import CORSMiddleware
+
 from utils.logger import logger
 from db.connection import setup_indexes
-from fastapi.middleware.cors import CORSMiddleware
 from api.routes.catalogues import router as catalogues_router
 from api.routes.planning import router as planning_router
 from api.routes.auth import router as auth_router
 from api.routes.admin import router as admin_router
 from services.catalogue_service import mettre_a_jour_tous
+from services.scheduler_service import scheduler, load_schedules_from_db
 from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT
-
-scheduler = AsyncIOScheduler()
 
 
 async def _create_default_admin() -> None:
@@ -29,11 +28,14 @@ async def _create_default_admin() -> None:
         "role":            Role.ADMIN,
         "hashed_password": hash_password(ADMIN_PASSWORD),
         "is_active":       True,
+        "is_blocked":      False,
         "permissions": {
             "can_sync":           True,
             "can_delete":         True,
             "can_refresh":        True,
             "allowed_catalogues": [],
+            "catalogue_content":  {},
+            "quota":              {"enabled": False, "period": "month", "max_syncs": 10},
         },
     })
     logger.info(
@@ -46,8 +48,22 @@ async def _create_default_admin() -> None:
 async def lifespan(app: FastAPI):
     await setup_indexes()
     await _create_default_admin()
-    scheduler.add_job(mettre_a_jour_tous, "interval", hours=24, id="auto_update")
+
+    # Sync auto quotidienne (mise à jour des métadonnées)
+    scheduler.add_job(
+        mettre_a_jour_tous,
+        "interval",
+        hours=24,
+        id="auto_update_metadata",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
     scheduler.start()
+
+    # Charger les programmations de sync depuis la DB
+    await load_schedules_from_db()
+
     logger.info("Démarrage de l'application")
     yield
     scheduler.shutdown()

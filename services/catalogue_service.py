@@ -142,8 +142,9 @@ async def rafraichir_catalogue(slug: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 async def sync_content_bg(
-    slug:      str,
-    broadcast=None,  # Optional[Callable[[dict], Awaitable[None]]]
+    slug:            str,
+    broadcast        = None,   # Optional[Callable[[dict], Awaitable[None]]]
+    wait_if_paused   = None,   # Optional[async Callable[[], bool]] → False = annulée
 ) -> int:
     """
     Charge tous les épisodes de toutes les saisons et films d'un catalogue.
@@ -155,6 +156,12 @@ async def sync_content_bg(
     async def _emit(event: dict) -> None:
         if broadcast:
             await broadcast(event)
+
+    async def _check() -> bool:
+        """Retourne False si la sync doit s'arrêter (annulation)."""
+        if wait_if_paused:
+            return await wait_if_paused()
+        return True
 
     doc = await repo.find_by_slug(slug)
     if not doc:
@@ -175,6 +182,8 @@ async def sync_content_bg(
 
     # --- Saisons ---
     for i, saison in saisons:
+        if not await _check():
+            return total_loaded
         nom = saison.get("nom", f"Saison {i}")
         url = _ensure_absolute_url(saison.get("url", ""), slug)
 
@@ -224,6 +233,8 @@ async def sync_content_bg(
 
     # --- Films ---
     for j, film in films:
+        if not await _check():
+            return total_loaded
         nom = film.get("nom", f"Film {j}")
         url = _ensure_absolute_url(film.get("url", ""), slug)
 
@@ -261,6 +272,8 @@ async def sync_content_bg(
 
     # --- Scans / Mangas ---
     for k, scan in scans:
+        if not await _check():
+            return total_loaded
         nom = scan.get("nom", f"Scan {k}")
         url = _ensure_absolute_url(scan.get("url", ""), slug)
 
