@@ -56,6 +56,11 @@ async def setup_indexes():
 
         # Index sur la collection users
         await db["users"].create_index("username", unique=True)
+        await db["users"].create_index("oidc_sub")
+        await db["users"].create_index("groups")
+
+        # Index sur les groupes
+        await db["groups"].create_index("name")
 
         logger.info("Index MongoDB créés")
 

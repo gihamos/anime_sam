@@ -61,8 +61,10 @@ def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
     Filtre le contenu du catalogue selon le profil de l'utilisateur :
       - Admin          → tout visible
       - Non authentifié → selon visibility.is_public + public_*
-      - Utilisateur    → selon allowed_catalogues + catalogue_content
+      - Utilisateur    → permissions directes + groupes (catalogue / genre)
     """
+    from api.dependencies import EffectiveAccess
+
     slug       = cat.get("slug", "")
     visibility = cat.get("visibility", {})
 
@@ -79,18 +81,31 @@ def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
             visibility.get("public_scans",   []),
         )
 
-    # Utilisateur authentifié non-admin
-    perms         = user.get("permissions", {})
-    allowed_cats  = perms.get("allowed_catalogues", [])
-    if allowed_cats and slug not in allowed_cats:
-        raise HTTPException(status_code=404, detail="Not found")
+    # Utilisateur authentifié non-admin — utiliser _eff (résolu par get_current_user)
+    eff: Optional[EffectiveAccess] = user.get("_eff")
 
-    content = perms.get("catalogue_content", {}).get(slug, {})
+    if eff and isinstance(eff, EffectiveAccess):
+        allowed_slugs = eff.allowed_slugs or set()
+        genre_access  = eff.genre_access  or set()
+        has_restrictions = bool(allowed_slugs or genre_access)
+        if has_restrictions:
+            cat_genres = {g.lower() for g in cat.get("genres", [])}
+            if slug not in allowed_slugs and not (cat_genres & genre_access):
+                raise HTTPException(status_code=404, detail="Not found")
+        cat_content = (eff.cat_content or {}).get(slug, {})
+    else:
+        # Fallback sans _eff
+        perms        = user.get("permissions", {})
+        allowed_cats = perms.get("allowed_catalogues", [])
+        if allowed_cats and slug not in allowed_cats:
+            raise HTTPException(status_code=404, detail="Not found")
+        cat_content = perms.get("catalogue_content", {}).get(slug, {})
+
     return _apply_content_filter(
         cat,
-        content.get("saisons", []),
-        content.get("films",   []),
-        content.get("scans",   []),
+        cat_content.get("saisons", []),
+        cat_content.get("films",   []),
+        cat_content.get("scans",   []),
     )
 
 
@@ -190,7 +205,7 @@ async def obtenir_catalogue(
 @router.post("/{slug}/rafraichir", summary="Re-scrape la structure")
 async def rafraichir(slug: str, user: dict = Depends(get_current_user)):
     check_can_refresh(user)
-    check_catalogue_access(user, slug)
+    await check_catalogue_access(user, slug)
     catalogue = await rafraichir_catalogue(slug)
     if not catalogue:
         raise HTTPException(status_code=404, detail=f"Impossible de rafraîchir '{slug}'")
@@ -249,7 +264,7 @@ async def start_sync_http(slug: str, user: dict = Depends(get_current_user)):
     `WS /catalogues/{slug}/sync-content/ws`
     """
     check_can_sync(user)
-    check_catalogue_access(user, slug)
+    await check_catalogue_access(user, slug)
 
     doc = await repo.find_by_slug(slug)
     if not doc:
@@ -325,7 +340,7 @@ async def ws_sync_episodes(
 
     try:
         check_can_sync(ws_user)
-        check_catalogue_access(ws_user, slug)
+        await check_catalogue_access(ws_user, slug)
         await check_quota(ws_user)
     except HTTPException as e:
         await websocket.send_json({"type": "error", "reason": e.detail, "slug": slug})

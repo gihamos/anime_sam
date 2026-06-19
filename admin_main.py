@@ -217,6 +217,53 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 .sc-completed{background:rgba(16,185,129,.12);color:var(--ok)}.sc-cancelled{background:var(--sur2);color:var(--mu)}.sc-error{background:rgba(244,63,94,.1);color:var(--er)}.sc-running{background:rgba(56,189,248,.1);color:var(--info)}
 .quota-used{font-size:.72rem;color:var(--mu)}.quota-warn{color:var(--wa)!important}
 
+/* Groupes */
+.gt-badge{display:inline-flex;align-items:center;gap:.2rem;padding:.18rem .5rem;border-radius:5px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.gt-catalogue{background:rgba(139,92,246,.12);color:var(--ac)}.gt-genre{background:rgba(56,189,248,.12);color:var(--info)}.gt-permission{background:rgba(16,185,129,.12);color:var(--ok)}
+.genre-chips{display:flex;flex-wrap:wrap;gap:.3rem;padding:.35rem 0}
+.genre-chip{display:inline-flex;align-items:center;gap:.2rem;padding:.2rem .5rem;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);border-radius:5px;font-size:.76rem;color:var(--info)}
+.genre-chip button{border:none;background:none;color:inherit;cursor:pointer;padding:0;font-size:.8rem;line-height:1;opacity:.7}.genre-chip button:hover{opacity:1}
+
+/* OIDC login */
+.oidc-sep{display:flex;align-items:center;gap:.5rem;margin:.9rem 0;color:var(--mu);font-size:.78rem}
+.oidc-sep::before,.oidc-sep::after{content:'';flex:1;border-top:1px solid var(--bdr)}
+.btn-oidc{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.5rem;border:1px solid var(--bdr);border-radius:8px;background:var(--sur2);color:var(--tx);font-size:.85rem;font-weight:500;cursor:pointer;transition:background .12s,border-color .12s;margin-bottom:.4rem;text-decoration:none}
+.btn-oidc:hover{background:var(--surh);border-color:var(--ac)}
+.oidc-icon{width:18px;height:18px;border-radius:3px}
+#oidc-btns{margin-top:0}
+
+/* Planning Sorties */
+.ptab-nav{display:flex;gap:0;border-bottom:2px solid var(--bdr);margin-bottom:1rem}
+.ptab{padding:.5rem 1.1rem;font-size:.84rem;font-weight:500;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .12s,border-color .12s}
+.ptab:hover{color:var(--tx2)}.ptab.active{color:var(--ac);border-bottom-color:var(--ac)}
+.ptab-content{display:none}.ptab-content.active{display:block}
+
+.week-grid{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:.55rem;margin-bottom:1rem;overflow-x:auto}
+@media(max-width:900px){.week-grid{grid-template-columns:repeat(4,minmax(130px,1fr))}}
+.day-col{background:var(--sur);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;min-width:130px}
+.day-col.today{border-color:var(--ac);background:rgba(139,92,246,.04)}
+.day-hd{padding:.5rem .7rem;border-bottom:1px solid var(--bdr);text-align:center}
+.day-hd .dnom{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tx2)}
+.day-hd .ddate{font-size:.72rem;color:var(--mu)}
+.day-col.today .dnom{color:var(--ac)}
+.day-animes{padding:.35rem .4rem}
+.anime-card{display:flex;align-items:center;gap:.45rem;padding:.35rem .4rem;border-radius:7px;cursor:pointer;transition:background .1s;margin-bottom:.2rem;border:1px solid transparent}
+.anime-card:hover{background:var(--surh);border-color:var(--bdr)}
+.anime-card.in-db{border-color:rgba(16,185,129,.2);background:rgba(16,185,129,.04)}
+.anime-thumb{width:32px;height:44px;border-radius:4px;object-fit:cover;flex-shrink:0;background:var(--sur2)}
+.anime-thumb-ph{width:32px;height:44px;border-radius:4px;background:var(--sur2);display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.anime-info{min-width:0;flex:1}
+.anime-titre{font-size:.75rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--tx)}
+.anime-sub{font-size:.68rem;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.anime-heure{font-size:.7rem;font-weight:600;color:var(--ac);white-space:nowrap}
+.lang-badge{display:inline-block;padding:.08rem .3rem;border-radius:3px;font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;background:var(--sur2);color:var(--mu);margin-top:.1rem}
+.lang-vostfr{background:rgba(56,189,248,.12);color:var(--info)}
+.lang-vf{background:rgba(139,92,246,.12);color:var(--ac)}
+.anime-actions{display:flex;flex-direction:column;gap:.15rem;flex-shrink:0}
+.no-anime{text-align:center;padding:.85rem .4rem;font-size:.75rem;color:var(--mu)}
+.planning-legend{display:flex;gap:.85rem;flex-wrap:wrap;align-items:center;font-size:.75rem;color:var(--mu);margin-bottom:.75rem}
+.planning-legend span{display:flex;align-items:center;gap:.3rem}
+
 /* Block badge */
 .b-block{background:rgba(244,63,94,.12);color:var(--er);border:1px solid rgba(244,63,94,.25)}
 .blocked-banner{background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.2);border-radius:7px;padding:.5rem .7rem;font-size:.8rem;color:var(--er);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
@@ -238,9 +285,14 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
   <div class="lcard">
     <h2>★ Anime Sama Admin</h2>
     <div id="lerr" class="alert a-er" style="display:none"></div>
-    <div class="fg"><label>Nom d'utilisateur</label><input id="lu" class="fc" placeholder="admin"></div>
-    <div class="fg"><label>Mot de passe</label><input id="lp" class="fc" type="password"></div>
+    <div id="lerr-oidc" class="alert a-er" style="display:none"></div>
+    <div class="fg"><label>Nom d'utilisateur</label><input id="lu" class="fc" placeholder="admin" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()"></div>
+    <div class="fg"><label>Mot de passe</label><input id="lp" class="fc" type="password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:.55rem" onclick="doLogin()">Connexion</button>
+    <div id="oidc-btns" style="display:none">
+      <div class="oidc-sep">ou continuer avec</div>
+      <div id="oidc-providers-list"></div>
+    </div>
   </div>
 </div>
 
@@ -251,6 +303,7 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
     <nav class="sb-nav">
       <div class="ni active" data-tab="users"     onclick="switchTab(this)"><span>👥</span> Utilisateurs</div>
       <div class="ni"        data-tab="catalogues" onclick="switchTab(this)"><span>📚</span> Catalogues</div>
+      <div class="ni"        data-tab="groups"     onclick="switchTab(this)"><span>🏷️</span> Groupes</div>
       <div class="ni"        data-tab="apps"       onclick="switchTab(this)"><span>🔌</span> Applications</div>
       <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
     </nav>
@@ -298,6 +351,23 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
         <div id="bg-bar"><div class="bbt">⟳ Synchronisations en arrière-plan</div><div id="bg-list"></div></div>
       </div>
 
+      <!-- GROUPES -->
+      <div id="tab-groups" style="display:none">
+        <div class="fbar">
+          <input id="gq" placeholder="🔍 Rechercher un groupe…" oninput="filterGroups()">
+          <select id="gf-type" onchange="filterGroups()">
+            <option value="">Tous types</option>
+            <option value="catalogue">🗂️ Catalogues</option>
+            <option value="genre">🏷️ Genres</option>
+            <option value="permission">🔐 Permissions</option>
+          </select>
+        </div>
+        <div class="htable-wrap"><table class="dt">
+          <thead><tr><th>Nom</th><th>Type</th><th>Détails</th><th>Membres</th><th>Permissions</th><th>Actions</th></tr></thead>
+          <tbody id="gtbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+        </table></div>
+      </div>
+
       <!-- APPLICATIONS -->
       <div id="tab-apps" style="display:none">
         <div class="alert a-info" style="margin-bottom:.85rem">
@@ -315,40 +385,61 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 
       <!-- PLANIFICATION -->
       <div id="tab-planning" style="display:none">
+        <div class="ptab-nav">
+          <div class="ptab active" onclick="showPTab(this,'pt-sorties')">📺 Sorties de la semaine</div>
+          <div class="ptab"        onclick="showPTab(this,'pt-prog')">📅 Programmations auto</div>
+          <div class="ptab"        onclick="showPTab(this,'pt-history')">🕒 Historique des syncs</div>
+        </div>
 
-        <!-- Programmations automatiques -->
-        <div class="section-hd">
-          <h2>📅 Programmations automatiques</h2>
-          <button class="btn btn-primary btn-sm" onclick="openCreateSchedule()">+ Nouvelle programmation</button>
+        <!-- ── Sorties semaine ── -->
+        <div id="pt-sorties" class="ptab-content active">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
+            <div class="planning-legend">
+              <span><span style="width:10px;height:10px;border-radius:3px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);display:inline-block"></span> Déjà en base</span>
+              <span>🕒 Heure locale · Source : anime-sama.to</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadPlanning()">↺ Actualiser</button>
+          </div>
+          <div id="planning-grid" class="week-grid">
+            <div style="grid-column:1/-1"><div class="empty"><div class="ic">⏳</div>Chargement du planning…</div></div>
+          </div>
+          <div id="planning-err" class="alert a-er" style="display:none"></div>
         </div>
-        <div class="htable-wrap"><table class="dt">
-          <thead><tr><th>Catalogue</th><th>Fréquence</th><th>Prochaine exécution</th><th>Dernière exécution</th><th>Statut</th><th>Actions</th></tr></thead>
-          <tbody id="stbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
-        </table></div>
 
-        <!-- Historique des syncs -->
-        <div class="section-hd" style="margin-top:.35rem">
-          <h2>🕒 Historique des synchronisations</h2>
-          <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualiser</button>
+        <!-- ── Programmations auto ── -->
+        <div id="pt-prog" class="ptab-content">
+          <div class="section-hd" style="margin-top:.25rem">
+            <h2>📅 Programmations automatiques</h2>
+            <button class="btn btn-primary btn-sm" onclick="openCreateSchedule()">+ Nouvelle</button>
+          </div>
+          <div class="htable-wrap"><table class="dt">
+            <thead><tr><th>Catalogue</th><th>Fréquence</th><th>Prochaine exécution</th><th>Dernière exécution</th><th>Statut</th><th>Actions</th></tr></thead>
+            <tbody id="stbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          </table></div>
         </div>
-        <div class="fbar" style="margin-bottom:.65rem">
-          <input id="hq" placeholder="🔍 Filtrer par slug…" oninput="filterHistory()">
-          <select id="hf-status" onchange="filterHistory()">
-            <option value="">Tous statuts</option>
-            <option value="completed">Terminé</option>
-            <option value="cancelled">Annulé</option>
-            <option value="error">Erreur</option>
-          </select>
-          <select id="hf-trig" onchange="filterHistory()">
-            <option value="">Tous déclencheurs</option>
-            <option value="schedule">Planifié</option>
-            <option value="manual">Manuel</option>
-          </select>
+
+        <!-- ── Historique syncs ── -->
+        <div id="pt-history" class="ptab-content">
+          <div class="section-hd" style="margin-top:.25rem">
+            <h2>🕒 Historique des synchronisations</h2>
+            <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualiser</button>
+          </div>
+          <div class="fbar" style="margin-bottom:.65rem">
+            <input id="hq" placeholder="🔍 Filtrer par slug…" oninput="filterHistory()">
+            <select id="hf-status" onchange="filterHistory()">
+              <option value="">Tous statuts</option><option value="completed">Terminé</option>
+              <option value="cancelled">Annulé</option><option value="error">Erreur</option>
+            </select>
+            <select id="hf-trig" onchange="filterHistory()">
+              <option value="">Tous déclencheurs</option>
+              <option value="schedule">Planifié</option><option value="manual">Manuel</option>
+            </select>
+          </div>
+          <div class="htable-wrap"><table class="dt">
+            <thead><tr><th>Catalogue</th><th>Déclencheur</th><th>Début</th><th>Durée</th><th>Statut</th><th>Éléments</th></tr></thead>
+            <tbody id="htbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          </table></div>
         </div>
-        <div class="htable-wrap"><table class="dt">
-          <thead><tr><th>Catalogue</th><th>Déclencheur</th><th>Début</th><th>Durée</th><th>Statut</th><th>Éléments</th></tr></thead>
-          <tbody id="htbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
-        </table></div>
       </div>
 
     </div><!-- /content -->
@@ -612,6 +703,89 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
   </div>
 </div>
 
+<!-- ══ MODAL GROUPE ══ -->
+<div class="mbk" id="m-group" style="display:none" onclick="if(event.target===this)cm('m-group')">
+  <div class="mbox" style="max-width:600px">
+    <div class="mhd"><h3 id="mg-title">Nouveau groupe</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-group')">✕</button></div>
+    <div class="mbd">
+      <div id="mg-err" class="alert a-er" style="display:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem">
+        <div class="fg"><label>Nom du groupe *</label><input id="mg-name" class="fc" placeholder="Ex : Abonnés Premium"></div>
+        <div class="fg"><label>Type *</label>
+          <select id="mg-type" class="fc" onchange="onGroupTypeChange()">
+            <option value="catalogue">🗂️ Catalogues spécifiques</option>
+            <option value="genre">🏷️ Genres de catalogues</option>
+            <option value="permission">🔐 Permissions seules</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label>Description</label><input id="mg-desc" class="fc" placeholder="Optionnel"></div>
+
+      <!-- Section Catalogues -->
+      <div id="mg-sect-catalogue">
+        <div class="fg"><label style="font-size:.78rem;color:var(--ac)">🗂️ Catalogues accessibles aux membres</label>
+          <div id="mg-cat-chips" class="genre-chips" style="min-height:30px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.4rem"></div>
+          <div style="display:flex;gap:.4rem;margin-top:.35rem">
+            <input id="mg-cat-search" class="fc" list="mg-cat-dl" placeholder="Ajouter un catalogue (slug)…" style="flex:1">
+            <datalist id="mg-cat-dl"></datalist>
+            <button class="btn btn-secondary btn-sm" onclick="mgAddCat()">+ Ajouter</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section Genres -->
+      <div id="mg-sect-genre" style="display:none">
+        <div class="fg"><label style="font-size:.78rem;color:var(--info)">🏷️ Genres — accès à tous les catalogues de ces genres</label>
+          <div id="mg-genre-chips" class="genre-chips" style="min-height:30px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:.4rem"></div>
+          <div style="display:flex;gap:.4rem;margin-top:.35rem">
+            <input id="mg-genre-search" class="fc" list="mg-genre-dl" placeholder="Ajouter un genre…" style="flex:1">
+            <datalist id="mg-genre-dl"></datalist>
+            <button class="btn btn-secondary btn-sm" onclick="mgAddGenre()">+ Ajouter</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Permissions (tous types) -->
+      <div style="border-top:1px solid var(--bdr);padding-top:.7rem;margin-top:.4rem">
+        <div class="fg-label" style="font-size:.76rem;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.45rem">🔐 Permissions accordées aux membres</div>
+        <div style="display:flex;gap:1.2rem;flex-wrap:wrap">
+          <label class="chk-label"><input type="checkbox" id="mg-sync"> Synchroniser</label>
+          <label class="chk-label"><input type="checkbox" id="mg-del"> Supprimer</label>
+          <label class="chk-label"><input type="checkbox" id="mg-ref"> Rafraîchir</label>
+        </div>
+        <div class="fg" style="margin-top:.55rem">
+          <label class="chk-label"><input type="checkbox" id="mg-q-en" onchange="toggleQuotaUI('mg')"> Quota de synchronisation</label>
+          <div id="mg-quota-fields" class="quota-row" style="display:none">
+            <input id="mg-q-max" type="number" min="1" value="10" style="width:80px">
+            <span>syncs par</span>
+            <select id="mg-q-period"><option value="day">jour</option><option value="month" selected>mois</option><option value="year">an</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="mftr">
+        <button class="btn btn-ghost" onclick="cm('m-group')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveGroup()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL MEMBRES ══ -->
+<div class="mbk" id="m-members" style="display:none" onclick="if(event.target===this)cm('m-members')">
+  <div class="mbox" style="max-width:520px">
+    <div class="mhd"><h3 id="mm-title">Membres</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-members')">✕</button></div>
+    <div class="mbd">
+      <div style="display:flex;gap:.4rem;margin-bottom:.75rem">
+        <input id="mm-add-u" class="fc" list="mm-users-dl" placeholder="Nom d'utilisateur à ajouter…" style="flex:1">
+        <datalist id="mm-users-dl"></datalist>
+        <button class="btn btn-primary btn-sm" onclick="addGroupMember()">+ Ajouter</button>
+      </div>
+      <div id="mm-body"></div>
+      <div class="mftr"><button class="btn btn-ghost" onclick="cm('m-members')">Fermer</button></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL BLOCAGE ══ -->
 <div class="mbk" id="m-block" style="display:none" onclick="if(event.target===this)cm('m-block')">
   <div class="mbox sm">
@@ -635,7 +809,7 @@ const WS_API = API.replace(/^http/, 'ws');
 
 // ─── État global ───────────────────────────────────────────────────────────
 let token = localStorage.getItem('as_token') || '';
-let allUsers = [], allCats = [], allClients = [];
+let allUsers = [], allCats = [], allClients = [], allGroups = [];
 let editUsername = null, accessUsername = null;
 let visSlug = null, detailSlug = null;
 let detailTags = { genres: [], langues: [] };
@@ -683,6 +857,7 @@ async function doLogin(){
   }catch(e){err.textContent=typeof e==='string'?e:'Identifiants incorrects';err.style.display='block';}
 }
 function logout(){localStorage.removeItem('as_token');token='';document.getElementById('login-page').style.display='flex';document.getElementById('shell').style.display='none';}
+
 async function initApp(){
   try{
     const me=await api('GET','/auth/me');
@@ -690,27 +865,72 @@ async function initApp(){
     document.getElementById('me-lbl').textContent=`@ ${me.username}`;
     document.getElementById('login-page').style.display='none';
     document.getElementById('shell').style.display='flex';
-    await Promise.all([loadUsers(),loadCats(),loadApps()]);
+    await Promise.all([loadUsers(),loadCats(),loadApps(),loadGroups()]);
   }catch{logout();}
 }
-if(token) initApp();
+
+// ── OIDC: hash handling ────────────────────────────────────────────────────
+(function(){
+  const hash=window.location.hash;
+  if(hash.startsWith('#token=')){
+    token=hash.slice(7);localStorage.setItem('as_token',token);
+    history.replaceState(null,'',location.pathname);initApp();return;
+  }
+  if(hash.startsWith('#oidc_error=')){
+    const err=decodeURIComponent(hash.slice(12));
+    const el=document.getElementById('lerr-oidc');
+    if(el){el.textContent='Erreur OIDC : '+err;el.style.display='block';}
+    history.replaceState(null,'',location.pathname);
+  }
+  if(token) initApp();
+})();
+
+// ── OIDC: charger les fournisseurs ────────────────────────────────────────
+(async function(){
+  try{
+    const providers=await fetch(API+'/auth/oidc/providers').then(r=>r.json());
+    if(!providers||!providers.length)return;
+    const ICONS={google:'https://www.google.com/favicon.ico',github:'https://github.com/favicon.ico'};
+    const html=providers.map(p=>`<button class="btn-oidc" onclick="oidcLogin('${esc(p.id)}')">
+      <img class="oidc-icon" src="${ICONS[p.id]||''}" onerror="this.style.display='none'">
+      Continuer avec ${esc(p.name)}
+    </button>`).join('');
+    const c=document.getElementById('oidc-providers-list');if(c)c.innerHTML=html;
+    const bx=document.getElementById('oidc-btns');if(bx)bx.style.display='';
+  }catch{}
+})();
+
+async function oidcLogin(providerId){
+  try{
+    const r=await api('GET','/auth/oidc/authorize?provider='+encodeURIComponent(providerId));
+    if(r.url) window.location.href=r.url;
+  }catch(e){toast(String(e),'er');}
+}
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').click();}
 function switchTab(el){
   const tab=el.dataset.tab;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
-  ['users','catalogues','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  const titles={users:'Utilisateurs',catalogues:'Catalogues',apps:'Applications',planning:'Planification'};
+  ['users','catalogues','groups','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',apps:'Applications',planning:'Planification'};
   const actions={
     users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
     catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
+    groups:`<button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ Nouveau groupe</button>`,
     apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
     planning:'',
   };
   document.getElementById('tb-title').textContent=titles[tab]||tab;
   document.getElementById('tb-actions').innerHTML=actions[tab]||'';
-  if(tab==='planning'){loadSchedules();loadHistory();}
+  if(tab==='planning'){loadPlanning();loadSchedules();loadHistory();}
+  if(tab==='groups'){loadGroups();}
+}
+
+function showPTab(el,target){
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  document.querySelectorAll('.ptab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById(target).classList.add('active');
 }
 document.getElementById('tb-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`;
 
@@ -1310,6 +1530,265 @@ async function saveClientAccess(){
     await api('PUT',`/admin/api/clients/${cltAccessClientId}`,{permissions:{...ep,allowed_catalogues:allowed,catalogue_content:content}});
     toast('Accès mis à jour','ok');cm('m-clt-access');await loadApps();
   }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+
+// ═══════════════════════ GROUPES ═════════════════════════════════════════
+
+let editGroupId=null, membersGroupId=null;
+let _allGenres=[], _mgCatSlugs=new Set(), _mgGenres=new Set();
+
+const GROUP_TYPE_LABELS={catalogue:'🗂️ Catalogues',genre:'🏷️ Genres',permission:'🔐 Permissions'};
+const GROUP_TYPE_CLS   ={catalogue:'gt-catalogue',genre:'gt-genre',permission:'gt-permission'};
+
+async function loadGroups(){
+  try{
+    allGroups=await api('GET','/admin/api/groups');
+    filterGroups();
+    // Pré-charger les genres pour le modal
+    _allGenres=await api('GET','/admin/api/genres');
+  }catch(e){toast(String(e),'er');}
+}
+
+function filterGroups(){
+  const q=document.getElementById('gq').value.toLowerCase();
+  const t=document.getElementById('gf-type').value;
+  renderGroups(allGroups.filter(g=>(!q||g.name.toLowerCase().includes(q))&&(!t||g.type===t)));
+}
+
+function renderGroups(list){
+  const b=document.getElementById('gtbody');
+  if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">🏷️</div>Aucun groupe</div></td></tr>`;return;}
+  b.innerHTML=list.map(g=>{
+    const p=g.permissions||{};
+    const perms=[];
+    if(p.can_sync)   perms.push('<span class="badge b-ok" style="font-size:.68rem">Sync</span>');
+    if(p.can_delete) perms.push('<span class="badge b-er" style="font-size:.68rem">Suppr.</span>');
+    if(p.can_refresh)perms.push('<span class="badge b-info" style="font-size:.68rem">Refresh</span>');
+    const q2=p.quota||{};if(q2.enabled)perms.push(`<span class="badge" style="font-size:.68rem;background:var(--sur2)">Quota:${q2.max_syncs}/${q2.period}</span>`);
+
+    let detail='—';
+    if(g.type==='catalogue')detail=`${(g.catalogue_slugs||[]).length} catalogue(s)`;
+    else if(g.type==='genre')detail=(g.genres||[]).map(x=>`<span class="genre-chip" style="cursor:default">${esc(x)}</span>`).join('') || '—';
+
+    return `<tr>
+      <td><span style="font-weight:600">${esc(g.name)}</span>${g.description?`<div style="font-size:.72rem;color:var(--mu)">${esc(g.description)}</div>`:''}</td>
+      <td><span class="gt-badge ${GROUP_TYPE_CLS[g.type]||''}">${GROUP_TYPE_LABELS[g.type]||g.type}</span></td>
+      <td style="font-size:.78rem">${detail}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" style="gap:.3rem" onclick="openMembers('${esc(g.id)}','${esc(g.name)}')">
+          👤 ${g.member_count??0}
+        </button>
+      </td>
+      <td style="font-size:.78rem">${perms.join(' ') || '<span style="color:var(--mu)">—</span>'}</td>
+      <td><div class="actions">
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier" onclick="openEditGroup('${esc(g.id)}')">✏️</button>
+        <button class="btn btn-danger btn-icon btn-sm"   title="Supprimer" onclick="deleteGroup('${esc(g.id)}','${esc(g.name)}')">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function onGroupTypeChange(){
+  const t=document.getElementById('mg-type').value;
+  document.getElementById('mg-sect-catalogue').style.display=t==='catalogue'?'':'none';
+  document.getElementById('mg-sect-genre').style.display=t==='genre'?'':'none';
+}
+
+function _mgRenderCatChips(){
+  const el=document.getElementById('mg-cat-chips');
+  el.innerHTML=[..._mgCatSlugs].map(s=>`<span class="genre-chip">${esc(s)} <button onclick="_mgCatSlugs.delete('${esc(s)}');_mgRenderCatChips()">✕</button></span>`).join('');
+}
+function mgAddCat(){
+  const v=document.getElementById('mg-cat-search').value.trim();
+  if(v){_mgCatSlugs.add(v);document.getElementById('mg-cat-search').value='';_mgRenderCatChips();}
+}
+function _mgRenderGenreChips(){
+  const el=document.getElementById('mg-genre-chips');
+  el.innerHTML=[..._mgGenres].map(g=>`<span class="genre-chip">${esc(g)} <button onclick="_mgGenres.delete('${esc(g)}');_mgRenderGenreChips()">✕</button></span>`).join('');
+}
+function mgAddGenre(){
+  const v=document.getElementById('mg-genre-search').value.trim();
+  if(v){_mgGenres.add(v);document.getElementById('mg-genre-search').value='';_mgRenderGenreChips();}
+}
+
+function _populateGroupModal(){
+  // Remplir les datalists
+  const cdl=document.getElementById('mg-cat-dl');
+  cdl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
+  const gdl=document.getElementById('mg-genre-dl');
+  gdl.innerHTML=_allGenres.map(g=>`<option value="${esc(g)}">`).join('');
+  _mgRenderCatChips();_mgRenderGenreChips();
+  onGroupTypeChange();
+}
+
+function openCreateGroup(){
+  editGroupId=null;_mgCatSlugs=new Set();_mgGenres=new Set();
+  document.getElementById('mg-title').textContent='Nouveau groupe';
+  document.getElementById('mg-name').value='';document.getElementById('mg-desc').value='';
+  document.getElementById('mg-type').value='catalogue';
+  document.getElementById('mg-sync').checked=false;document.getElementById('mg-del').checked=false;document.getElementById('mg-ref').checked=false;
+  document.getElementById('mg-q-en').checked=false;document.getElementById('mg-q-max').value=10;document.getElementById('mg-q-period').value='month';
+  document.getElementById('mg-quota-fields').style.display='none';
+  document.getElementById('mg-err').style.display='none';
+  _populateGroupModal();om('m-group');
+}
+function openEditGroup(gid){
+  const g=allGroups.find(x=>x.id===gid);if(!g)return;
+  editGroupId=gid;
+  _mgCatSlugs=new Set(g.catalogue_slugs||[]);
+  _mgGenres=new Set(g.genres||[]);
+  document.getElementById('mg-title').textContent=`Modifier — ${g.name}`;
+  document.getElementById('mg-name').value=g.name;
+  document.getElementById('mg-desc').value=g.description||'';
+  document.getElementById('mg-type').value=g.type||'catalogue';
+  const p=g.permissions||{};
+  document.getElementById('mg-sync').checked=!!p.can_sync;
+  document.getElementById('mg-del').checked=!!p.can_delete;
+  document.getElementById('mg-ref').checked=!!p.can_refresh;
+  const q=p.quota||{};
+  document.getElementById('mg-q-en').checked=!!q.enabled;
+  document.getElementById('mg-q-max').value=q.max_syncs||10;
+  document.getElementById('mg-q-period').value=q.period||'month';
+  document.getElementById('mg-quota-fields').style.display=q.enabled?'flex':'none';
+  document.getElementById('mg-err').style.display='none';
+  _populateGroupModal();om('m-group');
+}
+async function saveGroup(){
+  const errEl=document.getElementById('mg-err');errEl.style.display='none';
+  const name=document.getElementById('mg-name').value.trim();
+  if(!name){errEl.textContent='Le nom est requis.';errEl.style.display='block';return;}
+  const type=document.getElementById('mg-type').value;
+  const qen=document.getElementById('mg-q-en').checked;
+  const body={
+    name,type,description:document.getElementById('mg-desc').value.trim()||null,
+    catalogue_slugs:[..._mgCatSlugs],genres:[..._mgGenres],
+    permissions:{
+      can_sync:document.getElementById('mg-sync').checked,
+      can_delete:document.getElementById('mg-del').checked,
+      can_refresh:document.getElementById('mg-ref').checked,
+      quota:{enabled:qen,period:document.getElementById('mg-q-period').value,max_syncs:parseInt(document.getElementById('mg-q-max').value)||10},
+    },
+  };
+  try{
+    if(editGroupId){await api('PUT',`/admin/api/groups/${editGroupId}`,body);toast('Groupe mis à jour','ok');}
+    else{await api('POST','/admin/api/groups',body);toast('Groupe créé','ok');}
+    cm('m-group');await loadGroups();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
+}
+async function deleteGroup(gid,name){
+  if(!confirm(`Supprimer le groupe « ${name} » ? Les membres seront retirés du groupe.`))return;
+  try{await api('DELETE',`/admin/api/groups/${gid}`);toast('Groupe supprimé','ok');await loadGroups();}
+  catch(e){toast(String(e),'er');}
+}
+
+// ── Membres du groupe ──────────────────────────────────────────────────────
+async function openMembers(gid,name){
+  membersGroupId=gid;
+  document.getElementById('mm-title').textContent=`Membres — ${name}`;
+  // Remplir la datalist des utilisateurs
+  const dl=document.getElementById('mm-users-dl');
+  dl.innerHTML=allUsers.map(u=>`<option value="${esc(u.username)}">`).join('');
+  document.getElementById('mm-add-u').value='';
+  await refreshMembersList();om('m-members');
+}
+async function refreshMembersList(){
+  try{
+    const members=await api('GET',`/admin/api/groups/${membersGroupId}/members`);
+    const b=document.getElementById('mm-body');
+    if(!members.length){b.innerHTML=`<div class="empty" style="padding:.85rem"><div class="ic">👥</div>Aucun membre</div>`;return;}
+    b.innerHTML=`<table class="dt"><thead><tr><th>Utilisateur</th><th>Email</th><th>Rôle</th><th></th></tr></thead><tbody>${
+      members.map(m=>`<tr>
+        <td style="font-weight:600">${esc(m.username)}</td>
+        <td style="font-size:.8rem;color:var(--mu)">${esc(m.email||'—')}</td>
+        <td><span class="badge ${m.role==='admin'?'b-ac':'b-mu'}">${esc(m.role)}</span></td>
+        <td><button class="btn btn-danger btn-icon btn-sm" title="Retirer" onclick="removeGroupMember('${esc(m.username)}')">✕</button></td>
+      </tr>`).join('')
+    }</tbody></table>`;
+  }catch(e){toast(String(e),'er');}
+}
+async function addGroupMember(){
+  const u=document.getElementById('mm-add-u').value.trim();if(!u)return;
+  try{await api('POST',`/admin/api/groups/${membersGroupId}/members`,{username:u});
+    document.getElementById('mm-add-u').value='';toast(`${u} ajouté`,'ok');await refreshMembersList();}
+  catch(e){toast(String(e),'er');}
+}
+async function removeGroupMember(username){
+  if(!confirm(`Retirer ${username} du groupe ?`))return;
+  try{await api('DELETE',`/admin/api/groups/${membersGroupId}/members/${username}`);toast(`${username} retiré`,'ok');await refreshMembersList();}
+  catch(e){toast(String(e),'er');}
+}
+
+// ═══════════════════════ SORTIES SEMAINE (anime-sama.to/planning/) ═══════
+
+let _planningData=[];
+
+const JOURS_FR=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+async function loadPlanning(){
+  const grid=document.getElementById('planning-grid');
+  const errEl=document.getElementById('planning-err');
+  grid.innerHTML='<div style="grid-column:1/-1"><div class="empty"><div class="ic">⏳</div>Chargement du planning…</div></div>';
+  errEl.style.display='none';
+  try{
+    _planningData=await api('GET','/planning/');
+    await renderPlanning();
+  }catch(e){
+    grid.innerHTML='';errEl.textContent='Impossible de récupérer le planning : '+String(e);errEl.style.display='block';
+  }
+}
+
+async function renderPlanning(){
+  const grid=document.getElementById('planning-grid');
+  if(!_planningData||!_planningData.length){
+    grid.innerHTML='<div style="grid-column:1/-1"><div class="empty"><div class="ic">📭</div>Aucune donnée disponible pour cette semaine.</div></div>';return;
+  }
+  // Enrichir avec les slugs connus en DB
+  const dbSlugs=new Set(allCats.map(c=>c.slug));
+  const today=new Date();const todayDay=today.toLocaleDateString('fr-FR',{weekday:'long'}).charAt(0).toUpperCase()+today.toLocaleDateString('fr-FR',{weekday:'long'}).slice(1);
+  grid.innerHTML=_planningData.map(day=>{
+    const isToday=day.jour===todayDay;
+    const animes=day.animes||[];
+    const animesHtml=animes.length?animes.map(a=>{
+      const inDb=dbSlugs.has(a.slug);
+      const langCls=a.lang?'lang-'+a.lang.replace(/[^a-z]/gi,'').toLowerCase():'';
+      const thumb=a.image?`<img class="anime-thumb" src="${esc(a.image)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'';
+      const ph=`<div class="anime-thumb-ph" ${a.image?'style="display:none"':''}">🎬</div>`;
+      return `<div class="anime-card ${inDb?'in-db':''}" title="${esc(a.titre)}${a.saison_info?' — '+esc(a.saison_info):''}">
+        ${thumb}${ph}
+        <div class="anime-info">
+          <div class="anime-titre">${esc(a.titre)}</div>
+          <div class="anime-sub">${esc(a.saison_info||'')}</div>
+          <div style="display:flex;align-items:center;gap:.25rem;margin-top:.1rem">
+            ${a.heure?`<span class="anime-heure">${esc(a.heure)}</span>`:''}
+            ${a.lang?`<span class="lang-badge ${langCls}">${esc(a.lang)}</span>`:''}
+          </div>
+        </div>
+        <div class="anime-actions">
+          ${inDb?`<button class="btn btn-secondary btn-icon btn-sm" title="Voir dans les catalogues" onclick="switchToSlug('${esc(a.slug)}')">📚</button>`
+                :`<button class="btn btn-primary btn-icon btn-sm" title="Ajouter au catalogue" onclick="openAddCatWithSlug('${esc(a.slug)}','${esc(a.titre)}')">+</button>`}
+        </div>
+      </div>`;
+    }).join(''):`<div class="no-anime">Aucune sortie</div>`;
+    return `<div class="day-col ${isToday?'today':''}">
+      <div class="day-hd"><div class="dnom">${esc(day.jour)}</div><div class="ddate">${esc(day.date||'')}</div></div>
+      <div class="day-animes">${animesHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function switchToSlug(slug){
+  // Basculer sur l'onglet catalogues et filtrer par slug
+  const el=document.querySelector('.ni[data-tab="catalogues"]');if(el)switchTab(el);
+  setTimeout(()=>{const qi=document.getElementById('cq');if(qi){qi.value=slug;filterCats();}},100);
+}
+
+function openAddCatWithSlug(slug,titre){
+  openAddCat();
+  setTimeout(()=>{
+    const si=document.getElementById('mc-slug');const ti=document.getElementById('mc-title-search');
+    if(si){si.value=slug;}
+    if(ti){ti.value=titre;}
+  },80);
 }
 
 // ═══════════════════════ PLANIFICATION ══════════════════════════════════

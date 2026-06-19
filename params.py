@@ -26,3 +26,35 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 
 API_PORT   = int(os.getenv("API_PORT",   "8000"))
 ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8001"))
+
+# ── OpenID Connect ──────────────────────────────────────────────────────────
+# URL de callback que le fournisseur OIDC doit avoir en liste blanche.
+OIDC_CALLBACK_URL   = os.getenv("OIDC_CALLBACK_URL",   f"http://localhost:8000/auth/oidc/callback")
+# URL vers laquelle le backend redirige après une connexion OIDC réussie.
+OIDC_ADMIN_REDIRECT = os.getenv("OIDC_ADMIN_REDIRECT", f"http://localhost:8001")
+
+_raw_providers: dict[str, dict] = {
+    "google": {
+        "client_id":     os.getenv("OIDC_GOOGLE_CLIENT_ID",     ""),
+        "client_secret": os.getenv("OIDC_GOOGLE_CLIENT_SECRET", ""),
+        "discovery_url": "https://accounts.google.com/.well-known/openid-configuration",
+        "name":          "Google",
+        "scopes":        ["openid", "email", "profile"],
+    },
+    "github": {
+        "client_id":     os.getenv("OIDC_GITHUB_CLIENT_ID",     ""),
+        "client_secret": os.getenv("OIDC_GITHUB_CLIENT_SECRET", ""),
+        "name":          "GitHub",
+    },
+    "custom": {
+        "client_id":     os.getenv("OIDC_CUSTOM_CLIENT_ID",     ""),
+        "client_secret": os.getenv("OIDC_CUSTOM_CLIENT_SECRET", ""),
+        "discovery_url": os.getenv("OIDC_CUSTOM_DISCOVERY_URL", ""),
+        "name":          os.getenv("OIDC_CUSTOM_NAME",          "SSO"),
+        "scopes":        ["openid", "email", "profile"],
+    },
+}
+# Ne garder que les fournisseurs ayant un client_id configuré
+OIDC_PROVIDERS: dict[str, dict] = {
+    k: v for k, v in _raw_providers.items() if v.get("client_id")
+}

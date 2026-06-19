@@ -43,6 +43,9 @@ class UserInDB(BaseModel):
     blocked_reason:  Optional[str]   = None
     blocked_until:   Optional[str]   = None   # ISO datetime ou None (permanent)
     permissions:     UserPermissions = Field(default_factory=UserPermissions)
+    groups:          list[str]       = Field(default_factory=list)   # IDs de groupes
+    oidc_sub:        Optional[str]   = None   # subject OIDC (ex : "1234567890")
+    oidc_provider:   Optional[str]   = None   # "google" | "github" | "custom"
 
 
 class UserCreate(BaseModel):
@@ -62,6 +65,7 @@ class UserUpdate(BaseModel):
     blocked_until:  Optional[str]             = None
     role:           Optional[Role]            = None
     permissions:    Optional[UserPermissions] = None
+    groups:         Optional[list[str]]       = None
 
 
 class UserPublic(BaseModel):
@@ -73,3 +77,5 @@ class UserPublic(BaseModel):
     blocked_reason: Optional[str]   = None
     blocked_until:  Optional[str]   = None
     permissions:    UserPermissions
+    groups:         list[str]       = Field(default_factory=list)
+    oidc_provider:  Optional[str]   = None

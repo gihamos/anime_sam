@@ -3,16 +3,13 @@ Dépendances FastAPI pour l'authentification et les autorisations.
 
 Hiérarchie des permissions :
   admin  → tous les droits
-  user   → selon UserPermissions (can_sync, can_delete, can_refresh,
-            allowed_catalogues)
-  client → selon APIClientPermissions
+  user   → permissions directes + groupes
+  client → permissions directes (pas de groupes pour l'instant)
 
-Utilisation dans les routes :
-  user = Depends(get_current_user)   # authentifié
-  user = Depends(require_admin)      # admin seulement
-  puis : check_can_sync(user) / check_catalogue_access(user, slug)
+EffectiveAccess (_eff) est calculé une fois par requête et attaché à l'utilisateur.
 """
 
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -48,8 +45,7 @@ def create_client_token(client_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
     return jwt.encode(
         {"sub": client_id, "type": "client", "exp": expire},
-        JWT_SECRET,
-        algorithm=ALGORITHM,
+        JWT_SECRET, algorithm=ALGORITHM,
     )
 
 
@@ -58,17 +54,81 @@ def create_client_token(client_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _check_not_blocked(doc: dict) -> None:
-    """Lève 403 si le compte est bloqué (et que le blocage temporaire n'a pas expiré)."""
     if not doc.get("is_blocked", False):
         return
     blocked_until = doc.get("blocked_until")
     if blocked_until:
         until_dt = datetime.fromisoformat(blocked_until)
         if until_dt <= datetime.now(timezone.utc):
-            # Blocage temporaire expiré → on laisse passer
-            return
+            return  # blocage temporaire expiré
     reason = doc.get("blocked_reason") or "Compte bloqué par un administrateur"
     raise HTTPException(status_code=403, detail=f"Accès bloqué : {reason}")
+
+
+# ---------------------------------------------------------------------------
+# Résolution des accès effectifs (fusion user + groupes)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EffectiveAccess:
+    is_admin:      bool       = False
+    can_sync:      bool       = False
+    can_delete:    bool       = False
+    can_refresh:   bool       = False
+    allowed_slugs: set        = field(default_factory=set)   # slugs spécifiques
+    genre_access:  set        = field(default_factory=set)   # genres → accès à tous leurs catalogues
+    cat_content:   dict       = field(default_factory=dict)  # slug → {saisons,films,scans}
+    quota:         dict       = field(default_factory=dict)
+
+
+async def resolve_effective_access(user: dict) -> EffectiveAccess:
+    if user.get("role") == "admin":
+        return EffectiveAccess(
+            is_admin=True, can_sync=True, can_delete=True, can_refresh=True,
+        )
+
+    perms = user.get("permissions", {})
+    acc = EffectiveAccess(
+        can_sync      = bool(perms.get("can_sync",    False)),
+        can_delete    = bool(perms.get("can_delete",  False)),
+        can_refresh   = bool(perms.get("can_refresh", False)),
+        allowed_slugs = set(perms.get("allowed_catalogues", [])),
+        cat_content   = dict(perms.get("catalogue_content", {})),
+        quota         = dict(perms.get("quota", {})),
+    )
+
+    group_ids = user.get("groups", [])
+    if group_ids:
+        import db.groups_repository as groups_repo
+        groups = await groups_repo.find_by_ids(group_ids)
+        for g in groups:
+            gp = g.get("permissions", {})
+            acc.can_sync    = acc.can_sync    or bool(gp.get("can_sync",    False))
+            acc.can_delete  = acc.can_delete  or bool(gp.get("can_delete",  False))
+            acc.can_refresh = acc.can_refresh or bool(gp.get("can_refresh", False))
+
+            gtype = g.get("type")
+            if gtype == "catalogue":
+                for slug in g.get("catalogue_slugs", []):
+                    acc.allowed_slugs.add(slug)
+                acc.cat_content.update(g.get("catalogue_content", {}))
+            elif gtype == "genre":
+                for genre in g.get("genres", []):
+                    acc.genre_access.add(genre.lower())
+
+            # Tout type de groupe peut avoir un quota — prendre le premier activé
+            gq = gp.get("quota", {})
+            if gq.get("enabled") and not acc.quota.get("enabled"):
+                acc.quota = gq
+
+    return acc
+
+
+async def _enrich_user(user: dict) -> dict:
+    """Attache l'accès effectif (_eff) au dict utilisateur."""
+    user = dict(user)
+    user["_eff"] = await resolve_effective_access(user)
+    return user
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +139,6 @@ _oauth2_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False
 
 
 async def _validate_token(token: str) -> dict:
-    """Valide un JWT et retourne l'utilisateur ou le client API. Lève 401 si invalide."""
     exc = HTTPException(
         status_code=401,
         detail="Token invalide ou expiré",
@@ -114,7 +173,8 @@ async def _validate_token(token: str) -> dict:
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    return await _validate_token(token)
+    user = await _validate_token(token)
+    return await _enrich_user(user)
 
 
 async def get_optional_user(
@@ -123,7 +183,8 @@ async def get_optional_user(
     if not token:
         return None
     try:
-        return await _validate_token(token)
+        user = await _validate_token(token)
+        return await _enrich_user(user)
     except HTTPException:
         return None
 
@@ -135,7 +196,6 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 
 async def decode_ws_token(token: str) -> Optional[dict]:
-    """Valide un JWT pour WebSocket. Supporte les tokens utilisateur et client API."""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         subject = payload.get("sub")
@@ -155,7 +215,7 @@ async def decode_ws_token(token: str) -> Optional[dict]:
                 _check_not_blocked(doc)
             except HTTPException:
                 return None
-            return doc
+            return await _enrich_user(doc)
 
         import db.user_repository as user_repo
         user = await user_repo.find_by_username(subject)
@@ -165,47 +225,82 @@ async def decode_ws_token(token: str) -> Optional[dict]:
             _check_not_blocked(user)
         except HTTPException:
             return None
-        return user
+        return await _enrich_user(user)
     except JWTError:
         return None
 
 
 # ---------------------------------------------------------------------------
-# Vérificateurs de permissions
+# Vérificateurs de permissions (utilisent _eff si disponible)
 # ---------------------------------------------------------------------------
 
-def check_can_sync(user: dict) -> None:
+def _eff(user: dict) -> EffectiveAccess:
+    e = user.get("_eff")
+    if e and isinstance(e, EffectiveAccess):
+        return e
+    # Fallback si _eff absent (ne devrait pas arriver avec get_current_user)
     perms = user.get("permissions", {})
-    if user.get("role") != "admin" and not perms.get("can_sync", False):
+    return EffectiveAccess(
+        is_admin    = user.get("role") == "admin",
+        can_sync    = bool(perms.get("can_sync",    False)),
+        can_delete  = bool(perms.get("can_delete",  False)),
+        can_refresh = bool(perms.get("can_refresh", False)),
+        allowed_slugs = set(perms.get("allowed_catalogues", [])),
+        quota = dict(perms.get("quota", {})),
+    )
+
+
+def check_can_sync(user: dict) -> None:
+    e = _eff(user)
+    if not e.is_admin and not e.can_sync:
         raise HTTPException(403, "Permission 'can_sync' requise")
 
 
 def check_can_delete(user: dict) -> None:
-    perms = user.get("permissions", {})
-    if user.get("role") != "admin" and not perms.get("can_delete", False):
+    e = _eff(user)
+    if not e.is_admin and not e.can_delete:
         raise HTTPException(403, "Permission 'can_delete' requise")
 
 
 def check_can_refresh(user: dict) -> None:
-    perms = user.get("permissions", {})
-    if user.get("role") != "admin" and not perms.get("can_refresh", False):
+    e = _eff(user)
+    if not e.is_admin and not e.can_refresh:
         raise HTTPException(403, "Permission 'can_refresh' requise")
 
 
-def check_catalogue_access(user: dict, slug: str) -> None:
-    if user.get("role") == "admin":
+async def check_catalogue_access(user: dict, slug: str) -> None:
+    """
+    Vérifie que l'utilisateur peut accéder à ce slug.
+    Prend en compte : permissions directes + groupes catalogue + groupes genre.
+    """
+    e = _eff(user)
+    if e.is_admin:
         return
-    allowed = user.get("permissions", {}).get("allowed_catalogues", [])
-    if allowed and slug not in allowed:
-        raise HTTPException(403, f"Accès non autorisé au catalogue '{slug}'")
+
+    # Pas de restriction explicite → accès total
+    if not e.allowed_slugs and not e.genre_access:
+        return
+
+    if slug in e.allowed_slugs:
+        return
+
+    if e.genre_access:
+        import db.repository as repo
+        doc = await repo.find_by_slug(slug)
+        if doc:
+            cat_genres = {g.lower() for g in doc.get("genres", [])}
+            if cat_genres & e.genre_access:
+                return
+
+    raise HTTPException(403, f"Accès non autorisé au catalogue '{slug}'")
 
 
 async def check_quota(user: dict) -> None:
     """Lève 429 si le quota de synchronisation est atteint."""
-    if user.get("role") == "admin":
+    e = _eff(user)
+    if e.is_admin:
         return
-    perms = user.get("permissions", {})
-    quota = perms.get("quota", {})
+    quota = e.quota or {}
     if not quota.get("enabled", False):
         return
     max_syncs = int(quota.get("max_syncs", 0))
@@ -220,16 +315,15 @@ async def check_quota(user: dict) -> None:
     if current >= max_syncs:
         raise HTTPException(
             status_code=429,
-            detail=f"Quota de synchronisation atteint ({current}/{max_syncs} par {period})"
+            detail=f"Quota de synchronisation atteint ({current}/{max_syncs} par {period})",
         )
 
 
 async def increment_quota(user: dict) -> None:
-    """Incrémente le compteur de sync pour l'entité."""
-    if user.get("role") == "admin":
+    e = _eff(user)
+    if e.is_admin:
         return
-    perms = user.get("permissions", {})
-    quota = perms.get("quota", {})
+    quota = e.quota or {}
     if not quota.get("enabled", False):
         return
     period    = quota.get("period", "month")
