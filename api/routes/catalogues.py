@@ -40,6 +40,59 @@ from fastapi import Depends
 router = APIRouter(prefix="/catalogues", tags=["Catalogues"])
 
 
+def _apply_content_filter(cat: dict, saisons: list, films: list, scans: list) -> dict:
+    """Retire du catalogue les contenus absents des listes (liste vide = tout garder)."""
+    cat = dict(cat)
+    if saisons:
+        allowed = set(saisons)
+        cat["saisons"] = [s for s in cat.get("saisons", []) if s.get("slug") in allowed]
+    if films:
+        allowed = set(films)
+        cat["films"] = [f for f in cat.get("films", []) if f.get("slug") in allowed]
+    if scans:
+        allowed = set(scans)
+        cat["scans"] = [s for s in cat.get("scans", []) if s.get("slug") in allowed]
+    return cat
+
+
+def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
+    """
+    Filtre le contenu du catalogue selon le profil de l'utilisateur :
+      - Admin          → tout visible
+      - Non authentifié → selon visibility.is_public + public_*
+      - Utilisateur    → selon allowed_catalogues + catalogue_content
+    """
+    slug       = cat.get("slug", "")
+    visibility = cat.get("visibility", {})
+
+    if user and user.get("role") == "admin":
+        return cat
+
+    if user is None:
+        if not visibility.get("is_public", True):
+            raise HTTPException(status_code=404, detail="Not found")
+        return _apply_content_filter(
+            cat,
+            visibility.get("public_saisons", []),
+            visibility.get("public_films",   []),
+            visibility.get("public_scans",   []),
+        )
+
+    # Utilisateur authentifié non-admin
+    perms         = user.get("permissions", {})
+    allowed_cats  = perms.get("allowed_catalogues", [])
+    if allowed_cats and slug not in allowed_cats:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    content = perms.get("catalogue_content", {}).get(slug, {})
+    return _apply_content_filter(
+        cat,
+        content.get("saisons", []),
+        content.get("films",   []),
+        content.get("scans",   []),
+    )
+
+
 # ------------------------------------------------------------------
 # Routes fixes (avant les routes dynamiques {slug})
 # ------------------------------------------------------------------
@@ -120,7 +173,7 @@ async def obtenir_catalogue(
     """
     catalogue = await repo.find_by_slug(slug)
     if catalogue:
-        return catalogue
+        return filter_catalogue_for_user(catalogue, user)
 
     if not user:
         raise HTTPException(status_code=404, detail="Not found")
@@ -129,7 +182,8 @@ async def obtenir_catalogue(
     catalogue = await get_catalogue(slug)
     if not catalogue:
         raise HTTPException(status_code=404, detail="Not found")
-    return catalogue
+
+    return filter_catalogue_for_user(catalogue, user)
 
 
 @router.post("/{slug}/rafraichir", summary="Re-scrape la structure")

@@ -190,6 +190,18 @@ async def mark_content_synced(slug: str) -> None:
     )
 
 
+async def update_catalogue_visibility(slug: str, visibility: dict) -> bool:
+    """Met à jour les paramètres de visibilité/accès public d'un catalogue."""
+    result = await _col().update_one(
+        {"slug": slug},
+        {"$set": {
+            "visibility":  visibility,
+            "updated_at":  datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return result.matched_count > 0
+
+
 # ---------------------------------------------------------------------------
 # Suppression
 # ---------------------------------------------------------------------------

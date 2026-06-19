@@ -6,6 +6,7 @@ from db.connection import setup_indexes
 from api.routes.catalogues import router as catalogues_router
 from api.routes.planning import router as planning_router
 from api.routes.auth import router as auth_router
+from api.routes.admin import router as admin_router
 from services.catalogue_service import mettre_a_jour_tous
 from params import ADMIN_USERNAME, ADMIN_PASSWORD
 
@@ -70,6 +71,7 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(catalogues_router)
 app.include_router(planning_router)
 

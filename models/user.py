@@ -9,13 +9,23 @@ class Role(str, Enum):
     USER  = "user"
 
 
+class ContentAccess(BaseModel):
+    """Accès fin aux contenus d'un catalogue (slugs autorisés, vide = tous)."""
+    saisons: list[str] = Field(default_factory=list)
+    films:   list[str] = Field(default_factory=list)
+    scans:   list[str] = Field(default_factory=list)
+
+
 class UserPermissions(BaseModel):
     """Permissions accordées à un utilisateur non-admin."""
-    can_sync:           bool      = False  # POST /{slug}/sync-content
-    can_delete:         bool      = False  # DELETE /catalogues/{slug}
-    can_refresh:        bool      = False  # POST /{slug}/rafraichir + update-all
-    # Liste blanche de slugs autorisés. Liste vide = tous les catalogues.
+    can_sync:           bool = False   # POST /{slug}/sync-content
+    can_delete:         bool = False   # DELETE /catalogues/{slug}
+    can_refresh:        bool = False   # rafraichir + update-all
+    # Catalogues accessibles — vide = tous, sinon whitelist de slugs
     allowed_catalogues: list[str] = Field(default_factory=list)
+    # Restrictions de contenu par catalogue (slug → accès fin)
+    # Clé absente = accès complet au catalogue
+    catalogue_content:  dict[str, ContentAccess] = Field(default_factory=dict)
 
 
 class UserInDB(BaseModel):

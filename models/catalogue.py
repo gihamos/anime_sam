@@ -111,6 +111,21 @@ class Scan(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Visibilité / contrôle d'accès public d'un catalogue
+# ---------------------------------------------------------------------------
+
+class CatalogueVisibility(BaseModel):
+    """
+    Contrôle ce que les utilisateurs non authentifiés (ou restreints) peuvent voir.
+    Pour chaque type de contenu, une liste vide = tout le contenu est visible.
+    """
+    is_public:      bool      = True   # catalogue accessible sans authentification
+    public_saisons: list[str] = Field(default_factory=list)  # slugs visibles publiquement
+    public_films:   list[str] = Field(default_factory=list)
+    public_scans:   list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Catalogue principal
 # ---------------------------------------------------------------------------
 
@@ -136,6 +151,7 @@ class Catalogue(BaseModel):
     films:             list[Film]       = Field(default_factory=list)
     scans:             list[Scan]       = Field(default_factory=list)
 
+    visibility:        CatalogueVisibility = Field(default_factory=CatalogueVisibility)
     metadata:          dict             = Field(default_factory=dict)
     episodes_synced:   bool             = False
 
