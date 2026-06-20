@@ -51,13 +51,35 @@ async def sync_genres(_: dict = Depends(require_admin)):
     from services.scraper import get_genres_from_site
 
     async def _do_sync():
+        from utils.logger import logger
         genres = await get_genres_from_site()
-        # Sauvegarder uniquement si on a trouvé au moins 5 genres valides
         if len(genres) >= 5:
             await genres_repo.save_all(genres)
+            logger.info(f"Sync genres : {len(genres)} genres sauvegardés")
         else:
-            from utils.logger import logger
-            logger.warning(f"Sync genres : seulement {len(genres)} genres trouvés, pas de sauvegarde")
+            # Fallback : liste complète connue d'anime-sama.to (validée 2026-06)
+            _FALLBACK = [
+                "Action","Adolescence","Aliens / Extra-terrestres","Amitié","Amour",
+                "Apocalypse","Art","Arts martiaux","Assassinat","Autre monde","Aventure",
+                "Combats","Comédie","Crime","Cyberpunk","Danse","Démons","Détective",
+                "Donghua","Dragon","Drame","Ecchi","Ecole","Elfe","Enquête","Famille",
+                "Fantastique","Fantasy","Fantômes","Futur","Gastronomie","Ghibli","Guerre",
+                "Harcèlement","Harem","Harem inversé","Histoire","Historique","Homosexualité",
+                "Horreur","Isekai","Jeunesse","Jeux","Jeux vidéo","Josei","Journalisme",
+                "Kaï","LGBT+","Mafia","Magical girl","Magie","Maladie","Mariage","Mature",
+                "Mechas","Médiéval","Militaire","Monde virtuel","Monstres","Musique","Mystère",
+                "Nekketsu","Ninjas","Nostalgie","Paranormal","Philosophie","Pirates","Police",
+                "Politique","Post-apocalyptique","Pouvoirs psychiques","Préhistoire","Prison",
+                "Psychologique","Quotidien","Religion","Réincarnation / Transmigration",
+                "Romance","Samouraïs","School Life","Science-Fantasy","Science-fiction",
+                "Scientifique","Seinen","Shôjo","Shôjo-Ai","Shônen","Shônen-Ai",
+                "Slice of Life","Société","Sport","Super pouvoirs","Super-héros","Surnaturel",
+                "Survie","Survival game","Technologies","Thriller","Tournois","Travail",
+                "Vampires","Vengeance","Voyage","Voyage temporel","Webcomic","Yakuza",
+                "Yaoi","Yokai","Yuri",
+            ]
+            logger.warning(f"Sync genres : seulement {len(genres)} genres scrappés, utilisation du fallback ({len(_FALLBACK)} genres)")
+            await genres_repo.save_all(_FALLBACK)
 
     asyncio.create_task(_do_sync())
     return {"status": "started", "message": "Synchronisation des genres lancée en arrière-plan"}
@@ -78,9 +100,10 @@ async def list_groups(_: dict = Depends(require_admin)):
 @router.post("/api/groups", status_code=201, summary="Créer un groupe (admin)")
 async def create_group(body: GroupCreate, _: dict = Depends(require_admin)):
     now = datetime.now(timezone.utc).isoformat()
-    doc = {**body.model_dump(), "created_at": now, "updated_at": now}
-    gid = await groups_repo.create(doc)
-    return {**doc, "id": gid, "member_count": 0}
+    # Copie pour éviter que insert_one ne modifie doc en ajoutant _id (ObjectId non sérialisable)
+    payload = {**body.model_dump(), "created_at": now, "updated_at": now}
+    gid = await groups_repo.create(payload)
+    return {**body.model_dump(), "id": gid, "created_at": now, "updated_at": now, "member_count": 0}
 
 
 @router.get("/api/groups/{gid}", summary="Détail d'un groupe (admin)")

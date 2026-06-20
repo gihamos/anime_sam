@@ -414,84 +414,72 @@ def _is_valid_genre(txt: str) -> bool:
 def _get_genres_sync() -> list[str]:
     """
     Scrape /catalogue/ pour extraire tous les genres disponibles.
-    Utilise Playwright (les genres sont JS-rendus — httpx ne les voit pas).
-    3 stratégies combinées :
-      1. Sélecteurs natifs Playwright (.genre-pill, select, checkbox)
-      2. Évaluation JS (variables globales, data-attributes, liens de filtre)
-      3. Parse HTML complet post-rendu (BeautifulSoup)
+
+    Structure réelle anime-sama.to (validée 2026-06) :
+      <div id="genreList">
+        <label class="filter-checkbox-item">
+          <input type="checkbox" class="filter-checkbox" name="genre[]" value="Action">
+          <span>Action</span>
+        </label>
+        ...
+      </div>
+
+    Stratégies dans l'ordre :
+      0. #genreList input.filter-checkbox → attribut value  (sélecteur validé)
+      1. Parse HTML complet post-rendu (BeautifulSoup, même sélecteur)
+      2. .genre-pill dans les cartes catalogue (fallback ancien comportement)
     """
     try:
         with sync_playwright() as p:
             browser, page = _open_page(p)
             page.goto(f"{BASE_SAMA_URL}catalogue/", timeout=30000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)   # laisser le JS charger les cartes et filtres
+
+            # Attendre que #genreList soit présent (rendu côté serveur, quasi-immédiat)
+            try:
+                page.wait_for_selector("#genreList input.filter-checkbox", timeout=8000)
+            except Exception:
+                page.wait_for_timeout(3000)
 
             genres: set[str] = set()
 
-            # ── Stratégie 1a : .genre-pill dans les cartes catalogue ──────────
+            # ── Stratégie 0 : #genreList input[name="genre[]"] ── (prioritaire)
             try:
-                for txt in page.locator(".genre-pill").all_text_contents():
-                    if _is_valid_genre(txt):
-                        genres.add(txt.strip())
-            except Exception:
-                pass
-
-            # ── Stratégie 1b : select[name*=genre] ───────────────────────────
-            try:
-                for sel_loc in page.locator("select").all():
-                    name = (sel_loc.get_attribute("name") or "").lower()
-                    iid  = (sel_loc.get_attribute("id")   or "").lower()
-                    if "genre" in name or "genre" in iid:
-                        for o in sel_loc.locator("option").all_text_contents():
-                            if _is_valid_genre(o):
-                                genres.add(o.strip())
-            except Exception:
-                pass
-
-            # ── Stratégie 2 : évaluation JS ──────────────────────────────────
-            try:
-                js_result = page.evaluate("""
-                    () => {
-                        // Variables globales communes
-                        const candidates = [
-                            window.genres, window.allGenres, window.genreList,
-                            window.GENRES, window.catalogue_genres,
-                            window.filters && window.filters.genres,
-                        ];
-                        for (const c of candidates) {
-                            if (Array.isArray(c) && c.length > 3) return c;
-                        }
-                        // data-genres sur un conteneur
-                        const el = document.querySelector('[data-genres]');
-                        if (el) {
-                            try { return JSON.parse(el.dataset.genres); } catch {}
-                        }
-                        // Liens/boutons filtre genre
-                        return Array.from(
-                            document.querySelectorAll('a[href*="genre"], [data-genre], .filter-genre')
-                        ).map(e => (e.dataset.genre || e.textContent || '').trim())
-                         .filter(t => t.length >= 2);
-                    }
+                values = page.evaluate("""
+                    () => Array.from(
+                        document.querySelectorAll('#genreList input.filter-checkbox')
+                    ).map(i => i.value).filter(v => v && v.trim().length >= 2)
                 """)
-                if isinstance(js_result, list):
-                    for g in js_result:
-                        if _is_valid_genre(str(g)):
-                            genres.add(str(g).strip())
+                if isinstance(values, list):
+                    for v in values:
+                        if _is_valid_genre(str(v)):
+                            genres.add(str(v).strip())
+                logger.info(f"Genres (stratégie #genreList) : {len(genres)} trouvés")
             except Exception:
                 pass
 
-            # ── Stratégie 3 : parse HTML complet post-rendu ──────────────────
-            try:
-                html = page.content()
-                for g in Parser.parse_genres_from_catalogue(html):
-                    if _is_valid_genre(g):
-                        genres.add(g)
-            except Exception:
-                pass
+            # ── Stratégie 1 : parse HTML complet (BeautifulSoup) ─────────────
+            if len(genres) < 5:
+                try:
+                    html = page.content()
+                    for g in Parser.parse_genres_from_catalogue(html):
+                        if _is_valid_genre(g):
+                            genres.add(g)
+                    logger.info(f"Genres (stratégie HTML) : {len(genres)} après parse")
+                except Exception:
+                    pass
+
+            # ── Stratégie 2 : .genre-pill des cartes ──────────────────────────
+            if len(genres) < 5:
+                try:
+                    for txt in page.locator(".genre-pill").all_text_contents():
+                        if _is_valid_genre(txt):
+                            genres.add(txt.strip())
+                except Exception:
+                    pass
 
             browser.close()
             result = sorted(genres)
-            logger.info(f"Genres : {len(result)} genres trouvés")
+            logger.info(f"Genres : {len(result)} genres trouvés au total")
             return result
 
     except Exception:

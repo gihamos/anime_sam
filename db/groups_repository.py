@@ -42,7 +42,7 @@ async def find_by_ids(gids: list[str]) -> list[dict]:
 
 async def create(doc: dict) -> str:
     db = get_db()
-    result = await db.groups.insert_one(doc)
+    result = await db.groups.insert_one(dict(doc))  # copie pour ne pas muter le dict appelant
     return str(result.inserted_id)
 
 
@@ -67,12 +67,17 @@ async def delete(gid: str) -> bool:
 
 async def count_members(gid: str) -> int:
     db = get_db()
-    return await db.users.count_documents({"groups": ObjectId(gid)})
+    oid = _oid(gid)
+    query = {"$or": [{"groups": oid}, {"groups": gid}]} if oid else {"groups": gid}
+    return await db.users.count_documents(query)
 
 
 async def list_members(gid: str) -> list[dict]:
     db = get_db()
-    cursor = db.users.find({"groups": gid}, {"_id": 0, "hashed_password": 0})
+    oid = _oid(gid)
+    # Chercher par ObjectId ET par string pour couvrir les deux formats en DB
+    query = {"$or": [{"groups": oid}, {"groups": gid}]} if oid else {"groups": gid}
+    cursor = db.users.find(query, {"_id": 0, "hashed_password": 0})
     return await cursor.to_list(None)
 
 
