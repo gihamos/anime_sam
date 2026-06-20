@@ -67,7 +67,7 @@ async def delete(gid: str) -> bool:
 
 async def count_members(gid: str) -> int:
     db = get_db()
-    return await db.users.count_documents({"groups": gid})
+    return await db.users.count_documents({"groups": ObjectId(gid)})
 
 
 async def list_members(gid: str) -> list[dict]:
