@@ -139,18 +139,32 @@ async def rechercher_catalogue(
     return results
 
 
-@router.get("/site/rechercher", summary="Scrape /catalogue/ avec filtres")
+@router.get("/site/rechercher", summary="Scrape /catalogue/ avec filtres réels anime-sama.to")
 async def rechercher_sur_site_route(
-    q:      Optional[str] = Query(None, description="Titre"),
-    type:   Optional[str] = Query(None, description="anime | scans | film | autres"),
-    lang:   Optional[str] = Query(None, description="vostfr | vf | vastfr"),
-    statut: Optional[str] = Query(None, description="en-cours | termine"),
-    genre:  Optional[str] = Query(None, description="Genres séparés par virgule"),
-    page:   int           = Query(1, ge=1),
+    search:        Optional[str] = Query(None,  description="Texte libre"),
+    type:          Optional[str] = Query(None,  description="Anime,Scans,Film,Autres (virgule)"),
+    langue:        Optional[str] = Query(None,  description="VOSTFR,VF,VASTFR (virgule)"),
+    statut:        Optional[str] = Query(None,  description="En cours,Terminé (virgule)"),
+    genre:         Optional[str] = Query(None,  description="Genres séparés par virgule"),
+    annee_min:     Optional[int] = Query(None),
+    annee_max:     Optional[int] = Query(None),
+    episodes_min:  Optional[int] = Query(None),
+    episodes_max:  Optional[int] = Query(None),
+    chapitres_min: Optional[int] = Query(None),
+    chapitres_max: Optional[int] = Query(None),
+    page:          int           = Query(1, ge=1),
 ):
-    genres_list = [g.strip() for g in genre.split(",")] if genre else None
+    def _split(s: Optional[str]) -> Optional[list[str]]:
+        return [x.strip() for x in s.split(",") if x.strip()] if s else None
+
     results = await rechercher_sur_site(
-        q=q, type_contenu=type, lang=lang, statut=statut, genres=genres_list, page=page
+        search=search,
+        types=_split(type),   langues=_split(langue),
+        statuts=_split(statut), genres=_split(genre),
+        annee_min=annee_min, annee_max=annee_max,
+        episodes_min=episodes_min, episodes_max=episodes_max,
+        chapitres_min=chapitres_min, chapitres_max=chapitres_max,
+        page=page,
     )
     if not results:
         raise HTTPException(status_code=404, detail="Aucun résultat sur le site")

@@ -400,38 +400,47 @@ class Parser:
     # ------------------------------------------------------------------
 
     @staticmethod
+    @staticmethod
     def parse_liste_catalogue(html: str) -> list[dict]:
         """
         Parse la page liste du catalogue anime-sama.
-        Retourne [ { title, slug, url, image, genres, types, langues } ]
+        Gère les URLs absolues (https://anime-sama.to/catalogue/slug/)
+        et relatives (/catalogue/slug/).
         """
+        _slug_re = re.compile(r'/catalogue/([^/?#\s]+)')
         soup = BeautifulSoup(html, "html.parser")
         results = []
         seen: set[str] = set()
 
-        for card in soup.select("a[href]"):
+        for card in soup.select("a[href*='/catalogue/']"):
             href = card.get("href", "")
-            parts = [p for p in href.rstrip("/").split("/") if p]
-            # Garder seulement /catalogue/{slug}/ (profondeur 2)
-            if len(parts) != 2 or parts[0] != "catalogue":
+            m = _slug_re.search(href)
+            if not m:
                 continue
-            slug = parts[1]
-            if slug in seen:
+            slug = m.group(1).strip("/")
+            # Ignorer les sous-pages (saison, lang…) : le slug ne doit pas contenir d'autres "/"
+            if not slug or slug in seen:
                 continue
             seen.add(slug)
 
-            img_tag   = card.select_one("img")
-            title_tag = card.select_one("h2, h3, .titre, [class*='title']")
-            title = title_tag.get_text(strip=True) if title_tag else slug
+            img_tag = card.select_one("img")
+            # Le premier h3 (ou h2) est souvent le titre formaté
+            title_tag = card.select_one("h3, h2, .titre, [class*='title']")
+            nom = title_tag.get_text(strip=True) if title_tag else slug
 
             genres_tags = card.select(".genre-pill, .genre, [class*='genre']")
-            genres = [g.get_text(strip=True) for g in genres_tags]
+            genres = [g.get_text(strip=True) for g in genres_tags if g.get_text(strip=True)]
+
+            img_src = None
+            if img_tag:
+                img_src = (img_tag.get("data-src") or img_tag.get("data-lazy-src")
+                           or img_tag.get("src") or "")
 
             results.append({
-                "title":  title,
+                "nom":    nom,
                 "slug":   slug,
-                "url":    _abs(href),
-                "image":  _abs(img_tag.get("src", "")) if img_tag else None,
+                "url":    href if href.startswith("http") else _abs(href),
+                "image":  img_src if img_src and img_src.startswith("http") else _abs(img_src) if img_src else None,
                 "genres": genres,
             })
 

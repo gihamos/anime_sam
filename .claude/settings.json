@@ -6,7 +6,12 @@
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/scraper.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/scraper.py', encoding='utf-8'\\).read\\(\\)\\); print\\('scraper OK'\\)\")",
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/parsers.py', encoding='utf-8'\\).read\\(\\)\\); print\\('parsers OK'\\)\")",
-      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/groups.py', encoding='utf-8'\\).read\\(\\)\\); print\\('groups OK'\\)\")"
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/groups.py', encoding='utf-8'\\).read\\(\\)\\); print\\('groups OK'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/admin_main.py', encoding='utf-8'\\).read\\(\\)\\); print\\('admin OK'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/catalogue_service.py', encoding='utf-8'\\).read\\(\\)\\); print\\('service OK'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/catalogues.py', encoding='utf-8'\\).read\\(\\)\\); print\\('route OK'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/parsers.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/admin.py', encoding='utf-8'\\).read\\(\\)\\); print\\('admin.py OK'\\)\")"
     ]
   }
 }

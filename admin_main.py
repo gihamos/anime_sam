@@ -192,6 +192,16 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 .ep-chip.chap{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--ac)}
 .ep-more{display:inline-block;padding:.15rem .5rem;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;font-size:.7rem;color:var(--mu);cursor:pointer;margin-top:.2rem}
 .ep-more:hover{background:var(--surh)}.lecteur-pill{display:inline-flex;align-items:center;gap:.3rem;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;padding:.2rem .5rem;font-size:.75rem;margin:.15rem}
+.ep-chip.playable{cursor:pointer;background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.5)}.ep-chip.playable:hover{background:rgba(16,185,129,.32);transform:scale(1.07)}
+.lecteur-pill.playable{cursor:pointer;background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.3);color:var(--info)}.lecteur-pill.playable:hover{background:rgba(56,189,248,.22)}
+.btn-danger{background:rgba(244,63,94,.15);color:var(--er);border:1px solid rgba(244,63,94,.35)}.btn-danger:hover{background:rgba(244,63,94,.28);border-color:var(--er)}
+#bulk-del-btn{display:none}
+/* Player modal */
+#m-player .mbox{max-width:960px;height:85vh}
+#mp-frame-wrap{flex:1;background:#000;position:relative;min-height:200px}
+#mp-iframe{position:absolute;inset:0;width:100%;height:100%;border:none}
+#mp-lects{display:flex;gap:.35rem;padding:.5rem .9rem;border-bottom:1px solid var(--bdr);flex-wrap:wrap;align-items:center;flex-shrink:0}
+#mp-lects .lbl{font-size:.74rem;color:var(--mu);margin-right:.15rem}
 
 /* Search results */
 .sr-item{display:flex;align-items:center;gap:.65rem;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--bdr);background:var(--sur2);margin-bottom:.35rem;cursor:pointer;transition:background .1s,border-color .1s}
@@ -287,6 +297,24 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 .b-block{background:rgba(244,63,94,.12);color:var(--er);border:1px solid rgba(244,63,94,.25)}
 .blocked-banner{background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.2);border-radius:7px;padding:.5rem .7rem;font-size:.8rem;color:var(--er);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
 
+/* Recherche avancée */
+.search-layout{display:grid;grid-template-columns:220px 1fr;gap:1rem;align-items:start}
+@media(max-width:820px){.search-layout{grid-template-columns:1fr}}
+.search-filters{background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:.8rem;position:sticky;top:0}
+.sf-section{margin-bottom:.65rem}
+.sf-label{display:block;font-size:.72rem;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+.sf-checks{display:flex;flex-direction:column;gap:.2rem}
+.search-results-area{min-width:0}
+.search-results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:.75rem}
+.src-card{background:var(--sur);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
+.src-card:hover{border-color:var(--ac);box-shadow:0 2px 12px rgba(139,92,246,.12)}
+.src-card.in-db{border-color:rgba(16,185,129,.4)}
+.src-poster{width:100%;aspect-ratio:2/3;object-fit:cover;background:var(--sur2);display:block}
+.src-poster-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;font-size:2.2rem;background:var(--sur2);color:var(--mu)}
+.src-info{padding:.5rem .55rem;flex:1;display:flex;flex-direction:column;gap:.2rem}
+.src-nom{font-size:.79rem;font-weight:600;color:var(--tx);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.src-slug{font-size:.68rem;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-foot{padding:.38rem .55rem;border-top:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:.3rem;flex-wrap:wrap}
 /* Toasts */
 #toasts{position:fixed;bottom:1.25rem;right:1.25rem;z-index:300;display:flex;flex-direction:column;gap:.4rem}
 .toast{padding:.6rem .9rem;border-radius:8px;font-size:.8rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.3);animation:ti .18s ease-out;min-width:210px;display:flex;align-items:center;gap:.45rem}
@@ -323,6 +351,7 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div class="ni active" data-tab="users"     onclick="switchTab(this)"><span>👥</span> Utilisateurs</div>
       <div class="ni"        data-tab="catalogues" onclick="switchTab(this)"><span>📚</span> Catalogues</div>
       <div class="ni"        data-tab="groups"     onclick="switchTab(this)"><span>🏷️</span> Groupes</div>
+      <div class="ni"        data-tab="search"     onclick="switchTab(this)"><span>🔍</span> Recherche</div>
       <div class="ni"        data-tab="apps"       onclick="switchTab(this)"><span>🔌</span> Applications</div>
       <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
     </nav>
@@ -362,10 +391,11 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           <select id="cf-etat" onchange="filterCats()"><option value="">Tout état</option><option value="en_cours">En cours</option><option value="termine">Terminé</option><option value="abandonne">Abandonné</option></select>
           <select id="cf-sync" onchange="filterCats()"><option value="">Toute sync</option><option value="no">Non synchronisé</option><option value="yes">Synchronisé</option></select>
           <select id="cf-genre" onchange="filterCats()"><option value="">Tous les genres</option></select>
+          <button id="bulk-del-btn" class="btn btn-danger btn-sm" onclick="openDeleteSelected()">🗑 Supprimer la sélection (<span id="bulk-del-count">0</span>)</button>
         </div>
         <div class="dtw"><table class="dt">
-          <thead><tr><th>Catalogue</th><th>Type</th><th>Contenu</th><th>État</th><th>Sync</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
-          <tbody id="ctbody"><tr><td colspan="7"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          <thead><tr><th style="width:32px"><input type="checkbox" id="ct-chk-all" title="Tout sélectionner" onchange="selectAllCats(this)"></th><th>Catalogue</th><th>Type</th><th>Contenu</th><th>État</th><th>Sync</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+          <tbody id="ctbody"><tr><td colspan="8"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
         </table></div>
         <div id="bg-bar"><div class="bbt">⟳ Synchronisations en arrière-plan</div><div id="bg-list"></div></div>
       </div>
@@ -385,6 +415,72 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           <thead><tr><th>Nom</th><th>Type</th><th>Détails</th><th>Membres</th><th>Permissions</th><th>Actions</th></tr></thead>
           <tbody id="gtbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
         </table></div>
+      </div>
+
+      <!-- RECHERCHE AVANCÉE -->
+      <div id="tab-search" style="display:none">
+        <div class="search-layout">
+          <!-- Panneau filtres -->
+          <div class="search-filters">
+            <div class="sf-section">
+              <label class="sf-label">Titre</label>
+              <input id="sf-q" class="fc" placeholder="Naruto, One Piece…" onkeydown="if(event.key==='Enter')runSearch(1)">
+            </div>
+            <div class="sf-section">
+              <label class="sf-label">Type</label>
+              <div class="sf-checks">
+                <label class="fcheck"><input type="checkbox" class="sf-type" value="Anime"> Anime</label>
+                <label class="fcheck"><input type="checkbox" class="sf-type" value="Scans"> Scans</label>
+                <label class="fcheck"><input type="checkbox" class="sf-type" value="Film"> Film</label>
+                <label class="fcheck"><input type="checkbox" class="sf-type" value="Autres"> Autres</label>
+              </div>
+            </div>
+            <div class="sf-section">
+              <label class="sf-label">Langue</label>
+              <div class="sf-checks">
+                <label class="fcheck"><input type="checkbox" class="sf-langue" value="VOSTFR"> VOSTFR</label>
+                <label class="fcheck"><input type="checkbox" class="sf-langue" value="VF"> VF</label>
+                <label class="fcheck"><input type="checkbox" class="sf-langue" value="VASTFR"> VASTFR</label>
+              </div>
+            </div>
+            <div class="sf-section">
+              <label class="sf-label">Statut</label>
+              <div class="sf-checks">
+                <label class="fcheck"><input type="checkbox" class="sf-statut" value="En cours"> En cours</label>
+                <label class="fcheck"><input type="checkbox" class="sf-statut" value="Terminé"> Terminé</label>
+              </div>
+            </div>
+            <div class="sf-section">
+              <label class="sf-label">Année</label>
+              <div style="display:flex;gap:.4rem;align-items:center">
+                <input id="sf-annee-min" class="fc" type="number" placeholder="1990" min="1960" max="2030" style="flex:1;padding:.3rem .45rem">
+                <span style="color:var(--mu);font-size:.8rem">–</span>
+                <input id="sf-annee-max" class="fc" type="number" placeholder="2026" min="1960" max="2030" style="flex:1;padding:.3rem .45rem">
+              </div>
+            </div>
+            <div class="sf-section">
+              <label class="sf-label">Genres <span id="sf-genre-count" style="color:var(--ac);font-weight:700;font-size:.7rem"></span></label>
+              <div class="genre-grid-wrap">
+                <div class="genre-grid-filter"><input id="sf-genre-filter" placeholder="Filtrer les genres…" oninput="filterSearchGenres()"></div>
+                <div id="sf-genre-grid" class="genre-grid" style="max-height:200px"><span style="color:var(--mu);font-size:.78rem;padding:.4rem">Chargement…</span></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:.45rem;margin-top:.8rem">
+              <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="runSearch(1)">🔍 Rechercher</button>
+              <button class="btn btn-ghost btn-sm" onclick="clearSearchFilters()" title="Réinitialiser">✕</button>
+            </div>
+          </div>
+
+          <!-- Zone résultats -->
+          <div class="search-results-area">
+            <div id="sr-status" style="display:none;padding:.35rem 0;font-size:.82rem;color:var(--mu)"></div>
+            <div id="sr-grid" class="search-results-grid"></div>
+            <div id="sr-more" style="display:none;text-align:center;margin-top:1.1rem">
+              <button class="btn btn-secondary" id="sr-more-btn" onclick="runSearch(_srPage+1)">Charger plus…</button>
+            </div>
+            <div id="sr-empty" class="empty"><div class="ic">🔍</div>Utilisez les filtres pour rechercher des catalogues sur anime-sama.to</div>
+          </div>
+        </div>
       </div>
 
       <!-- APPLICATIONS -->
@@ -566,6 +662,33 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
     <div class="mhd"><h3 id="mc-title">Contenu</h3><span id="mc-sync-badge" class="badge"></span><button class="btn btn-ghost btn-icon" onclick="cm('m-content')">✕</button></div>
     <div class="mbd" id="mc-body"><div class="empty"><div class="ic">⏳</div>Chargement…</div></div>
     <div class="mft"><button class="btn btn-secondary" onclick="cm('m-content')">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Modal confirmation suppression catalogue(s) -->
+<div class="mbk" id="m-del-cat" style="display:none" onclick="if(event.target===this)cm('m-del-cat')">
+  <div class="mbox sm">
+    <div class="mhd"><h3>Supprimer</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-del-cat')">✕</button></div>
+    <div class="mbd">
+      <p id="md-text" style="color:var(--tx);line-height:1.6;margin-bottom:.6rem"></p>
+      <div class="alert a-er">⚠ Cette action est irréversible. Toutes les données (épisodes, films, scans) associées seront supprimées.</div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-secondary" onclick="cm('m-del-cat')">Annuler</button>
+      <button class="btn btn-danger" onclick="confirmDeleteCats()">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal lecteur vidéo -->
+<div class="mbk" id="m-player" style="display:none" onclick="if(event.target===this)closePlayer()">
+  <div class="mbox" style="max-width:960px;height:85vh;display:flex;flex-direction:column">
+    <div class="mhd">
+      <h3 id="mp-title">Lecteur</h3>
+      <button class="btn btn-ghost btn-icon" onclick="closePlayer()">✕</button>
+    </div>
+    <div id="mp-lects"><span class="lbl">Lecteurs :</span></div>
+    <div id="mp-frame-wrap"><iframe id="mp-iframe" src="" allowfullscreen referrerpolicy="no-referrer"></iframe></div>
   </div>
 </div>
 
@@ -838,6 +961,9 @@ let detailTags = { genres: [], langues: [] };
 let activeSyncSlug = null;
 let editClientId = null, cltAccessClientId = null;
 const bgSyncs = new Map();
+let _delCatSlugs = [];
+let _playerVideos = [];
+let _contentData  = null;
 
 // ─── Thème ─────────────────────────────────────────────────────────────────
 const H = document.documentElement;
@@ -866,7 +992,7 @@ function copyText(txt,msg){navigator.clipboard.writeText(txt).then(()=>toast(msg
 function om(id){document.getElementById(id).style.display='flex';}
 function cm(id){document.getElementById(id).style.display='none';}
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')['m-user','m-access','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block'].forEach(cm);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('m-player').style.display!=='none'){closePlayer();return;}['m-user','m-access','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block','m-del-cat'].forEach(cm);}});
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 document.getElementById('lp').onkeydown=e=>{if(e.key==='Enter')doLogin();};
@@ -934,19 +1060,20 @@ function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').c
 function switchTab(el){
   const tab=el.dataset.tab;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
-  ['users','catalogues','groups','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',apps:'Applications',planning:'Planification'};
+  ['users','catalogues','groups','search','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification'};
   const actions={
     users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
     catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
     groups:`<button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ Nouveau groupe</button>`,
     apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
-    planning:'',
+    search:'',planning:'',
   };
   document.getElementById('tb-title').textContent=titles[tab]||tab;
   document.getElementById('tb-actions').innerHTML=actions[tab]||'';
   if(tab==='planning'){loadPlanning();loadSchedules();loadHistory();}
   if(tab==='groups'){loadGroups();}
+  if(tab==='search'){initSearch();}
 }
 
 function showPTab(el,target){
@@ -1124,15 +1251,17 @@ function filterCats(){
 }
 function renderCats(list){
   const b=document.getElementById('ctbody');
-  if(!list.length){b.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">📚</div>Aucun catalogue</div></td></tr>`;return;}
+  if(!list.length){b.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="ic">📚</div>Aucun catalogue</div></td></tr>`;return;}
   const tl={anime:'🎬 Anime',scan:'📖 Scan',film:'🎞 Film',autre:'📦 Autre'};
   const eb={en_cours:'b-info',termine:'b-ok',abandonne:'b-mu'},el={en_cours:'En cours',termine:'Terminé',abandonne:'Abandonné'};
   b.innerHTML=list.map(c=>{
     const st=isStale(c),bg=bgSyncs.get(c.slug),isSyncing=bg&&!bg.done;
     const nb=[c.saisons.length&&`${c.saisons.length} saison${c.saisons.length>1?'s':''}`,c.films.length&&`${c.films.length} film${c.films.length>1?'s':''}`,c.scans.length&&`${c.scans.length} scan${c.scans.length>1?'s':''}`].filter(Boolean).join(' · ');
+    const slug=esc(c.slug);
     return `<tr ${st?'style="background:rgba(245,158,11,.04)"':''}>
+      <td style="width:32px;text-align:center"><input type="checkbox" class="ct-sel" value="${slug}" onchange="updateCatBulkBtn()"></td>
       <td>
-        <div style="font-weight:600">${esc(c.nom)}</div><div style="font-size:.73rem;color:var(--mu)">${esc(c.slug)}</div>
+        <div style="font-weight:600">${esc(c.nom)}</div><div style="font-size:.73rem;color:var(--mu)">${slug}</div>
         ${st?'<span class="badge b-wa" style="margin-top:2px">⚠ MàJ recommandée</span>':''}
         ${isSyncing?`<span class="badge b-info" style="margin-top:2px">${bg.state==='paused'?'⏸ En pause':'⟳ En cours'} ${bg.pct}%</span>`:''}
       </td>
@@ -1142,14 +1271,92 @@ function renderCats(list){
       <td><span class="badge ${c.episodes_synced?'b-ok':'b-er'}">${c.episodes_synced?'✓ Oui':'✗ Non'}</span></td>
       <td style="font-size:.78rem;color:var(--mu);white-space:nowrap">${timeAgo(c.updated_at)}</td>
       <td><div class="actions">
-        <button class="btn btn-info btn-icon btn-sm"      title="Contenu"     onclick="openContent('${esc(c.slug)}')">👁</button>
-        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier"    onclick="openDetail('${esc(c.slug)}')">✏️</button>
-        <button class="btn btn-warn btn-icon btn-sm"      title="Rafraîchir"  onclick="doRefresh('${esc(c.slug)}')">↺</button>
-        <button class="btn ${isSyncing?'btn-info':'btn-ok'} btn-icon btn-sm"  title="${isSyncing?'Suivre':'Sync'}" onclick="openSync('${esc(c.slug)}')">⟳</button>
-        <button class="btn btn-secondary btn-icon btn-sm" title="Visibilité"  onclick="openVis('${esc(c.slug)}')">🔒</button>
+        <button class="btn btn-info btn-icon btn-sm"      title="Contenu"     onclick="openContent('${slug}')">👁</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier"    onclick="openDetail('${slug}')">✏️</button>
+        <button class="btn btn-warn btn-icon btn-sm"      title="Rafraîchir"  onclick="doRefresh('${slug}')">↺</button>
+        <button class="btn ${isSyncing?'btn-info':'btn-ok'} btn-icon btn-sm"  title="${isSyncing?'Suivre':'Sync'}" onclick="openSync('${slug}')">⟳</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Visibilité"  onclick="openVis('${slug}')">🔒</button>
+        <button class="btn btn-danger btn-icon btn-sm"    title="Supprimer"   onclick="openDeleteCat('${slug}')">🗑</button>
       </div></td>
     </tr>`;
   }).join('');
+  updateCatBulkBtn();
+}
+
+// ─── Suppression catalogue(s) ────────────────────────────────────────────
+function selectAllCats(cb){
+  document.querySelectorAll('.ct-sel').forEach(c=>c.checked=cb.checked);
+  updateCatBulkBtn();
+}
+function updateCatBulkBtn(){
+  const n=document.querySelectorAll('.ct-sel:checked').length;
+  const btn=document.getElementById('bulk-del-btn');
+  btn.style.display=n?'':'none';
+  document.getElementById('bulk-del-count').textContent=n;
+  const allCb=document.getElementById('ct-chk-all');
+  const total=document.querySelectorAll('.ct-sel').length;
+  if(allCb) allCb.indeterminate=n>0&&n<total,allCb.checked=n===total&&total>0;
+}
+function openDeleteCat(slug){
+  const cat=allCats.find(c=>c.slug===slug);
+  _delCatSlugs=[slug];
+  document.getElementById('md-text').innerHTML=`Supprimer le catalogue <strong>${esc(cat?.nom||slug)}</strong> ?`;
+  om('m-del-cat');
+}
+function openDeleteSelected(){
+  const slugs=[...document.querySelectorAll('.ct-sel:checked')].map(c=>c.value);
+  if(!slugs.length){toast('Aucun catalogue sélectionné','wa');return;}
+  _delCatSlugs=slugs;
+  const names=slugs.map(s=>{const c=allCats.find(x=>x.slug===s);return c?.nom||s;});
+  document.getElementById('md-text').innerHTML=`Supprimer ${slugs.length} catalogue${slugs.length>1?'s':''} ?<br><span style="font-size:.8rem;color:var(--mu)">${names.map(n=>`• ${esc(n)}`).join('<br>')}</span>`;
+  om('m-del-cat');
+}
+async function confirmDeleteCats(){
+  if(!_delCatSlugs.length)return;
+  cm('m-del-cat');
+  let ok=0,er=0;
+  for(const slug of _delCatSlugs){
+    try{await api('DELETE',`/admin/api/catalogues/${slug}`);ok++;}
+    catch(e){er++;toast(`Erreur suppression ${slug}: ${e}`,'er');}
+  }
+  if(ok)toast(`${ok} catalogue${ok>1?'s':''} supprimé${ok>1?'s':''}`, 'ok');
+  _delCatSlugs=[];
+  await loadCats();
+}
+
+// ─── Lecteur vidéo ───────────────────────────────────────────────────────
+function openPlayer(videos, title){
+  if(!videos?.length){toast('Aucun lecteur disponible','wa');return;}
+  _playerVideos=videos;
+  document.getElementById('mp-title').textContent=title||'Lecteur';
+  const lDiv=document.getElementById('mp-lects');
+  if(videos.length>1){
+    lDiv.style.display='';
+    lDiv.innerHTML='<span class="lbl">Lecteurs :</span>'+videos.map((v,i)=>
+      `<button class="btn btn-sm ${i===0?'btn-primary':'btn-secondary'}" onclick="switchPlayer(${i},this)">${esc(v.lecteur||`Lecteur ${i+1}`)}</button>`
+    ).join('');
+  }else{lDiv.style.display='none';}
+  document.getElementById('mp-iframe').src=videos[0].player_url||'';
+  om('m-player');
+}
+function switchPlayer(idx,btn){
+  document.querySelectorAll('#mp-lects button').forEach(b=>{b.classList.remove('btn-primary');b.classList.add('btn-secondary');});
+  btn.classList.remove('btn-secondary');btn.classList.add('btn-primary');
+  document.getElementById('mp-iframe').src=_playerVideos[idx]?.player_url||'';
+}
+function closePlayer(){
+  document.getElementById('mp-iframe').src=''; // stoppe la vidéo
+  cm('m-player');
+}
+// Helpers pour ouvrir le lecteur depuis la vue contenu
+function _openEpPlayer(saisonIdx,epNum){
+  const s=(_contentData?.saisons||[])[saisonIdx];if(!s)return;
+  const ep=(s.episodes||[]).find(e=>e.numero===epNum);if(!ep?.videos?.length)return;
+  openPlayer(ep.videos,`${esc(s.nom)} — Ép. ${epNum}`);
+}
+function _openFilmPlayer(filmIdx){
+  const f=(_contentData?.films||[])[filmIdx];if(!f?.videos?.length)return;
+  openPlayer(f.videos,esc(f.nom));
 }
 
 // ─── Ajouter + recherche ─────────────────────────────────────────────────
@@ -1235,6 +1442,7 @@ async function openContent(slug){
   document.getElementById('mc-body').innerHTML='<div class="empty"><div class="ic">⏳</div>Chargement…</div>';om('m-content');
   try{
     const d=await api('GET',`/admin/api/catalogues/${slug}/contenu`);
+    _contentData=d;
     const sb=document.getElementById('mc-sync-badge');
     if(d.episodes_synced){sb.textContent='✓ Synchronisé';sb.className='badge b-ok';}else{sb.textContent='✗ Non synchronisé';sb.className='badge b-er';}
     renderContentView(d);
@@ -1258,15 +1466,20 @@ function renderSaisonsContent(saisons){
   return saisons.map((s,idx)=>{
     const hasEps=s.episodes.length>0,langBadge=s.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(s.lang.toUpperCase())}</span>`:'';
     return `<div class="citem"><div class="citem-head" onclick="toggleCItem('sei-${idx}')"><span class="ci-nom">${esc(s.nom)}</span>${langBadge}<span class="ci-count">${hasEps?`${s.episodes.length} éps`:(s.total_episodes?`${s.total_episodes} éps (non chargés)`:'Aucun épisode')}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
-    <div class="citem-body ${hasEps?'':'unsynced'}" id="sei-${idx}">${hasEps?renderEpChips(s.episodes,'ep'):'<p style="margin:0">⚠ Épisodes non synchronisés.</p>'}</div></div>`;
+    <div class="citem-body ${hasEps?'':'unsynced'}" id="sei-${idx}">${hasEps?renderEpChips(s.episodes,'ep',idx):'<p style="margin:0">⚠ Épisodes non synchronisés.</p>'}</div></div>`;
   }).join('');
 }
 function renderFilmsContent(films){
   if(!films.length) return '<div class="empty"><div class="ic">🎞</div>Aucun film</div>';
   return films.map((f,idx)=>{
-    const hasVids=f.lecteurs.length>0,langBadge=f.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(f.lang.toUpperCase())}</span>`:'';
+    const hasVids=(f.videos||[]).length>0,langBadge=f.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(f.lang.toUpperCase())}</span>`:'';
+    const pillsHtml=hasVids
+      ?'<div style="margin-top:.35rem">'+f.videos.map((v,i)=>
+          `<span class="lecteur-pill playable" onclick="_openFilmPlayer(${idx})" title="Ouvrir ${esc(v.lecteur||'lecteur')}" data-lidx="${i}">▶ ${esc(v.lecteur||`Lecteur ${i+1}`)}</span>`
+        ).join('')+'</div>'
+      :'<p style="margin:0">⚠ Vidéos non synchronisées.</p>';
     return `<div class="citem"><div class="citem-head" onclick="toggleCItem('fi-${idx}')"><span class="ci-nom">${esc(f.nom)}</span>${langBadge}<span class="ci-count">${hasVids?`${f.videos_count} lecteur(s)`:'Non synchronisé'}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
-    <div class="citem-body ${hasVids?'':'unsynced'}" id="fi-${idx}">${hasVids?'<div>Lecteurs : '+f.lecteurs.map(l=>`<span class="lecteur-pill">🎬 ${esc(l)}</span>`).join('')+'</div>':'<p style="margin:0">⚠ Vidéos non synchronisées.</p>'}</div></div>`;
+    <div class="citem-body ${hasVids?'':'unsynced'}" id="fi-${idx}">${pillsHtml}</div></div>`;
   }).join('');
 }
 function renderScansContent(scans){
@@ -1277,8 +1490,14 @@ function renderScansContent(scans){
     <div class="citem-body ${hasChaps?'':'unsynced'}" id="sci-${idx}">${hasChaps?renderEpChips(sc.chapitres,'chap'):'<p style="margin:0">⚠ Chapitres non synchronisés.</p>'}</div></div>`;
   }).join('');
 }
-function renderEpChips(items,cls){
-  const MAX=120,chips=items.slice(0,MAX).map(e=>`<span class="ep-chip ${cls}">${e.numero}</span>`).join('');
+function renderEpChips(items,cls,saisonIdx){
+  const MAX=120;
+  const chip=e=>{
+    const play=e.videos&&e.videos.length>0;
+    const attr=play?`onclick="_openEpPlayer(${saisonIdx},${e.numero})" title="Lire — ${e.videos.length} lecteur(s)"`:'';
+    return `<span class="ep-chip ${cls}${play?' playable':''}" ${attr}>${e.numero}</span>`;
+  };
+  const chips=items.slice(0,MAX).map(chip).join('');
   const more=items.length>MAX?`<span class="ep-more" onclick="this.outerHTML='${items.slice(MAX).map(e=>`<span class=\\"ep-chip ${cls}\\">${e.numero}</span>`).join('')}'">… +${items.length-MAX} de plus</span>`:'';
   return `<div class="ep-grid">${chips}${more}</div>`;
 }
@@ -1999,6 +2218,165 @@ function filterHistory(){
   const list=allHistory.filter(h=>(!q||h.slug.includes(q))&&(!st||h.status===st)&&(!tr||(tr==='schedule'?h.triggered_by.startsWith('schedule'):!h.triggered_by.startsWith('schedule'))));
   renderHistory(list);
 }
+// ═══════════════════════ RECHERCHE AVANCÉE ═══════════════════════════════════
+
+let _srPage=0, _srKnownSlugs=new Set(), _srAllGenres=[], _srSelGenres=new Set(), _srInitDone=false;
+
+async function initSearch(){
+  if(_srInitDone)return;
+  _srInitDone=true;
+  try{_srAllGenres=await api('GET','/admin/api/genres');}catch{_srAllGenres=[];}
+  try{const cats=await api('GET','/admin/api/catalogues');_srKnownSlugs=new Set((cats||[]).map(c=>c.slug));}catch{}
+  renderSearchGenreGrid();
+  document.getElementById('sr-empty').style.display='flex';
+}
+
+function renderSearchGenreGrid(){
+  const q=(document.getElementById('sf-genre-filter')?.value||'').toLowerCase();
+  const filtered=_srAllGenres.filter(g=>!q||g.toLowerCase().includes(q));
+  const el=document.getElementById('sf-genre-grid');
+  if(!el)return;
+  if(!filtered.length){el.innerHTML='<span style="color:var(--mu);font-size:.78rem;padding:.4rem">Aucun genre</span>';return;}
+  el.innerHTML=filtered.map(g=>`<span class="gs-chip ${_srSelGenres.has(g)?'on':''}" onclick="toggleSearchGenre('${esc(g)}')">${esc(g)}</span>`).join('');
+  const cnt=document.getElementById('sf-genre-count');
+  if(cnt)cnt.textContent=_srSelGenres.size?`(${_srSelGenres.size} sél.)` :'';
+}
+
+function filterSearchGenres(){renderSearchGenreGrid();}
+
+function toggleSearchGenre(g){
+  if(_srSelGenres.has(g))_srSelGenres.delete(g);else _srSelGenres.add(g);
+  renderSearchGenreGrid();
+}
+
+function _sfChecked(cls){return [...document.querySelectorAll(`.${cls}:checked`)].map(i=>i.value);}
+
+function clearSearchFilters(){
+  const sfQ=document.getElementById('sf-q');if(sfQ)sfQ.value='';
+  const sfGF=document.getElementById('sf-genre-filter');if(sfGF)sfGF.value='';
+  const sfAMin=document.getElementById('sf-annee-min');if(sfAMin)sfAMin.value='';
+  const sfAMax=document.getElementById('sf-annee-max');if(sfAMax)sfAMax.value='';
+  document.querySelectorAll('.sf-type,.sf-langue,.sf-statut').forEach(cb=>cb.checked=false);
+  _srSelGenres.clear();_srPage=0;
+  renderSearchGenreGrid();
+  document.getElementById('sr-grid').innerHTML='';
+  document.getElementById('sr-more').style.display='none';
+  document.getElementById('sr-status').style.display='none';
+  document.getElementById('sr-empty').innerHTML='<div class="ic">🔍</div>Utilisez les filtres pour rechercher des catalogues sur anime-sama.to';
+  document.getElementById('sr-empty').style.display='flex';
+}
+
+async function runSearch(page=1){
+  const search=document.getElementById('sf-q')?.value.trim()||'';
+  const types=_sfChecked('sf-type');
+  const langues=_sfChecked('sf-langue');
+  const statuts=_sfChecked('sf-statut');
+  const genres=[..._srSelGenres];
+  const anneeMin=document.getElementById('sf-annee-min')?.value||'';
+  const anneeMax=document.getElementById('sf-annee-max')?.value||'';
+
+  const p=new URLSearchParams();
+  p.set('page',page);
+  if(search)p.set('search',search);
+  if(types.length)p.set('type',types.join(','));
+  if(langues.length)p.set('langue',langues.join(','));
+  if(statuts.length)p.set('statut',statuts.join(','));
+  if(genres.length)p.set('genre',genres.join(','));
+  if(anneeMin)p.set('annee_min',anneeMin);
+  if(anneeMax)p.set('annee_max',anneeMax);
+
+  const statusEl=document.getElementById('sr-status');
+  const gridEl=document.getElementById('sr-grid');
+  const emptyEl=document.getElementById('sr-empty');
+  const moreEl=document.getElementById('sr-more');
+  const moreBtn=document.getElementById('sr-more-btn');
+
+  emptyEl.style.display='none';
+  statusEl.innerHTML='<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="display:inline-block;width:13px;height:13px;border:2px solid var(--bdr);border-top-color:var(--ac);border-radius:50%;animation:spin .6s linear infinite"></span> Recherche sur anime-sama.to…</span>';
+  statusEl.style.display='';
+  if(page===1){gridEl.innerHTML='';moreEl.style.display='none';}
+  if(moreBtn)moreBtn.disabled=true;
+
+  try{
+    try{const cats=await api('GET','/admin/api/catalogues');_srKnownSlugs=new Set((cats||[]).map(c=>c.slug));}catch{}
+
+    let results;
+    try{results=await api('GET',`/catalogues/site/rechercher?${p}`);}
+    catch(e){
+      if(String(e).includes('404')||String(e).includes('Aucun')){results=[];}
+      else throw e;
+    }
+    const list=Array.isArray(results)?results:[];
+
+    if(page===1&&!list.length){
+      statusEl.style.display='none';
+      emptyEl.innerHTML='<div class="ic">😶</div>Aucun résultat pour ces critères';
+      emptyEl.style.display='flex';
+      return;
+    }
+
+    gridEl.insertAdjacentHTML('beforeend',list.map(r=>_srCard(r)).join(''));
+    _srPage=page;
+    statusEl.textContent=page===1?`${list.length} résultat${list.length>1?'s':''}`:`+${list.length} résultats (page ${page})`;
+    moreEl.style.display=list.length>=18?'':'none';
+  }catch(e){
+    statusEl.textContent=`❌ ${String(e)}`;
+  }finally{
+    if(moreBtn)moreBtn.disabled=false;
+  }
+}
+
+function _srCard(r){
+  const inDb=_srKnownSlugs.has(r.slug);
+  const img=r.image
+    ?`<img class="src-poster" src="${esc(r.image)}" loading="lazy" onerror="this.outerHTML='<div class=src-poster-ph>🎬</div>'">`
+    :`<div class="src-poster-ph">🎬</div>`;
+  const tb=r.type_contenu?`<span class="badge b-mu" style="font-size:.62rem">${esc(r.type_contenu)}</span>`:'';
+  const db=inDb?`<span class="badge" style="background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid rgba(16,185,129,.3);font-size:.62rem">✓ En base</span>`:'';
+  const addBtn=inDb
+    ?`<button class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:.2rem .5rem;pointer-events:none" disabled>✓ Ajouté</button>`
+    :`<button class="btn btn-primary btn-sm" style="font-size:.7rem;padding:.2rem .5rem" onclick="addFromSearch('${esc(r.slug)}','${esc(r.nom||'')}',this)">+ Ajouter</button>`;
+  return `<div class="src-card${inDb?' in-db':''}" data-slug="${esc(r.slug)}">
+    ${img}
+    <div class="src-info">
+      <div class="src-nom">${esc(r.nom||r.slug)}</div>
+      <div class="src-slug">${esc(r.slug)}</div>
+      <div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.2rem">${tb}${db}</div>
+    </div>
+    <div class="src-foot">${addBtn}</div>
+  </div>`;
+}
+
+async function addFromSearch(slug,titre,btn){
+  btn.disabled=true;btn.textContent='⏳';
+  try{
+    const r=await fetch(API+`/catalogues/${slug}`,{headers:{Authorization:`Bearer ${token}`}});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw d.detail||`Erreur ${r.status}`;
+    toast(`${d.nom||slug} ajouté`,'ok');
+    _srKnownSlugs.add(slug);
+    const card=document.querySelector(`.src-card[data-slug="${slug}"]`);
+    if(card){
+      card.classList.add('in-db');
+      const foot=card.querySelector('.src-foot');
+      if(foot)foot.innerHTML=`<button class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:.2rem .5rem" disabled>✓ Ajouté</button>`;
+      const infoLast=card.querySelector('.src-info>div:last-child');
+      if(infoLast)infoLast.insertAdjacentHTML('beforeend',`<span class="badge" style="background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid rgba(16,185,129,.3);font-size:.62rem">✓ En base</span>`);
+    }
+    loadCats();
+  }catch(e){
+    toast(String(e),'er');
+    btn.disabled=false;btn.textContent='+ Ajouter';
+  }
+}
+
+// Ajout animation spinner
+const _srStyle=document.createElement('style');
+_srStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(_srStyle);
+
+// ══════════════════════════════════════════════════════════════════════════════
+
 function renderHistory(list){
   const b=document.getElementById('htbody');
   if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">🕒</div>Aucune sync enregistrée</div></td></tr>`;return;}

@@ -76,20 +76,26 @@ async def rechercher(
 
 
 async def rechercher_sur_site(
-    q:            Optional[str]       = None,
-    type_contenu: Optional[str]       = None,
-    lang:         Optional[str]       = None,
-    statut:       Optional[str]       = None,
-    genres:       Optional[list[str]] = None,
-    page:         int                 = 1,
+    search:        Optional[str]       = None,
+    types:         Optional[list[str]] = None,
+    langues:       Optional[list[str]] = None,
+    statuts:       Optional[list[str]] = None,
+    genres:        Optional[list[str]] = None,
+    annee_min:     Optional[int]       = None,
+    annee_max:     Optional[int]       = None,
+    episodes_min:  Optional[int]       = None,
+    episodes_max:  Optional[int]       = None,
+    chapitres_min: Optional[int]       = None,
+    chapitres_max: Optional[int]       = None,
+    page:          int                 = 1,
 ) -> list[dict]:
-    """
-    Scrape directement /catalogue/ sur le site avec filtres URL.
-    Ne passe pas par la DB.
-    """
+    """Scrape directement /catalogue/ avec les filtres réels du site."""
     return await scraper.search_catalogue_site(
-        q=q, type_contenu=type_contenu, lang=lang,
-        statut=statut, genres=genres, page_num=page,
+        search=search, types=types, langues=langues, statuts=statuts,
+        genres=genres, annee_min=annee_min, annee_max=annee_max,
+        episodes_min=episodes_min, episodes_max=episodes_max,
+        chapitres_min=chapitres_min, chapitres_max=chapitres_max,
+        page_num=page,
     )
 
 

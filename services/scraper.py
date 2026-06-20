@@ -94,29 +94,53 @@ def _search_sync(query: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _search_catalogue_site_sync(
-    q: Optional[str] = None,
-    type_contenu: Optional[str] = None,
-    lang: Optional[str] = None,
-    statut: Optional[str] = None,
-    genres: Optional[list[str]] = None,
-    page_num: int = 1,
+    search:        Optional[str]       = None,
+    types:         Optional[list[str]] = None,
+    langues:       Optional[list[str]] = None,
+    statuts:       Optional[list[str]] = None,
+    genres:        Optional[list[str]] = None,
+    annee_min:     Optional[int]       = None,
+    annee_max:     Optional[int]       = None,
+    episodes_min:  Optional[int]       = None,
+    episodes_max:  Optional[int]       = None,
+    chapitres_min: Optional[int]       = None,
+    chapitres_max: Optional[int]       = None,
+    page_num:      int                 = 1,
 ) -> list[dict]:
     """
-    Scrape /catalogue/ avec les filtres URL.
-    Paramètres :
-      q           → ?q=naruto
-      type_contenu → ?type=anime|scans|film|autres
-      lang        → ?lang=vostfr|vf|vastfr
-      statut      → ?statut=en-cours|termine
-      genres      → ?genres=action,aventure  (multiples séparés par virgule)
-      page_num    → ?page=N
+    Scrape /catalogue/ avec les filtres réels d'anime-sama.to.
+
+    Structure URL validée (le JS de la page en a besoin) :
+      type[]=Anime&type[]=Scans   → tableau PHP (seulement si sélectionné)
+      langue[]=VOSTFR             → idem
+      current[]=En cours          → idem (avec accent)
+      genre[]=Démons              → idem (avec accents exacts)
+      annee_min=&annee_max=       → TOUJOURS présents, même vides
+      episodes_min=&episodes_max= → idem
+      chapitres_min=&chapitres_max= → idem
+      search=naruto               → TOUJOURS présent (vide si pas de texte)
     """
-    params: dict = {"page": page_num}
-    if q:           params["q"]      = q
-    if type_contenu: params["type"]  = type_contenu
-    if lang:        params["lang"]   = lang
-    if statut:      params["statut"] = statut
-    if genres:      params["genres"] = ",".join(genres)
+    params: list[tuple[str, str]] = []
+
+    # Tableaux PHP : seulement si des valeurs sont sélectionnées
+    for t in (types   or []): params.append(("type[]",    t))
+    for l in (langues or []): params.append(("langue[]",  l))
+    for s in (statuts or []): params.append(("current[]", s))
+    for g in (genres  or []): params.append(("genre[]",   g))
+
+    # Plages : toujours incluses même vides (le JS du site les attend)
+    params.append(("annee_min",     str(annee_min)     if annee_min     else ""))
+    params.append(("annee_max",     str(annee_max)     if annee_max     else ""))
+    params.append(("episodes_min",  str(episodes_min)  if episodes_min  else ""))
+    params.append(("episodes_max",  str(episodes_max)  if episodes_max  else ""))
+    params.append(("chapitres_min", str(chapitres_min) if chapitres_min else ""))
+    params.append(("chapitres_max", str(chapitres_max) if chapitres_max else ""))
+
+    # search : toujours présent (vide si pas de texte)
+    params.append(("search", search or ""))
+
+    if page_num > 1:
+        params.append(("page", str(page_num)))
 
     url = f"{BASE_SAMA_URL}catalogue/?{urlencode(params)}"
 
@@ -124,11 +148,28 @@ def _search_catalogue_site_sync(
         with sync_playwright() as p:
             browser, page = _open_page(p)
             page.goto(url, timeout=30000, wait_until="domcontentloaded")
-            # Attendre que les cartes soient rendues
-            page.wait_for_timeout(2000)
+
+            # Attendre que les cartes apparaissent dans le DOM
+            try:
+                page.wait_for_selector("a[href*='/catalogue/']", timeout=8000)
+            except Exception:
+                pass  # Pas de cartes (0 résultats) ou timeout
+
+            page.wait_for_timeout(1500)  # Attente supplémentaire pour le rendu complet
             html = page.content()
+
+            # ── Debug : logguer un extrait pour comprendre la structure ──────
+            a_links = page.evaluate("""
+                () => Array.from(document.querySelectorAll('a[href*="/catalogue/"]'))
+                    .slice(0, 5)
+                    .map(a => ({href: a.href, text: a.innerText.trim().slice(0,40)}))
+            """)
+            logger.info(f"Catalogue site debug : {len(a_links)} liens /catalogue/ trouvés : {a_links}")
+
             browser.close()
-            return Parser.parse_liste_catalogue(html)
+            results = Parser.parse_liste_catalogue(html)
+            logger.info(f"Catalogue site : {len(results)} résultats parsés pour {url!r}")
+            return results
     except Exception:
         logger.exception(f"Erreur catalogue liste {url!r}")
         return []
@@ -168,57 +209,128 @@ def _getcatalogue_sync(slug: str) -> Optional[Catalogue]:
 # Épisodes d'une saison (Playwright)
 # ---------------------------------------------------------------------------
 
+# Regex pour identifier le segment de langue en fin d'URL
+_LANG_SEGMENT_RE = re.compile(
+    r'/(vf\d*|vostfr|vastfr|vo|vqc\d*|van|var|vcn|vkr)(/?)$',
+    re.IGNORECASE,
+)
+# Ordre de priorité : VF d'abord, puis VOSTFR, puis VO
+_LANG_TRY_ORDER = ["vf", "vostfr", "vo"]
+
+
+def _replace_lang(url: str, lang: str) -> str:
+    """Remplace le segment de langue dans l'URL par `lang`."""
+    m = _LANG_SEGMENT_RE.search(url)
+    if m:
+        return url[:m.start()] + f'/{lang}/'
+    # Pas de langue trouvée dans l'URL : on l'ajoute avant le slash final
+    return url.rstrip('/') + f'/{lang}/'
+
+
+def _page_introuvable(page) -> bool:
+    """Retourne True si la page affiche 'Accès Introuvable' (soft 404)."""
+    try:
+        return "Introuvable" in (page.title() or "")
+    except Exception:
+        return False
+
+
 def _get_episodes_sync(url_saison: str) -> dict[int, list[dict]]:
     """
     Retourne { ep_num: [ {lecteur, player_url}, … ], … }
-    Retourne {} si la page est introuvable (404) ou bloquée.
+
+    Essaie les langues dans l'ordre VF → VOSTFR → VO quelle que soit
+    la langue indiquée dans l'URL d'origine.
+    Détecte les pages invalides via :
+      - code HTTP 404
+      - <title> contenant "Introuvable" (soft-404 retourné en 200 par le site)
     """
     try:
         with sync_playwright() as p:
             browser, page = _open_page(p)
-            resp = page.goto(url_saison, timeout=60000)
 
-            # 404 → langue non disponible pour ce contenu
-            if resp and resp.status == 404:
-                logger.info(f"404 — langue non disponible : {url_saison}")
-                browser.close()
-                return {}
+            # ── Sélection de la meilleure langue disponible ──────────────────
+            effective_url: str | None = None
+            for lang in _LANG_TRY_ORDER:
+                candidate = _replace_lang(url_saison, lang)
+                resp = page.goto(candidate, timeout=60000)
 
-            try:
-                page.wait_for_selector("#selectEpisodes", timeout=15000)
-            except Exception:
-                _debug_page_state(page, "episodes")
+                if resp and resp.status == 404:
+                    logger.info(f"  [{lang}] 404 HTTP — {candidate}")
+                    continue
+
+                if _page_introuvable(page):
+                    logger.info(f"  [{lang}] Page 'Introuvable' — {candidate}")
+                    continue
+
                 if _is_blocked(page):
-                    logger.error(f"Page bloquée (FortiGuard ?) : {url_saison}")
+                    logger.error(f"Page bloquée (FortiGuard ?) : {candidate}")
+                    browser.close()
+                    return {}
+
+                try:
+                    page.wait_for_selector("#selectEpisodes", timeout=15000)
+                    effective_url = candidate
+                    logger.info(f"Langue retenue : {lang} → {candidate}")
+                    break
+                except Exception:
+                    _debug_page_state(page, f"no-ep-{lang}")
+                    logger.info(f"  [{lang}] #selectEpisodes absent — {candidate}")
+                    continue
+
+            if not effective_url:
                 browser.close()
+                logger.info(f"Aucune langue disponible pour : {url_saison}")
                 return {}
 
+            # ── Scraping des épisodes (page déjà chargée et valide) ──────────
             options = page.locator("#selectEpisodes option").all_text_contents()
             total   = len(options)
-            logger.info(f"{total} épisodes/chapitres sur {url_saison}")
+            logger.info(f"{total} épisodes/chapitres sur {effective_url}")
 
             results: dict[int, list[dict]] = {}
             for idx in range(total):
-                # Sélection par index — fonctionne quel que soit le libellé
-                # ("Episode 1", "Film 1", "Chapitre 1", …)
                 page.select_option("#selectEpisodes", index=idx)
                 page.wait_for_timeout(300)
 
-                # Numéro extrait du texte de l'option
                 label  = options[idx].strip()
                 num_m  = re.search(r"(\d+(?:[.,]\d+)?)", label)
                 ep_num = int(float(num_m.group(1).replace(",", "."))) if num_m else idx + 1
 
-                lecteurs = page.locator("#selectLecteurs option").all_text_contents()
-                ep_data  = []
-                for i, nom in enumerate(lecteurs):
+                lecteur_noms = page.locator("#selectLecteurs option").all_text_contents()
+                ep_data:   list[dict] = []
+                seen_urls: set[str]   = set()
+                prev_src = ""
+
+                for i, nom in enumerate(lecteur_noms):
                     page.select_option("#selectLecteurs", index=i)
-                    page.wait_for_timeout(200)
-                    player_url = page.locator("#playerDF").get_attribute("src")
-                    ep_data.append({"lecteur": nom.strip(), "player_url": player_url})
 
-                results[ep_num] = ep_data
+                    # Attendre que #playerDF.src change réellement (max 2 s)
+                    try:
+                        page.wait_for_function(
+                            """(p) => {
+                                const f = document.getElementById('playerDF');
+                                const s = f ? (f.getAttribute('src') || f.src || '') : '';
+                                return s.length > 4 && s !== p;
+                            }""",
+                            arg=prev_src,
+                            timeout=2000,
+                        )
+                    except Exception:
+                        page.wait_for_timeout(600)
 
+                    player_url = (page.locator("#playerDF").get_attribute("src") or "").strip()
+
+                    if player_url and player_url not in seen_urls:
+                        ep_data.append({"lecteur": nom.strip(), "player_url": player_url})
+                        seen_urls.add(player_url)
+                        prev_src = player_url
+
+                if ep_data:
+                    results[ep_num] = ep_data
+                    logger.debug(f"  ep {ep_num} : {len(ep_data)} lecteur(s)")
+
+            logger.info(f"{len(results)} épisodes ({effective_url})")
             browser.close()
             return results
     except Exception:
@@ -361,19 +473,27 @@ async def search_anime(query: str) -> list[dict]:
 
 
 async def search_catalogue_site(
-    q: Optional[str] = None,
-    type_contenu: Optional[str] = None,
-    lang: Optional[str] = None,
-    statut: Optional[str] = None,
-    genres: Optional[list[str]] = None,
-    page_num: int = 1,
+    search:        Optional[str]       = None,
+    types:         Optional[list[str]] = None,
+    langues:       Optional[list[str]] = None,
+    statuts:       Optional[list[str]] = None,
+    genres:        Optional[list[str]] = None,
+    annee_min:     Optional[int]       = None,
+    annee_max:     Optional[int]       = None,
+    episodes_min:  Optional[int]       = None,
+    episodes_max:  Optional[int]       = None,
+    chapitres_min: Optional[int]       = None,
+    chapitres_max: Optional[int]       = None,
+    page_num:      int                 = 1,
 ) -> list[dict]:
-    """Scrape /catalogue/ avec filtres (Playwright)."""
+    """Scrape /catalogue/ avec filtres réels anime-sama.to (Playwright)."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         _executor,
         _search_catalogue_site_sync,
-        q, type_contenu, lang, statut, genres, page_num,
+        search, types, langues, statuts, genres,
+        annee_min, annee_max, episodes_min, episodes_max,
+        chapitres_min, chapitres_max, page_num,
     )
 
 

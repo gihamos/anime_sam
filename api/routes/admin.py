@@ -95,10 +95,14 @@ async def get_catalogue_admin(slug: str, _: dict = Depends(require_admin)):
 
 @router.get("/api/catalogues/{slug}/contenu", summary="Contenu allégé d'un catalogue (admin)")
 async def get_catalogue_content(slug: str, _: dict = Depends(require_admin)):
-    """Retourne épisodes/chapitres sans URLs de vidéos ni images."""
+    """Retourne épisodes/chapitres avec URLs lecteurs (sans images)."""
     doc = await repo.find_by_slug(slug)
     if not doc:
         raise HTTPException(404, f"Catalogue '{slug}' introuvable")
+
+    def _vids(raw: list) -> list:
+        return [{"lecteur": v.get("lecteur"), "player_url": v.get("player_url")}
+                for v in raw if v.get("player_url")]
 
     saisons = []
     for i, s in enumerate(doc.get("saisons", [])):
@@ -110,7 +114,11 @@ async def get_catalogue_content(slug: str, _: dict = Depends(require_admin)):
             "lang":           s.get("lang"),
             "url":            s.get("url"),
             "total_episodes": s.get("total_episodes", len(eps)),
-            "episodes":       [{"numero": e.get("numero"), "titre": e.get("titre")} for e in eps],
+            "episodes": [
+                {"numero": e.get("numero"), "titre": e.get("titre"),
+                 "videos": _vids(e.get("videos", []))}
+                for e in eps
+            ],
         })
 
     films = []
@@ -123,6 +131,7 @@ async def get_catalogue_content(slug: str, _: dict = Depends(require_admin)):
             "lang":         f.get("lang"),
             "url":          f.get("url"),
             "videos_count": len(vids),
+            "videos":       _vids(vids),
             "lecteurs":     [v.get("lecteur") for v in vids if v.get("lecteur")],
         })
 
@@ -147,6 +156,13 @@ async def get_catalogue_content(slug: str, _: dict = Depends(require_admin)):
         "films":           films,
         "scans":           scans,
     }
+
+
+@router.delete("/api/catalogues/{slug}", status_code=204, summary="Supprimer un catalogue (admin)")
+async def delete_catalogue(slug: str, _: dict = Depends(require_admin)):
+    deleted = await repo.delete_by_slug(slug)
+    if not deleted:
+        raise HTTPException(404, f"Catalogue '{slug}' introuvable")
 
 
 @router.put("/api/catalogues/{slug}", summary="Mise à jour des métadonnées (admin)")
