@@ -331,6 +331,7 @@ async def create_schedule(body: ScheduleCreate, _: dict = Depends(require_admin)
         "last_run":   None,
     }
     sid = await schedules_repo.create(sched_doc)
+    sched_doc.pop("_id", None)   # insert_one injecte _id (ObjectId) dans le dict — non sérialisable
     sched_doc["id"] = sid
     if body.active:
         sched_svc.add_job(sched_doc)
@@ -383,6 +384,74 @@ async def run_schedule_now(sid: str, _: dict = Depends(require_admin)):
     )
     sync_manager.register(slug, task)
     return {"status": "started", "slug": slug}
+
+
+# ---------------------------------------------------------------------------
+# Historique des synchronisations
+# ---------------------------------------------------------------------------
+
+@router.put("/api/users/{username}/dl-perms", summary="Permissions de téléchargement d'un utilisateur (admin)")
+async def update_dl_perms(username: str, body: dict, _: dict = Depends(require_admin)):
+    import db.user_repository as user_repo
+    user = await user_repo.find_by_username(username)
+    if not user:
+        raise HTTPException(404, f"Utilisateur '{username}' introuvable")
+    perms = dict(user.get("permissions", {}))
+    perms["can_download"]              = bool(body.get("can_download", True))
+    perms["download_forbidden_slugs"]  = [str(s) for s in body.get("download_forbidden_slugs", [])]
+    await user_repo.update_user(username, {"permissions": perms})
+    return {
+        "ok": True,
+        "username": username,
+        "can_download": perms["can_download"],
+        "download_forbidden_slugs": perms["download_forbidden_slugs"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Sécurité — Verrouillage API + Ban IP
+# ---------------------------------------------------------------------------
+
+@router.get("/api/security/state", summary="État de sécurité (admin)")
+async def security_state(_: dict = Depends(require_admin)):
+    import services.api_guard as guard
+    import db.ip_bans_repository as ip_repo
+    return {**guard.get_state(), "banned_count": len(await ip_repo.list_bans())}
+
+
+@router.put("/api/security/lock", summary="Verrouiller / déverrouiller l'API (admin)")
+async def set_lock(body: dict, admin: dict = Depends(require_admin)):
+    import services.api_guard as guard
+    locked = bool(body.get("locked", False))
+    reason = str(body.get("reason", "") or "")
+    await guard.set_state(locked, reason)
+    return {"ok": True, "locked": locked, "reason": reason,
+            "by": admin.get("username", "admin")}
+
+
+@router.get("/api/security/ip-bans", summary="Liste des IPs bannies (admin)")
+async def list_ip_bans(_: dict = Depends(require_admin)):
+    import db.ip_bans_repository as ip_repo
+    return await ip_repo.list_bans()
+
+
+@router.post("/api/security/ip-bans", status_code=201, summary="Bannir une IP (admin)")
+async def add_ip_ban(body: dict, admin: dict = Depends(require_admin)):
+    import db.ip_bans_repository as ip_repo
+    ip = str(body.get("ip", "")).strip()
+    if not ip:
+        raise HTTPException(400, "ip requis")
+    reason = str(body.get("reason", "") or "")
+    await ip_repo.add_ban(ip, reason, banned_by=admin.get("username", "admin"))
+    return {"ok": True, "ip": ip, "reason": reason}
+
+
+@router.delete("/api/security/ip-bans/{ip:path}", status_code=204,
+               summary="Lever le ban d'une IP (admin)")
+async def remove_ip_ban(ip: str, _: dict = Depends(require_admin)):
+    import db.ip_bans_repository as ip_repo
+    if not await ip_repo.remove_ban(ip):
+        raise HTTPException(404, f"IP '{ip}' non bannie")
 
 
 # ---------------------------------------------------------------------------

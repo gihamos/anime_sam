@@ -11,7 +11,10 @@
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/catalogue_service.py', encoding='utf-8'\\).read\\(\\)\\); print\\('service OK'\\)\")",
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/catalogues.py', encoding='utf-8'\\).read\\(\\)\\); print\\('route OK'\\)\")",
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/services/parsers.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/admin.py', encoding='utf-8'\\).read\\(\\)\\); print\\('admin.py OK'\\)\")"
+      "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/admin.py', encoding='utf-8'\\).read\\(\\)\\); print\\('admin.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('api/routes/download.py'\\).read\\(\\)\\); ast.parse\\(open\\('api/routes/admin.py'\\).read\\(\\)\\); ast.parse\\(open\\('api/dependencies.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "PowerShell(python -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/admin_main.py'\\).read\\(\\)\\); print\\('admin_main OK'\\)\")",
+      "Bash(pip show *)"
     ]
   }
 }

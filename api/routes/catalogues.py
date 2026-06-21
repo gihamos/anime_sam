@@ -72,7 +72,7 @@ def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
         return cat
 
     if user is None:
-        if not visibility.get("is_public", True):
+        if not visibility.get("is_public", False):
             raise HTTPException(status_code=404, detail="Not found")
         return _apply_content_filter(
             cat,
@@ -398,7 +398,7 @@ async def ws_sync_episodes(
 
             await websocket.send_json(event)
 
-            if event.get("type") in ("completed", "error"):
+            if event.get("type") in ("completed", "error", "cancelled"):
                 break
 
     except (WebSocketDisconnect, Exception):

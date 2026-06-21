@@ -210,6 +210,9 @@ async def sync_content_bg(
         logger.info(f"sync [{slug}] chargement saison {i} : {url}")
 
         raw = await scraper.get_episodes(url)
+        # Vérifier l'annulation dès que le scraper rend la main
+        if not await _check():
+            return total_loaded
         if not raw:
             await _emit({"type": "saison_error", "index": i, "nom": nom})
             steps_done += 1
@@ -260,6 +263,8 @@ async def sync_content_bg(
         logger.info(f"sync [{slug}] film {j} : {url}")
 
         raw = await scraper.get_episodes(url)
+        if not await _check():
+            return total_loaded
         if raw and 1 in raw:
             videos = [{"lecteur": v["lecteur"], "player_url": v["player_url"]}
                       for v in raw[1]]
@@ -299,6 +304,8 @@ async def sync_content_bg(
         logger.info(f"sync [{slug}] scan {k} : {url}")
 
         chapitres = await scraper.get_scan_chapitres(url)
+        if not await _check():
+            return total_loaded
         if chapitres:
             await repo.update_scan_chapitres(slug, k, chapitres)
             total_loaded += len(chapitres)

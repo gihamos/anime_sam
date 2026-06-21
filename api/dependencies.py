@@ -75,10 +75,13 @@ class EffectiveAccess:
     can_sync:      bool       = False
     can_delete:    bool       = False
     can_refresh:   bool       = False
+    can_download:  bool       = True    # téléchargement global autorisé
     allowed_slugs: set        = field(default_factory=set)   # slugs spécifiques
     genre_access:  set        = field(default_factory=set)   # genres → accès à tous leurs catalogues
     cat_content:   dict       = field(default_factory=dict)  # slug → {saisons,films,scans}
-    quota:         dict       = field(default_factory=dict)
+    dl_forbidden:  set        = field(default_factory=set)   # slugs interdits au téléchargement
+    dl_quota:      dict       = field(default_factory=dict)  # quota téléchargement (groupe)
+    quota:         dict       = field(default_factory=dict)  # quota de synchronisation
 
 
 async def resolve_effective_access(user: dict) -> EffectiveAccess:
@@ -92,8 +95,10 @@ async def resolve_effective_access(user: dict) -> EffectiveAccess:
         can_sync      = bool(perms.get("can_sync",    False)),
         can_delete    = bool(perms.get("can_delete",  False)),
         can_refresh   = bool(perms.get("can_refresh", False)),
+        can_download  = bool(perms.get("can_download", True)),
         allowed_slugs = set(perms.get("allowed_catalogues", [])),
         cat_content   = dict(perms.get("catalogue_content", {})),
+        dl_forbidden  = set(perms.get("download_forbidden_slugs", [])),
         quota         = dict(perms.get("quota", {})),
     )
 
@@ -107,6 +112,16 @@ async def resolve_effective_access(user: dict) -> EffectiveAccess:
             acc.can_delete  = acc.can_delete  or bool(gp.get("can_delete",  False))
             acc.can_refresh = acc.can_refresh or bool(gp.get("can_refresh", False))
 
+            # Un groupe peut interdire le téléchargement (logique AND)
+            if not gp.get("can_download", True):
+                acc.can_download = False
+            # Cumul des slugs interdits
+            acc.dl_forbidden |= set(gp.get("download_forbidden_slugs", []))
+            # Premier quota téléchargement de groupe activé (si aucun quota user)
+            gdl_q = gp.get("download_quota", {})
+            if gdl_q.get("enabled") and not acc.dl_quota.get("enabled"):
+                acc.dl_quota = gdl_q
+
             gtype = g.get("type")
             if gtype == "catalogue":
                 for slug in g.get("catalogue_slugs", []):
@@ -116,7 +131,7 @@ async def resolve_effective_access(user: dict) -> EffectiveAccess:
                 for genre in g.get("genres", []):
                     acc.genre_access.add(genre.lower())
 
-            # Tout type de groupe peut avoir un quota — prendre le premier activé
+            # Quota de sync — prendre le premier activé
             gq = gp.get("quota", {})
             if gq.get("enabled") and not acc.quota.get("enabled"):
                 acc.quota = gq

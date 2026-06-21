@@ -5,10 +5,15 @@ from models.user import QuotaConfig
 
 
 class GroupPermissions(BaseModel):
-    can_sync:    bool        = False
-    can_delete:  bool        = False
-    can_refresh: bool        = False
-    quota:       QuotaConfig = Field(default_factory=QuotaConfig)
+    can_sync:                 bool        = False
+    can_delete:               bool        = False
+    can_refresh:              bool        = False
+    # Téléchargement
+    can_download:             bool        = True
+    download_forbidden_slugs: list[str]   = Field(default_factory=list)
+    download_quota:           dict        = Field(default_factory=dict)
+    # Quota de sync
+    quota:                    QuotaConfig = Field(default_factory=QuotaConfig)
 
 
 class GroupCreate(BaseModel):

@@ -296,6 +296,20 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 /* Block badge */
 .b-block{background:rgba(244,63,94,.12);color:var(--er);border:1px solid rgba(244,63,94,.25)}
 .blocked-banner{background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.2);border-radius:7px;padding:.5rem .7rem;font-size:.8rem;color:var(--er);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
+/* Téléchargement permissions */
+.b-dl-on{background:rgba(16,185,129,.1);color:var(--ok);border:1px solid rgba(16,185,129,.25)}
+.b-dl-off{background:rgba(244,63,94,.1);color:var(--er);border:1px solid rgba(244,63,94,.25)}
+.dl-slug-chip{display:inline-flex;align-items:center;gap:.25rem;padding:.18rem .5rem;border-radius:20px;font-size:.72rem;background:rgba(244,63,94,.1);color:var(--er);border:1px solid rgba(244,63,94,.25)}
+.dl-slug-chip button{background:none;border:none;cursor:pointer;padding:0;line-height:1;color:inherit;font-size:.8rem;opacity:.7}
+.dl-slug-chip button:hover{opacity:1}
+#mdl-slugs{display:flex;flex-wrap:wrap;gap:.3rem;min-height:28px;padding:.35rem;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;margin-top:.4rem}
+.mdl-add-row{display:flex;gap:.45rem;margin-top:.55rem}
+.sched-res{padding:.5rem .75rem;cursor:pointer;font-size:.84rem;border-bottom:1px solid var(--bdr);transition:background .1s}
+.sched-res:last-child{border-bottom:none}
+.sched-res:hover,.sched-res:active{background:var(--surh);color:var(--tx)}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:11px;overflow:hidden}
+.card-hd{padding:.7rem 1rem;background:var(--sur2);border-bottom:1px solid var(--bdr);font-size:.84rem;font-weight:600;color:var(--tx2)}
+.card-bd{padding:.9rem 1rem}
 
 /* Recherche avancée */
 .search-layout{display:grid;grid-template-columns:220px 1fr;gap:1rem;align-items:start}
@@ -354,6 +368,8 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div class="ni"        data-tab="search"     onclick="switchTab(this)"><span>🔍</span> Recherche</div>
       <div class="ni"        data-tab="apps"       onclick="switchTab(this)"><span>🔌</span> Applications</div>
       <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
+      <div class="ni"        data-tab="downloads"  onclick="switchTab(this)"><span>⬇</span> Téléchargements</div>
+      <div class="ni"        data-tab="security"   onclick="switchTab(this)"><span>🔒</span> Sécurité</div>
     </nav>
     <div class="sb-foot">
       <div class="me" id="me-lbl"></div>
@@ -378,8 +394,8 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           </select>
         </div>
         <div class="dtw"><table class="dt">
-          <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Statut</th><th>Permissions</th><th>Accès catalogues</th><th>Actions</th></tr></thead>
-          <tbody id="utbody"><tr><td colspan="6"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Statut</th><th>Permissions</th><th>Accès catalogues</th><th>Téléchargement</th><th>Actions</th></tr></thead>
+          <tbody id="utbody"><tr><td colspan="7"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
         </table></div>
       </div>
 
@@ -557,6 +573,76 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
         </div>
       </div>
 
+      <!-- TÉLÉCHARGEMENTS -->
+      <div id="tab-downloads" style="display:none">
+        <div class="ptab-nav">
+          <div class="ptab active" onclick="showPTab(this,'dl-history')">📥 Historique</div>
+          <div class="ptab"        onclick="showPTab(this,'dl-quotas')">⚙ Quotas</div>
+        </div>
+
+        <!-- Historique -->
+        <div id="dl-history" class="ptab-content active">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
+            <span style="font-size:.82rem;color:var(--mu)">Derniers téléchargements (200 max)</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadDlHistory()">↺ Actualiser</button>
+          </div>
+          <div class="dtw"><table class="dt">
+            <thead><tr><th>Utilisateur</th><th>Catalogue</th><th>Type</th><th>Fichiers</th><th>Taille</th><th>Détails</th><th>Date</th></tr></thead>
+            <tbody id="dl-htbody"><tr><td colspan="7"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          </table></div>
+        </div>
+
+        <!-- Quotas -->
+        <div id="dl-quotas" class="ptab-content">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
+            <span style="font-size:.82rem;color:var(--mu)">Quotas de téléchargement par utilisateur (<code>__default__</code> = règle globale)</span>
+            <button class="btn btn-primary btn-sm" onclick="openDlQuota('__default__')">⚙ Quota global</button>
+          </div>
+          <div class="dtw"><table class="dt">
+            <thead><tr><th>Utilisateur</th><th>Fichiers/24h</th><th>Go/24h</th><th>Téléchargement</th><th>Actions</th></tr></thead>
+            <tbody id="dl-qtbody"><tr><td colspan="5"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- SÉCURITÉ -->
+      <div id="tab-security" style="display:none">
+        <!-- Verrouillage API -->
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-hd" style="display:flex;align-items:center;gap:.6rem">
+            <span>🔒 Verrouillage de l'API</span>
+            <span id="lock-badge" class="badge b-ok">Ouverte</span>
+          </div>
+          <div class="card-bd">
+            <p style="font-size:.82rem;color:var(--mu);margin:0 0 .7rem">
+              Quand l'API est verrouillée, tous les utilisateurs non-administrateurs reçoivent une erreur 503.
+              Les administrateurs et la route <code>/auth/login</code> restent accessibles.
+            </p>
+            <div class="fg" style="margin-bottom:.65rem">
+              <label>Message affiché aux utilisateurs bloqués</label>
+              <input id="lock-reason" class="fc" placeholder="Maintenance en cours, revenez plus tard…">
+            </div>
+            <button id="lock-btn" class="btn btn-danger btn-sm" onclick="toggleApiLock()">🔒 Verrouiller l'API</button>
+          </div>
+        </div>
+
+        <!-- Bans IP -->
+        <div class="card">
+          <div class="card-hd">🚫 Adresses IP bannies</div>
+          <div class="card-bd">
+            <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
+              <input id="ban-ip"     class="fc" placeholder="192.168.1.100" style="flex:1;min-width:140px">
+              <input id="ban-reason" class="fc" placeholder="Raison (optionnel)" style="flex:2;min-width:160px">
+              <button class="btn btn-danger btn-sm" onclick="addBan()">+ Bannir</button>
+            </div>
+            <div class="tbl-wrap"><table class="tbl">
+              <thead><tr><th>IP</th><th>Raison</th><th>Banni le</th><th>Par</th><th></th></tr></thead>
+              <tbody id="bans-tbody"><tr><td colspan="5"><div class="empty">Chargement…</div></td></tr></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /content -->
   </div>
 </div>
@@ -603,6 +689,29 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div id="ma-list"></div>
     </div>
     <div class="mft"><button class="btn btn-secondary" onclick="cm('m-access')">Annuler</button><button class="btn btn-primary" onclick="saveAccess()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- Permissions téléchargement par utilisateur -->
+<div class="mbk" id="m-dl-perm" style="display:none" onclick="if(event.target===this)cm('m-dl-perm')">
+  <div class="mbox md">
+    <div class="mhd"><h3 id="mdl-title">Téléchargements</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-dl-perm')">✕</button></div>
+    <div class="mbd">
+      <div id="mdl-err" class="alert a-er" style="display:none"></div>
+      <label class="fsw" style="margin-bottom:1rem">
+        <input type="checkbox" id="mdl-can" onchange="document.getElementById('mdl-global-status').textContent=this.checked?'Téléchargement autorisé':'Téléchargement interdit'">
+        <span id="mdl-global-status" style="font-weight:600">Téléchargement autorisé</span>
+      </label>
+      <div class="div"></div>
+      <p style="font-size:.75rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Catalogues interdits</p>
+      <p style="font-size:.78rem;color:var(--mu);margin-bottom:.55rem">Même si le téléchargement global est activé, les catalogues listés ici seront bloqués pour cet utilisateur.</p>
+      <div id="mdl-slugs"></div>
+      <div class="mdl-add-row">
+        <select id="mdl-slug-sel" class="fs" style="flex:1"></select>
+        <button class="btn btn-secondary btn-sm" onclick="addDlForbidSlug()">+ Ajouter</button>
+      </div>
+    </div>
+    <div class="mft"><button class="btn btn-secondary" onclick="cm('m-dl-perm')">Annuler</button><button class="btn btn-primary" onclick="saveDlPerm()">Enregistrer</button></div>
   </div>
 </div>
 
@@ -662,6 +771,50 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
     <div class="mhd"><h3 id="mc-title">Contenu</h3><span id="mc-sync-badge" class="badge"></span><button class="btn btn-ghost btn-icon" onclick="cm('m-content')">✕</button></div>
     <div class="mbd" id="mc-body"><div class="empty"><div class="ic">⏳</div>Chargement…</div></div>
     <div class="mft"><button class="btn btn-secondary" onclick="cm('m-content')">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Modal quota téléchargement -->
+<div class="mbk" id="m-dl-quota" style="display:none" onclick="if(event.target===this)cm('m-dl-quota')">
+  <div class="mbox sm">
+    <div class="mhd"><h3>Quota — <span id="dq-user"></span></h3><button class="btn btn-ghost btn-icon" onclick="cm('m-dl-quota')">✕</button></div>
+    <div class="mbd">
+      <div id="dq-err" class="alert a-er" style="display:none"></div>
+      <div class="fg"><label>Fichiers maximum / 24 h</label><input id="dq-files" class="fc" type="number" min="0" value="20"></div>
+      <div class="fg"><label>Go maximum / 24 h</label><input id="dq-gb" class="fc" type="number" min="0" step="0.5" value="10"></div>
+      <label class="fsw"><input type="checkbox" id="dq-enabled" checked><span style="font-weight:600">Téléchargement autorisé</span></label>
+    </div>
+    <div class="mft">
+      <button class="btn btn-secondary" onclick="cm('m-dl-quota')">Annuler</button>
+      <button id="dq-del-btn" class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteDlQuota()">Supprimer</button>
+      <button class="btn btn-primary" onclick="saveDlQuota()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal progression job ZIP -->
+<div class="mbk" id="m-dl-job" style="display:none">
+  <div class="mbox md">
+    <div class="mhd">
+      <h3 id="djob-title">Téléchargement en cours…</h3>
+      <span id="djob-badge" class="badge b-info">En cours</span>
+    </div>
+    <div class="mbd">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.25rem">
+        <span id="djob-label" style="font-size:.82rem;color:var(--mu)">Initialisation…</span>
+        <span id="djob-pct" style="font-size:.82rem;font-weight:700;color:var(--ac)">0%</span>
+      </div>
+      <div class="prog-wrap"><div id="djob-bar" class="prog-fill"></div></div>
+      <p id="djob-current" style="font-size:.75rem;color:var(--mu);margin:.3rem 0 0;min-height:1rem"></p>
+      <p id="djob-stats" style="font-size:.75rem;color:var(--mu);margin:.2rem 0 0;min-height:1rem;font-variant-numeric:tabular-nums"></p>
+      <div class="alert a-wa" style="margin-top:.65rem;font-size:.78rem">
+        ⏳ Le téléchargement peut prendre plusieurs minutes selon la taille du fichier.
+      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-secondary" id="djob-cancel" onclick="cancelDlJob()">Annuler</button>
+      <button class="btn btn-primary" id="djob-dl-btn" style="display:none" onclick="triggerDlJobFile()">⬇ Télécharger le ZIP</button>
+    </div>
   </div>
 </div>
 
@@ -799,11 +952,12 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
     <div class="mbd">
       <div id="ms3-err" class="alert a-er" style="display:none"></div>
       <div class="fg">
-        <label>Catalogue (slug) *</label>
-        <div style="display:flex;gap:.5rem">
-          <input id="ms3-slug" class="fc" placeholder="naruto" list="ms3-cat-list">
-          <datalist id="ms3-cat-list"></datalist>
-        </div>
+        <label>Catalogue *</label>
+        <input id="ms3-search" class="fc" placeholder="Tapez pour rechercher…" oninput="onSchedSearch(this.value)" autocomplete="off">
+        <div id="ms3-results" style="display:none;max-height:210px;overflow-y:auto;background:var(--sur2);border:1px solid var(--ac);border-radius:8px;margin-top:5px"></div>
+        <p style="font-size:.74rem;color:var(--mu);margin:.3rem 0 0">
+          slug : <code id="ms3-slug-hint" style="color:var(--ac)">—</code>
+        </p>
       </div>
       <div class="fg">
         <label>Description</label>
@@ -907,6 +1061,20 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           </div>
         </div>
       </div>
+
+      <div style="border-top:1px solid var(--bdr);padding-top:.7rem;margin-top:.4rem">
+        <div class="fg-label" style="font-size:.76rem;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.45rem">⬇ Téléchargements</div>
+        <label class="chk-label"><input type="checkbox" id="mg-dl-allow" checked> Autoriser le téléchargement pour les membres</label>
+        <div class="fg" style="margin-top:.55rem">
+          <label class="chk-label"><input type="checkbox" id="mg-dl-q-en" onchange="toggleDlQuotaUI()"> Quota de téléchargement</label>
+          <div id="mg-dl-quota-fields" class="quota-row" style="display:none">
+            <input id="mg-dl-q-files" type="number" min="1" value="20" style="width:70px">
+            <span>fichiers et</span>
+            <input id="mg-dl-q-gb" type="number" min="0.1" step="0.5" value="5" style="width:70px">
+            <span>Go par jour</span>
+          </div>
+        </div>
+      </div>
       <div class="mftr">
         <button class="btn btn-ghost" onclick="cm('m-group')">Annuler</button>
         <button class="btn btn-primary" onclick="saveGroup()">Enregistrer</button>
@@ -961,9 +1129,12 @@ let detailTags = { genres: [], langues: [] };
 let activeSyncSlug = null;
 let editClientId = null, cltAccessClientId = null;
 const bgSyncs = new Map();
-let _delCatSlugs = [];
+let _delCatSlugs  = [];
 let _playerVideos = [];
 let _contentData  = null;
+let _dlJobId      = null;
+let _dlJobPoll    = null;
+let _dqUsername   = null;
 
 // ─── Thème ─────────────────────────────────────────────────────────────────
 const H = document.documentElement;
@@ -992,7 +1163,7 @@ function copyText(txt,msg){navigator.clipboard.writeText(txt).then(()=>toast(msg
 function om(id){document.getElementById(id).style.display='flex';}
 function cm(id){document.getElementById(id).style.display='none';}
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('m-player').style.display!=='none'){closePlayer();return;}['m-user','m-access','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block','m-del-cat'].forEach(cm);}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('m-player').style.display!=='none'){closePlayer();return;}['m-user','m-access','m-dl-perm','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block','m-del-cat','m-dl-quota'].forEach(cm);}});
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 document.getElementById('lp').onkeydown=e=>{if(e.key==='Enter')doLogin();};
@@ -1060,20 +1231,22 @@ function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').c
 function switchTab(el){
   const tab=el.dataset.tab;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
-  ['users','catalogues','groups','search','apps','planning'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification'};
+  ['users','catalogues','groups','search','apps','planning','downloads','security'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification',downloads:'Téléchargements',security:'Sécurité'};
   const actions={
     users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
     catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
     groups:`<button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ Nouveau groupe</button>`,
     apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
-    search:'',planning:'',
+    search:'',planning:'',downloads:'',security:'',
   };
   document.getElementById('tb-title').textContent=titles[tab]||tab;
   document.getElementById('tb-actions').innerHTML=actions[tab]||'';
   if(tab==='planning'){loadPlanning();loadSchedules();loadHistory();}
   if(tab==='groups'){loadGroups();}
   if(tab==='search'){initSearch();}
+  if(tab==='downloads'){loadDlHistory();loadDlQuotas();}
+  if(tab==='security'){loadSecurity();}
 }
 
 function showPTab(el,target){
@@ -1091,10 +1264,15 @@ function filterUsers(){
 }
 function renderUsers(list){
   const b=document.getElementById('utbody');
-  if(!list.length){b.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="ic">👤</div>Aucun résultat</div></td></tr>`;return;}
+  if(!list.length){b.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">👤</div>Aucun résultat</div></td></tr>`;return;}
   b.innerHTML=list.map(u=>{
     const p=u.permissions||{},cats=p.allowed_catalogues||[],blk=u.is_blocked,q=p.quota||{};
     const quotaInfo=q.enabled?`<span class="quota-used ${q.max_syncs>0?'':''}">Quota: ${q.max_syncs}/${q.period==='day'?'j':q.period==='year'?'an':'mois'}</span>`:'';
+    const canDl=p.can_download!==false;
+    const forbidN=(p.download_forbidden_slugs||[]).length;
+    const dlBadge=canDl
+      ?(forbidN?`<span class="badge b-dl-on" title="${forbidN} catalogue(s) interdit(s)">⬇ ${forbidN} exclu${forbidN>1?'s':''}</span>`:'<span class="badge b-dl-on">⬇ OK</span>')
+      :'<span class="badge b-dl-off">⬇ Bloqué</span>';
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:.55rem">
         <div class="av">${esc(u.username).slice(0,2).toUpperCase()}</div>
@@ -1107,9 +1285,11 @@ function renderUsers(list){
       </td>
       <td><div style="display:flex;gap:.2rem;flex-wrap:wrap"><span class="pc ${p.can_sync?'on':''}">⟳ Sync</span><span class="pc ${p.can_delete?'on':''}">🗑 Suppr</span><span class="pc ${p.can_refresh?'on':''}">↺ Refresh</span>${quotaInfo}</div></td>
       <td>${cats.length===0?'<span class="badge b-info">Tous</span>':cats.slice(0,3).map(c=>`<span class="tag">${esc(c)}</span>`).join('')+(cats.length>3?`<span class="tag">+${cats.length-3}</span>`:'')}</td>
+      <td>${dlBadge}</td>
       <td><div class="actions">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="openEditUser('${esc(u.username)}')">✏️</button>
         <button class="btn btn-secondary btn-icon btn-sm" onclick="openAccess('${esc(u.username)}')">🔑</button>
+        <button class="btn btn-secondary btn-icon btn-sm" title="Permissions téléchargement" onclick="openDlPerm('${esc(u.username)}')">⬇</button>
         <button class="btn ${blk?'btn-ok':'btn-danger'} btn-icon btn-sm" title="${blk?'Débloquer':'Bloquer'}" onclick="${blk?`unblock('user','${esc(u.username)}')`:`openBlock('user','${esc(u.username)}')`}">${blk?'✓':'🚫'}</button>
         <button class="btn btn-danger btn-icon btn-sm"   onclick="deleteUser('${esc(u.username)}')">🗑</button>
       </div></td></tr>`;
@@ -1146,6 +1326,7 @@ async function saveUser(){
     if(editUsername){
       const ex=allUsers.find(u=>u.username===editUsername)?.permissions||{};
       perms.allowed_catalogues=ex.allowed_catalogues||[];perms.catalogue_content=ex.catalogue_content||{};
+      perms.can_download=ex.can_download!==false;perms.download_forbidden_slugs=ex.download_forbidden_slugs||[];
       const body={is_active:document.getElementById('mu-a').checked,role:document.getElementById('mu-r').value,permissions:perms};
       const email=document.getElementById('mu-e').value;if(email) body.email=email;
       const pass=document.getElementById('mu-p').value;if(pass) body.password=pass;
@@ -1163,6 +1344,67 @@ async function deleteUser(username){
   if(!confirm(`Supprimer « ${username} » ?`))return;
   try{await api('DELETE',`/auth/users/${username}`);toast(`${username} supprimé`,'ok');await loadUsers();}
   catch(e){toast(String(e),'er');}
+}
+
+// ─── Permissions téléchargement Users ─────────────────────────────────────
+let _dlPermUser = null;
+let _dlForbidden = [];
+
+function openDlPerm(username){
+  _dlPermUser = username;
+  const u = allUsers.find(x=>x.username===username);
+  const p = u?.permissions||{};
+  _dlForbidden = [...(p.download_forbidden_slugs||[])];
+  const canDl = p.can_download!==false;
+  document.getElementById('mdl-title').textContent = `Téléchargements — ${username}`;
+  document.getElementById('mdl-can').checked = canDl;
+  document.getElementById('mdl-global-status').textContent = canDl?'Téléchargement autorisé':'Téléchargement interdit';
+  document.getElementById('mdl-err').style.display='none';
+  _renderDlSlugs();
+  _buildDlSlugSel();
+  om('m-dl-perm');
+}
+
+function _renderDlSlugs(){
+  const el=document.getElementById('mdl-slugs');
+  if(!_dlForbidden.length){el.innerHTML='<span style="color:var(--mu);font-size:.78rem">Aucun catalogue interdit</span>';return;}
+  el.innerHTML=_dlForbidden.map(s=>`<span class="dl-slug-chip">${esc(s)}<button onclick="removeDlForbidSlug('${esc(s)}')" title="Retirer">✕</button></span>`).join('');
+}
+
+function _buildDlSlugSel(){
+  const sel=document.getElementById('mdl-slug-sel');
+  const avail=allCats.filter(c=>!_dlForbidden.includes(c.slug));
+  sel.innerHTML=avail.length
+    ?avail.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)} (${esc(c.slug)})</option>`).join('')
+    :'<option value="">— tous déjà interdits —</option>';
+}
+
+function addDlForbidSlug(){
+  const sel=document.getElementById('mdl-slug-sel');
+  const slug=sel.value;
+  if(!slug||_dlForbidden.includes(slug))return;
+  _dlForbidden.push(slug);
+  _renderDlSlugs();
+  _buildDlSlugSel();
+}
+
+function removeDlForbidSlug(slug){
+  _dlForbidden=_dlForbidden.filter(s=>s!==slug);
+  _renderDlSlugs();
+  _buildDlSlugSel();
+}
+
+async function saveDlPerm(){
+  const errEl=document.getElementById('mdl-err');errEl.style.display='none';
+  try{
+    await api('PUT',`/admin/api/users/${_dlPermUser}/dl-perms`,{
+      can_download: document.getElementById('mdl-can').checked,
+      download_forbidden_slugs: _dlForbidden,
+    });
+    toast('Permissions téléchargement sauvegardées','ok');
+    cm('m-dl-perm');
+    await loadUsers();
+  }catch(e){errEl.textContent=typeof e==='string'?e:JSON.stringify(e);errEl.style.display='block';}
 }
 
 // ─── Accès catalogues Users ────────────────────────────────────────────────
@@ -1359,6 +1601,180 @@ function _openFilmPlayer(filmIdx){
   openPlayer(f.videos,esc(f.nom));
 }
 
+// ═══════════════════════════════ TÉLÉCHARGEMENTS ══════════════════════════════
+
+// ─── Téléchargement via job (épisode / film / saison) ────────────────────
+function _dlUrl(path){return `${API}${path}?token=${encodeURIComponent(token)}`;}
+
+function dlEpisode(slug,saisonIdx,epNum){
+  dlSaison(slug, saisonIdx, [epNum]);
+}
+function dlFilm(slug,filmIdx){
+  _startDlJob({slug, film_idx:filmIdx});
+}
+function _dlFile(url,fname){
+  const a=document.createElement('a');a.href=url;a.download=fname;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+// ─── Job téléchargement (épisode unique, film, saison, sélection) ─────────
+async function dlSaison(slug,saisonIdx,nums){
+  const body={slug,saison_idx:saisonIdx};
+  if(nums&&nums.length)body.nums=nums;
+  await _startDlJob(body);
+}
+async function _startDlJob(body){
+  try{
+    toast('Préparation du téléchargement…','info');
+    const job=await api('POST','/api/download/jobs',body);
+    _dlJobId=job.job_id;
+    const isSingle=job.is_single;
+    document.getElementById('djob-title').textContent=`Téléchargement — ${job.output_name}`;
+    document.getElementById('djob-badge').textContent='En cours';document.getElementById('djob-badge').className='badge b-info';
+    document.getElementById('djob-label').textContent=isSingle?'Téléchargement en cours…':`0 / ${job.nb_items} fichiers`;
+    document.getElementById('djob-pct').textContent='0%';
+    document.getElementById('djob-bar').style.width='0%';document.getElementById('djob-bar').className='prog-fill';
+    document.getElementById('djob-current').textContent='';
+    document.getElementById('djob-stats').textContent='';
+    document.getElementById('djob-cancel').style.display='';
+    document.getElementById('djob-dl-btn').style.display='none';
+    om('m-dl-job');
+    _dlJobPoll=setInterval(()=>_pollDlJob(isSingle),1000);
+  }catch(e){toast(`Erreur : ${e}`,'er');}
+}
+function _fmtBytes(b){if(!b)return'0 o';const u=['o','Ko','Mo','Go'];let i=0;while(b>=1024&&i<3){b/=1024;i++;}return`${b.toFixed(i?1:0)} ${u[i]}`;}
+function _fmtEta(s){if(!s)return'';if(s<60)return`${s}s`;if(s<3600)return`${Math.floor(s/60)}m${String(s%60).padStart(2,'0')}s`;return`${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,'0')}m`;}
+async function _pollDlJob(isSingle){
+  if(!_dlJobId)return;
+  try{
+    const s=await api('GET',`/api/download/jobs/${_dlJobId}`);
+    document.getElementById('djob-pct').textContent=`${s.progress}%`;
+    document.getElementById('djob-bar').style.width=`${s.progress}%`;
+    if(s.current)document.getElementById('djob-current').textContent=s.current;
+    // Ligne vitesse/taille/ETA
+    if(s.status==='downloading'&&s.dl_speed>0){
+      const parts=[];
+      if(s.dl_total>0)parts.push(`${_fmtBytes(s.dl_bytes)} / ${_fmtBytes(s.dl_total)}`);
+      else if(s.dl_bytes>0)parts.push(_fmtBytes(s.dl_bytes));
+      parts.push(`${_fmtBytes(s.dl_speed)}/s`);
+      if(s.dl_eta>0)parts.push(`ETA ${_fmtEta(s.dl_eta)}`);
+      document.getElementById('djob-stats').textContent=parts.join(' — ');
+      if(!isSingle){
+        const fLabel=document.getElementById('djob-label');
+        const done=Math.round(s.progress/100*(s.nb_items||1));
+        fLabel.textContent=`Fichier en cours — ${_fmtBytes(s.dl_bytes)}${s.dl_total?' / '+_fmtBytes(s.dl_total):''}`;
+      }
+    }else if(!isSingle&&s.status==='downloading'){
+      const done=Math.max(0,Math.round(s.progress/90*(s.nb_items||1)));
+      document.getElementById('djob-label').textContent=`${done} / ${s.nb_items} fichier(s)`;
+    }
+    if(s.status==='ready'){
+      clearInterval(_dlJobPoll);_dlJobPoll=null;
+      document.getElementById('djob-bar').style.width='100%';document.getElementById('djob-bar').className='prog-fill done';
+      document.getElementById('djob-badge').textContent='Prêt';document.getElementById('djob-badge').className='badge b-ok';
+      document.getElementById('djob-label').textContent=s.is_single?'Fichier prêt':`${s.nb_items} fichier(s) prêt(s) dans le ZIP`;
+      document.getElementById('djob-pct').textContent='100%';
+      document.getElementById('djob-stats').textContent='';
+      document.getElementById('djob-cancel').style.display='none';
+      const dlBtn=document.getElementById('djob-dl-btn');
+      dlBtn.textContent=s.is_single?'⬇ Télécharger le fichier':'⬇ Télécharger le ZIP';
+      dlBtn.style.display='';
+    }else if(s.status==='error'){
+      clearInterval(_dlJobPoll);_dlJobPoll=null;
+      document.getElementById('djob-badge').textContent='Erreur';document.getElementById('djob-badge').className='badge b-er';
+      document.getElementById('djob-label').textContent=s.error||'Erreur inconnue';
+      document.getElementById('djob-bar').className='prog-fill er';
+      document.getElementById('djob-stats').textContent='';
+    }
+  }catch{clearInterval(_dlJobPoll);_dlJobPoll=null;}
+}
+function triggerDlJobFile(){
+  if(!_dlJobId)return;
+  const url=_dlUrl(`/api/download/jobs/${_dlJobId}/file`);
+  _dlFile(url,'download');
+}
+async function cancelDlJob(){
+  if(_dlJobPoll){clearInterval(_dlJobPoll);_dlJobPoll=null;}
+  if(_dlJobId){try{await api('DELETE',`/api/download/jobs/${_dlJobId}`);}catch{}}
+  _dlJobId=null;cm('m-dl-job');
+}
+
+// ─── Historique ───────────────────────────────────────────────────────────
+async function loadDlHistory(){
+  try{
+    const rows=await api('GET','/admin/api/downloads?limit=200');
+    const b=document.getElementById('dl-htbody');
+    if(!rows?.length){b.innerHTML='<tr><td colspan="7"><div class="empty"><div class="ic">📥</div>Aucun téléchargement</div></td></tr>';return;}
+    const tl={episode:'🎬 Épisode',film:'🎞 Film',season:'📦 Saison (ZIP)'};
+    b.innerHTML=rows.map(r=>`<tr>
+      <td style="font-weight:600">${esc(r.username||'?')}</td>
+      <td style="font-size:.8rem">${esc(r.slug||'')}</td>
+      <td><span class="badge b-mu" style="font-size:.68rem">${tl[r.type]||r.type}</span></td>
+      <td style="text-align:center">${r.nb_files||1}</td>
+      <td style="font-size:.8rem;color:var(--mu)">${r.size_bytes?_fmtSize(r.size_bytes):'—'}</td>
+      <td style="font-size:.78rem;color:var(--mu);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.details||'')}">${esc(r.details||'—')}</td>
+      <td style="font-size:.78rem;color:var(--mu);white-space:nowrap">${timeAgo(r.date)}</td>
+    </tr>`).join('');
+  }catch(e){document.getElementById('dl-htbody').innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">⚠</div>${esc(String(e))}</div></td></tr>`;}
+}
+function _fmtSize(b){
+  if(b>=1073741824)return(b/1073741824).toFixed(1)+' Go';
+  if(b>=1048576)   return(b/1048576).toFixed(1)+' Mo';
+  return(b/1024).toFixed(0)+' Ko';
+}
+
+// ─── Quotas ───────────────────────────────────────────────────────────────
+async function loadDlQuotas(){
+  try{
+    const rows=await api('GET','/admin/api/dl-quotas');
+    const b=document.getElementById('dl-qtbody');
+    if(!rows?.length){b.innerHTML='<tr><td colspan="5"><div class="empty"><div class="ic">⚙</div>Aucun quota configuré — quota global par défaut : 20 fichiers / 10 Go par 24h</div></td></tr>';return;}
+    b.innerHTML=rows.map(q=>`<tr>
+      <td style="font-weight:600">${q.username==='__default__'?'<span class="badge b-info">global</span>':esc(q.username)}</td>
+      <td style="text-align:center">${q.max_files_per_day}</td>
+      <td style="text-align:center">${q.max_gb_per_day} Go</td>
+      <td><span class="badge ${q.can_download!==false?'b-ok':'b-er'}">${q.can_download!==false?'✓ Autorisé':'✗ Bloqué'}</span></td>
+      <td><div class="actions">
+        <button class="btn btn-secondary btn-icon btn-sm" title="Modifier" onclick="openDlQuota('${esc(q.username)}')">✏️</button>
+        ${q.username!=='__default__'?`<button class="btn btn-danger btn-icon btn-sm" title="Supprimer" onclick="deleteDlQuota('${esc(q.username)}')">🗑</button>`:''}
+      </div></td>
+    </tr>`).join('');
+  }catch(e){document.getElementById('dl-qtbody').innerHTML=`<tr><td colspan="5"><div class="empty"><div class="ic">⚠</div>${esc(String(e))}</div></td></tr>`;}
+}
+async function openDlQuota(username){
+  _dqUsername=username;
+  document.getElementById('dq-user').textContent=username==='__default__'?'Quota global':username;
+  document.getElementById('dq-err').style.display='none';
+  document.getElementById('dq-del-btn').style.display=username==='__default__'?'none':'';
+  // Essayer de charger le quota existant
+  try{
+    const rows=await api('GET','/admin/api/dl-quotas');
+    const q=(rows||[]).find(r=>r.username===username);
+    document.getElementById('dq-files').value=q?.max_files_per_day??20;
+    document.getElementById('dq-gb').value=q?.max_gb_per_day??10;
+    document.getElementById('dq-enabled').checked=q?.can_download!==false;
+  }catch{}
+  om('m-dl-quota');
+}
+async function saveDlQuota(){
+  if(!_dqUsername)return;
+  const body={
+    max_files_per_day:parseInt(document.getElementById('dq-files').value)||20,
+    max_gb_per_day:parseFloat(document.getElementById('dq-gb').value)||10,
+    can_download:document.getElementById('dq-enabled').checked,
+  };
+  try{
+    await api('PUT',`/admin/api/dl-quotas/${encodeURIComponent(_dqUsername)}`,body);
+    toast(`Quota enregistré pour « ${_dqUsername} »`,'ok');cm('m-dl-quota');loadDlQuotas();
+  }catch(e){document.getElementById('dq-err').textContent=String(e);document.getElementById('dq-err').style.display='';}
+}
+async function deleteDlQuota(username){
+  const u=username||_dqUsername;if(!u)return;
+  if(!confirm(`Supprimer le quota de « ${u} » (retour au défaut) ?`))return;
+  try{await api('DELETE',`/admin/api/dl-quotas/${encodeURIComponent(u)}`);toast('Quota supprimé','ok');cm('m-dl-quota');loadDlQuotas();}
+  catch(e){toast(String(e),'er');}
+}
+
 // ─── Ajouter + recherche ─────────────────────────────────────────────────
 function openAddCat(){
   document.getElementById('add-slug').value='';['add-err','add-ok','add-loading','sr-loading'].forEach(i=>document.getElementById(i).style.display='none');
@@ -1463,20 +1879,33 @@ function renderContentView(d){
 function showCTab(el,id){document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.ctab-content').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById(id).classList.add('active');}
 function renderSaisonsContent(saisons){
   if(!saisons.length) return '<div class="empty"><div class="ic">🎬</div>Aucune saison</div>';
+  const slug=_contentData?.slug||'';
   return saisons.map((s,idx)=>{
     const hasEps=s.episodes.length>0,langBadge=s.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(s.lang.toUpperCase())}</span>`:'';
-    return `<div class="citem"><div class="citem-head" onclick="toggleCItem('sei-${idx}')"><span class="ci-nom">${esc(s.nom)}</span>${langBadge}<span class="ci-count">${hasEps?`${s.episodes.length} éps`:(s.total_episodes?`${s.total_episodes} éps (non chargés)`:'Aucun épisode')}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
-    <div class="citem-body ${hasEps?'':'unsynced'}" id="sei-${idx}">${hasEps?renderEpChips(s.episodes,'ep',idx):'<p style="margin:0">⚠ Épisodes non synchronisés.</p>'}</div></div>`;
+    const dlBtn=hasEps?`<button class="btn btn-secondary btn-sm" style="margin-left:auto;font-size:.72rem" onclick="event.stopPropagation();dlSaison('${slug}',${idx})" title="Télécharger toute la saison (ZIP)">⬇ ZIP</button>`:'';
+    return `<div class="citem">
+      <div class="citem-head" onclick="toggleCItem('sei-${idx}')" style="gap:.5rem">
+        <span class="ci-nom">${esc(s.nom)}</span>${langBadge}
+        <span class="ci-count">${hasEps?`${s.episodes.length} éps`:(s.total_episodes?`${s.total_episodes} éps (non chargés)`:'Aucun épisode')}</span>
+        ${dlBtn}
+        <span style="color:var(--mu)">▾</span>
+      </div>
+      <div class="citem-body ${hasEps?'':'unsynced'}" id="sei-${idx}">${hasEps?renderEpChips(s.episodes,'ep',idx,slug):'<p style="margin:0">⚠ Épisodes non synchronisés.</p>'}</div>
+    </div>`;
   }).join('');
 }
 function renderFilmsContent(films){
   if(!films.length) return '<div class="empty"><div class="ic">🎞</div>Aucun film</div>';
+  const slug=_contentData?.slug||'';
   return films.map((f,idx)=>{
     const hasVids=(f.videos||[]).length>0,langBadge=f.lang?`<span class="badge b-mu" style="font-size:.65rem">${esc(f.lang.toUpperCase())}</span>`:'';
     const pillsHtml=hasVids
-      ?'<div style="margin-top:.35rem">'+f.videos.map((v,i)=>
-          `<span class="lecteur-pill playable" onclick="_openFilmPlayer(${idx})" title="Ouvrir ${esc(v.lecteur||'lecteur')}" data-lidx="${i}">▶ ${esc(v.lecteur||`Lecteur ${i+1}`)}</span>`
-        ).join('')+'</div>'
+      ?'<div style="margin-top:.35rem;display:flex;flex-wrap:wrap;align-items:center;gap:.25rem">'
+        +f.videos.map((v,i)=>
+          `<span class="lecteur-pill playable" onclick="_openFilmPlayer(${idx})" title="Lire" data-lidx="${i}">▶ ${esc(v.lecteur||`Lecteur ${i+1}`)}</span>`
+        ).join('')
+        +`<button class="btn btn-secondary btn-sm" style="font-size:.72rem" onclick="dlFilm('${slug}',${idx})" title="Télécharger ce film (mp4)">⬇ MP4</button>`
+        +'</div>'
       :'<p style="margin:0">⚠ Vidéos non synchronisées.</p>';
     return `<div class="citem"><div class="citem-head" onclick="toggleCItem('fi-${idx}')"><span class="ci-nom">${esc(f.nom)}</span>${langBadge}<span class="ci-count">${hasVids?`${f.videos_count} lecteur(s)`:'Non synchronisé'}</span><span style="color:var(--mu);margin-left:.4rem">▾</span></div>
     <div class="citem-body ${hasVids?'':'unsynced'}" id="fi-${idx}">${pillsHtml}</div></div>`;
@@ -1490,16 +1919,19 @@ function renderScansContent(scans){
     <div class="citem-body ${hasChaps?'':'unsynced'}" id="sci-${idx}">${hasChaps?renderEpChips(sc.chapitres,'chap'):'<p style="margin:0">⚠ Chapitres non synchronisés.</p>'}</div></div>`;
   }).join('');
 }
-function renderEpChips(items,cls,saisonIdx){
+function renderEpChips(items,cls,saisonIdx,slug){
   const MAX=120;
   const chip=e=>{
     const play=e.videos&&e.videos.length>0;
-    const attr=play?`onclick="_openEpPlayer(${saisonIdx},${e.numero})" title="Lire — ${e.videos.length} lecteur(s)"`:'';
-    return `<span class="ep-chip ${cls}${play?' playable':''}" ${attr}>${e.numero}</span>`;
+    const playAttr=play?`onclick="_openEpPlayer(${saisonIdx},${e.numero})" title="Lire — ${e.videos.length} lecteur(s)"`:'';
+    const dlAttr=play&&slug?`ondblclick="event.stopPropagation();dlEpisode('${slug}',${saisonIdx},${e.numero})" title="Double-clic = télécharger en mp4"`:'';
+    return `<span class="ep-chip ${cls}${play?' playable':''}" ${playAttr} ${dlAttr}>${e.numero}</span>`;
   };
   const chips=items.slice(0,MAX).map(chip).join('');
   const more=items.length>MAX?`<span class="ep-more" onclick="this.outerHTML='${items.slice(MAX).map(e=>`<span class=\\"ep-chip ${cls}\\">${e.numero}</span>`).join('')}'">… +${items.length-MAX} de plus</span>`:'';
-  return `<div class="ep-grid">${chips}${more}</div>`;
+  const hasDl=slug&&items.some(e=>e.videos?.length);
+  const dlAll=hasDl?`<div style="margin-top:.5rem"><button class="btn btn-secondary btn-sm" style="font-size:.72rem" onclick="dlSaison('${slug}',${saisonIdx},[${items.filter(e=>e.videos?.length).map(e=>e.numero).join(',')}])">⬇ Télécharger les épisodes disponibles</button></div>`:'';
+  return `<div class="ep-grid">${chips}${more}</div>${dlAll}`;
 }
 function toggleCItem(id){document.getElementById(id).classList.toggle('open');}
 
@@ -1554,7 +1986,15 @@ function connectSyncWS(slug){
   state.ws=ws;
   ws.onmessage=e=>{try{onSyncEvent(slug,JSON.parse(e.data));}catch{}};
   ws.onerror=()=>{if(!state.done){state.state='error';state.done=true;updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);}};
-  ws.onclose=()=>{if(!state.done){updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);}};
+  ws.onclose=()=>{
+    if(state.done)return;
+    // La sync est toujours en cours côté serveur : tenter une reconnexion dans 3 s
+    setTimeout(()=>{
+      const s=bgSyncs.get(slug);
+      if(s&&!s.done) connectSyncWS(slug);
+    },3000);
+    updateBgBar();if(activeSyncSlug===slug)renderSyncModal(slug);
+  };
 }
 
 function onSyncEvent(slug,ev){
@@ -1600,7 +2040,15 @@ function renderSyncModal(slug){
 }
 async function syncPause(){if(activeSyncSlug)try{await api('POST',`/catalogues/${activeSyncSlug}/sync-content/pause`);}catch(e){toast(String(e),'er');}}
 async function syncResume(){if(activeSyncSlug)try{await api('POST',`/catalogues/${activeSyncSlug}/sync-content/resume`);}catch(e){toast(String(e),'er');}}
-async function syncCancel(){if(!activeSyncSlug||!confirm('Annuler ?'))return;try{await api('DELETE',`/catalogues/${activeSyncSlug}/sync-content`);}catch(e){toast(String(e),'er');}}
+async function syncCancel(){
+  if(!activeSyncSlug||!confirm('Annuler ?'))return;
+  try{
+    await api('DELETE',`/catalogues/${activeSyncSlug}/sync-content`);
+    // Mettre à jour l'UI immédiatement sans attendre l'événement WS
+    const s=bgSyncs.get(activeSyncSlug);
+    if(s&&!s.done){s.state='cancelling';addSyncLog(activeSyncSlug,'⚠ Annulation envoyée au serveur…','cancel');renderSyncModal(activeSyncSlug);updateBgBar();}
+  }catch(e){toast(String(e),'er');}
+}
 function syncFond(){cm('m-sync');activeSyncSlug=null;toast('Sync en arrière-plan','info');}
 function updateBgBar(){
   const active=[...bgSyncs.entries()].filter(([,s])=>!s.done);
@@ -1617,7 +2065,14 @@ function updateBgBar(){
 }
 async function bgPause(slug){try{await api('POST',`/catalogues/${slug}/sync-content/pause`);}catch(e){toast(String(e),'er');}}
 async function bgResume(slug){try{await api('POST',`/catalogues/${slug}/sync-content/resume`);}catch(e){toast(String(e),'er');}}
-async function bgCancel(slug){if(!confirm(`Annuler sync « ${slug} » ?`))return;try{await api('DELETE',`/catalogues/${slug}/sync-content`);}catch(e){toast(String(e),'er');}}
+async function bgCancel(slug){
+  if(!confirm(`Annuler sync « ${slug} » ?`))return;
+  try{
+    await api('DELETE',`/catalogues/${slug}/sync-content`);
+    const s=bgSyncs.get(slug);
+    if(s&&!s.done){s.state='cancelling';addSyncLog(slug,'⚠ Annulation envoyée au serveur…','cancel');if(activeSyncSlug===slug)renderSyncModal(slug);updateBgBar();}
+  }catch(e){toast(String(e),'er');}
+}
 
 // ═══════════════════════════ APPLICATIONS ════════════════════════════════
 
@@ -1717,6 +2172,10 @@ function showSecretModal(cid,secret,isNew){
 function toggleQuotaUI(pfx){
   const en=document.getElementById(pfx+'-q-en').checked;
   document.getElementById(pfx+'-quota-fields').style.display=en?'flex':'none';
+}
+function toggleDlQuotaUI(){
+  const en=document.getElementById('mg-dl-q-en').checked;
+  document.getElementById('mg-dl-quota-fields').style.display=en?'flex':'none';
 }
 
 // ─── Blocage ──────────────────────────────────────────────────────────────
@@ -1939,6 +2398,9 @@ function openCreateGroup(){
   document.getElementById('mg-sync').checked=false;document.getElementById('mg-del').checked=false;document.getElementById('mg-ref').checked=false;
   document.getElementById('mg-q-en').checked=false;document.getElementById('mg-q-max').value=10;document.getElementById('mg-q-period').value='month';
   document.getElementById('mg-quota-fields').style.display='none';
+  document.getElementById('mg-dl-allow').checked=true;
+  document.getElementById('mg-dl-q-en').checked=false;document.getElementById('mg-dl-q-files').value=20;document.getElementById('mg-dl-q-gb').value=5;
+  document.getElementById('mg-dl-quota-fields').style.display='none';
   document.getElementById('mg-err').style.display='none';
   _populateGroupModal();om('m-group');
 }
@@ -1960,6 +2422,13 @@ function openEditGroup(gid){
   document.getElementById('mg-q-max').value=q.max_syncs||10;
   document.getElementById('mg-q-period').value=q.period||'month';
   document.getElementById('mg-quota-fields').style.display=q.enabled?'flex':'none';
+  // Téléchargements
+  document.getElementById('mg-dl-allow').checked=p.can_download!==false;
+  const dq=p.download_quota||{};
+  document.getElementById('mg-dl-q-en').checked=!!dq.enabled;
+  document.getElementById('mg-dl-q-files').value=dq.max_files_per_day||20;
+  document.getElementById('mg-dl-q-gb').value=dq.max_gb_per_day||5;
+  document.getElementById('mg-dl-quota-fields').style.display=dq.enabled?'flex':'none';
   document.getElementById('mg-err').style.display='none';
   _populateGroupModal();om('m-group');
 }
@@ -1969,6 +2438,7 @@ async function saveGroup(){
   if(!name){errEl.textContent='Le nom est requis.';errEl.style.display='block';return;}
   const type=document.getElementById('mg-type').value;
   const qen=document.getElementById('mg-q-en').checked;
+  const dlQen=document.getElementById('mg-dl-q-en').checked;
   const body={
     name,type,description:document.getElementById('mg-desc').value.trim()||null,
     catalogue_slugs:[..._mgCatSlugs],genres:[..._mgGenres],
@@ -1977,6 +2447,9 @@ async function saveGroup(){
       can_delete:document.getElementById('mg-del').checked,
       can_refresh:document.getElementById('mg-ref').checked,
       quota:{enabled:qen,period:document.getElementById('mg-q-period').value,max_syncs:parseInt(document.getElementById('mg-q-max').value)||10},
+      can_download:document.getElementById('mg-dl-allow').checked,
+      download_forbidden_slugs:[],
+      download_quota:{enabled:dlQen,max_files_per_day:parseInt(document.getElementById('mg-dl-q-files').value)||20,max_gb_per_day:parseFloat(document.getElementById('mg-dl-q-gb').value)||5},
     },
   };
   try{
@@ -2026,6 +2499,68 @@ async function removeGroupMember(username){
   if(!confirm(`Retirer ${username} du groupe ?`))return;
   try{await api('DELETE',`/admin/api/groups/${membersGroupId}/members/${username}`);toast(`${username} retiré`,'ok');await refreshMembersList();}
   catch(e){toast(String(e),'er');}
+}
+
+// ═══════════════════════════════ SÉCURITÉ ════════════════════════════════
+
+let _apiLocked=false;
+
+async function loadSecurity(){
+  try{
+    const state=await api('GET','/admin/api/security/state');
+    _apiLocked=state.locked;
+    document.getElementById('lock-reason').value=state.reason||'';
+    const badge=document.getElementById('lock-badge');
+    const btn=document.getElementById('lock-btn');
+    if(state.locked){
+      badge.textContent='🔒 Verrouillée';badge.className='badge b-er';
+      btn.textContent='🔓 Déverrouiller l\'API';btn.className='btn btn-ok btn-sm';
+    }else{
+      badge.textContent='✅ Ouverte';badge.className='badge b-ok';
+      btn.textContent='🔒 Verrouiller l\'API';btn.className='btn btn-danger btn-sm';
+    }
+    const bans=await api('GET','/admin/api/security/ip-bans');
+    renderBans(bans);
+  }catch(e){toast('Erreur sécurité : '+String(e),'er');}
+}
+async function toggleApiLock(){
+  const locked=!_apiLocked;
+  const reason=document.getElementById('lock-reason').value.trim();
+  if(locked&&!confirm('Verrouiller l\'API ? Tous les utilisateurs non-admins seront bloqués.'))return;
+  try{
+    await api('PUT','/admin/api/security/lock',{locked,reason});
+    toast(locked?'API verrouillée — seuls les admins y ont accès':'API déverrouillée',locked?'wa':'ok');
+    await loadSecurity();
+  }catch(e){toast(String(e),'er');}
+}
+function renderBans(list){
+  const b=document.getElementById('bans-tbody');
+  if(!list.length){b.innerHTML='<tr><td colspan="5"><div class="empty">Aucune adresse IP bannie</div></td></tr>';return;}
+  b.innerHTML=list.map(x=>`<tr>
+    <td><code style="font-size:.82rem">${esc(x.ip)}</code></td>
+    <td style="font-size:.82rem">${esc(x.reason||'—')}</td>
+    <td style="font-size:.75rem;color:var(--mu)">${x.created_at?new Date(x.created_at).toLocaleString('fr'):'—'}</td>
+    <td style="font-size:.78rem;color:var(--mu)">${esc(x.banned_by||'admin')}</td>
+    <td><button class="btn btn-secondary btn-sm" onclick="removeBan('${esc(x.ip)}')">Débannir</button></td>
+  </tr>`).join('');
+}
+async function addBan(){
+  const ip=document.getElementById('ban-ip').value.trim();
+  if(!ip){toast('Adresse IP requise','er');return;}
+  const reason=document.getElementById('ban-reason').value.trim();
+  try{
+    await api('POST','/admin/api/security/ip-bans',{ip,reason});
+    toast(`${ip} banni`,'ok');
+    document.getElementById('ban-ip').value='';document.getElementById('ban-reason').value='';
+    await loadSecurity();
+  }catch(e){toast(String(e),'er');}
+}
+async function removeBan(ip){
+  if(!confirm(`Débannir l'IP ${ip} ?`))return;
+  try{
+    await api('DELETE',`/admin/api/security/ip-bans/${encodeURIComponent(ip)}`);
+    toast(`${ip} débanni`,'ok');await loadSecurity();
+  }catch(e){toast(String(e),'er');}
 }
 
 // ═══════════════════════ SORTIES SEMAINE (anime-sama.to/planning/) ═══════
@@ -2155,30 +2690,54 @@ function onFreqChange(){
   document.getElementById('ms3-interval-field').style.display=freq==='custom'?'block':'none';
 }
 
+let _schedSlug=null;
+function onSchedSearch(val){
+  const q=val.trim().toLowerCase();
+  const res=document.getElementById('ms3-results');
+  if(!q){res.style.display='none';_schedSlug=null;document.getElementById('ms3-slug-hint').textContent='—';return;}
+  const hits=allCats.filter(c=>c.nom.toLowerCase().includes(q)||c.slug.includes(q)).slice(0,12);
+  if(!hits.length){res.style.display='none';return;}
+  res.innerHTML=hits.map(c=>`<div class="sched-res" onmousedown="selectSchedCat('${esc(c.slug)}','${esc(c.nom)}')">`+
+    `<span style="font-weight:600">${esc(c.nom)}</span>`+
+    `<span style="color:var(--mu);font-size:.72rem;margin-left:.5rem">${esc(c.slug)}</span></div>`).join('');
+  res.style.display='block';
+}
+function hideSchedResults(){document.getElementById('ms3-results').style.display='none';}
+function selectSchedCat(slug,nom){
+  _schedSlug=slug;
+  document.getElementById('ms3-search').value=nom;
+  document.getElementById('ms3-slug-hint').textContent=slug;
+  document.getElementById('ms3-results').style.display='none';
+}
 function openCreateSchedule(){
-  editScheduleId=null;document.getElementById('ms3-title').textContent='Nouvelle programmation';
-  document.getElementById('ms3-slug').value='';document.getElementById('ms3-desc').value='';
+  editScheduleId=null;_schedSlug=null;document.getElementById('ms3-title').textContent='Nouvelle programmation';
+  document.getElementById('ms3-search').value='';document.getElementById('ms3-slug-hint').textContent='—';
+  document.getElementById('ms3-results').style.display='none';
+  document.getElementById('ms3-desc').value='';
   document.getElementById('ms3-freq').value='weekly';document.getElementById('ms3-hour').value='2';document.getElementById('ms3-min').value='0';
   document.getElementById('ms3-dow').value='0';document.getElementById('ms3-dom').value='1';document.getElementById('ms3-interval').value='7';
   document.getElementById('ms3-active').checked=true;document.getElementById('ms3-err').style.display='none';
-  // Alimenter la datalist
-  const dl=document.getElementById('ms3-cat-list');dl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
   onFreqChange();om('m-schedule');
 }
 function openEditSchedule(sid){
   const s=allSchedules.find(x=>x.id===sid);if(!s)return;
-  editScheduleId=sid;document.getElementById('ms3-title').textContent=`Modifier — ${s.slug}`;
-  document.getElementById('ms3-slug').value=s.slug;document.getElementById('ms3-desc').value=s.description||'';
+  editScheduleId=sid;_schedSlug=s.slug;
+  document.getElementById('ms3-title').textContent=`Modifier — ${s.slug}`;
+  const found=allCats.find(c=>c.slug===s.slug);
+  document.getElementById('ms3-search').value=found?found.nom:s.slug;
+  document.getElementById('ms3-slug-hint').textContent=s.slug;
+  document.getElementById('ms3-results').style.display='none';
+  document.getElementById('ms3-desc').value=s.description||'';
   document.getElementById('ms3-freq').value=s.frequency||'daily';document.getElementById('ms3-hour').value=s.hour??2;document.getElementById('ms3-min').value=s.minute??0;
   document.getElementById('ms3-dow').value=s.day_of_week??0;document.getElementById('ms3-dom').value=s.day_of_month??1;document.getElementById('ms3-interval').value=s.interval_days??7;
   document.getElementById('ms3-active').checked=s.active!==false;document.getElementById('ms3-err').style.display='none';
-  const dl=document.getElementById('ms3-cat-list');dl.innerHTML=allCats.map(c=>`<option value="${esc(c.slug)}">${esc(c.nom)}</option>`).join('');
   onFreqChange();om('m-schedule');
 }
 async function saveSchedule(){
   const errEl=document.getElementById('ms3-err');errEl.style.display='none';
-  const freq=document.getElementById('ms3-freq').value,slug=document.getElementById('ms3-slug').value.trim();
-  if(!slug){errEl.textContent='Le slug est requis.';errEl.style.display='block';return;}
+  const freq=document.getElementById('ms3-freq').value;
+  if(!_schedSlug){errEl.textContent='Sélectionnez un catalogue dans la liste.';errEl.style.display='block';return;}
+  const slug=_schedSlug;
   const body={slug,description:document.getElementById('ms3-desc').value.trim()||null,frequency:freq,hour:parseInt(document.getElementById('ms3-hour').value)||0,minute:parseInt(document.getElementById('ms3-min').value)||0,active:document.getElementById('ms3-active').checked};
   if(['weekly','biweekly'].includes(freq)) body.day_of_week=parseInt(document.getElementById('ms3-dow').value);
   if(freq==='monthly') body.day_of_month=parseInt(document.getElementById('ms3-dom').value)||1;
@@ -2403,7 +2962,13 @@ function renderHistory(list){
 
 @app.get("/", response_class=HTMLResponse)
 async def admin_ui():
-    return HTMLResponse(_HTML.replace("__API_BASE__", API_BASE))
+    return HTMLResponse(
+        _HTML.replace("__API_BASE__", API_BASE),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma":        "no-cache",
+        },
+    )
 
 
 if __name__ == "__main__":
