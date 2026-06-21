@@ -24,14 +24,19 @@ GET    /admin/api/history                      → historique des syncs (admin)
 GET    /admin/api/history/{slug}               → historique d'un catalogue (admin)
 """
 
+import asyncio
 import secrets as _secrets
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from models.catalogue import CatalogueVisibility
 from models.api_client import APIClientCreate, APIClientUpdate
 from models.schedule import ScheduleCreate, ScheduleUpdate
+from models.responses import (
+    CatalogueAdminSummary, ClientResponse, ClientCreated, SecretRegenerated,
+    ScheduleResponse, SecurityState, IpBan, OkResponse, StatusStarted, BulkResult,
+)
 import db.repository as repo
 import db.clients_repository as clients_repo
 import db.schedules_repository as schedules_repo
@@ -70,11 +75,20 @@ class CatalogueMetaUpdate(BaseModel):
     type_contenu:     Optional[str]       = None
 
 
+class BulkSlugs(BaseModel):
+    slugs: list[str] = Field(min_length=1, description="Liste des slugs à traiter")
+
+
+class BulkVisibilityBody(BaseModel):
+    slugs:     list[str] = Field(min_length=1)
+    is_public: bool      = False
+
+
 # ---------------------------------------------------------------------------
 # Catalogues
 # ---------------------------------------------------------------------------
 
-@router.get("/api/catalogues", summary="Catalogues avec visibilité et statut (admin)")
+@router.get("/api/catalogues", response_model=list[CatalogueAdminSummary], summary="Catalogues avec visibilité et statut (admin)")
 async def list_catalogues_admin(_: dict = Depends(require_admin)):
     items = await repo.get_all_summary()
     result = []
@@ -84,6 +98,71 @@ async def list_catalogues_admin(_: dict = Depends(require_admin)):
             result.append(_catalogue_summary(doc))
     return result
 
+
+# ── Opérations groupées — déclarées AVANT les routes /{slug} pour éviter les conflits ──
+
+@router.post("/api/catalogues/bulk-delete",
+             response_model=BulkResult,
+             summary="Supprimer plusieurs catalogues (admin)")
+async def bulk_delete_catalogues(body: BulkSlugs, _: dict = Depends(require_admin)):
+    """Supprime tous les slugs fournis. Retourne les slugs supprimés et les erreurs éventuelles."""
+    ok: list[str] = []
+    errors: dict[str, str] = {}
+    for slug in body.slugs:
+        if await repo.delete_by_slug(slug):
+            ok.append(slug)
+        else:
+            errors[slug] = "Introuvable"
+    return BulkResult(ok=ok, errors=errors)
+
+
+@router.post("/api/catalogues/bulk-rafraichir",
+             response_model=BulkResult,
+             summary="Rafraîchir (re-scrape) plusieurs catalogues (admin)")
+async def bulk_refresh_catalogues(body: BulkSlugs, _: dict = Depends(require_admin)):
+    """Re-scrape la structure de chaque catalogue en parallèle."""
+    from services.catalogue_service import rafraichir_catalogue
+    results = await asyncio.gather(
+        *[rafraichir_catalogue(s) for s in body.slugs],
+        return_exceptions=True,
+    )
+    ok: list[str] = []
+    errors: dict[str, str] = {}
+    for slug, res in zip(body.slugs, results):
+        if isinstance(res, Exception):
+            errors[slug] = str(res)
+        elif res is None:
+            errors[slug] = "Rafraîchissement impossible (catalogue introuvable sur le site)"
+        else:
+            ok.append(slug)
+    return BulkResult(ok=ok, errors=errors)
+
+
+@router.put("/api/catalogues/bulk-visibility",
+            response_model=BulkResult,
+            summary="Modifier la visibilité de plusieurs catalogues (admin)")
+async def bulk_update_visibility(body: BulkVisibilityBody, _: dict = Depends(require_admin)):
+    """
+    Applique la même visibilité à tous les slugs fournis.
+    Passer `is_public: false` pour tout rendre privé d'un coup.
+    """
+    vis = {
+        "is_public":     body.is_public,
+        "public_saisons": [],
+        "public_films":   [],
+        "public_scans":   [],
+    }
+    ok: list[str] = []
+    errors: dict[str, str] = {}
+    for slug in body.slugs:
+        if await repo.update_catalogue_visibility(slug, vis):
+            ok.append(slug)
+        else:
+            errors[slug] = "Introuvable"
+    return BulkResult(ok=ok, errors=errors)
+
+
+# ── Routes individuelles /{slug} ──────────────────────────────────────────────
 
 @router.get("/api/catalogues/{slug}", summary="Détail complet d'un catalogue (admin)")
 async def get_catalogue_admin(slug: str, _: dict = Depends(require_admin)):
@@ -165,7 +244,7 @@ async def delete_catalogue(slug: str, _: dict = Depends(require_admin)):
         raise HTTPException(404, f"Catalogue '{slug}' introuvable")
 
 
-@router.put("/api/catalogues/{slug}", summary="Mise à jour des métadonnées (admin)")
+@router.put("/api/catalogues/{slug}", response_model=OkResponse, summary="Mise à jour des métadonnées (admin)")
 async def update_catalogue_meta(
     slug: str,
     body: CatalogueMetaUpdate,
@@ -193,12 +272,12 @@ async def update_visibility(
 # Clients API
 # ---------------------------------------------------------------------------
 
-@router.get("/api/clients", summary="Liste des clients API (admin)")
+@router.get("/api/clients", response_model=list[ClientResponse], summary="Liste des clients API (admin)")
 async def list_api_clients(_: dict = Depends(require_admin)):
     return await clients_repo.list_clients()
 
 
-@router.post("/api/clients", status_code=201, summary="Créer un client API (admin)")
+@router.post("/api/clients", response_model=ClientCreated, status_code=201, summary="Créer un client API (admin)")
 async def create_api_client(body: APIClientCreate, _: dict = Depends(require_admin)):
     """
     Crée un nouveau client API. Le secret est retourné **une seule fois** dans
@@ -228,7 +307,7 @@ async def create_api_client(body: APIClientCreate, _: dict = Depends(require_adm
     }
 
 
-@router.get("/api/clients/{cid}", summary="Détail d'un client API (admin)")
+@router.get("/api/clients/{cid}", response_model=ClientResponse, summary="Détail d'un client API (admin)")
 async def get_api_client(cid: str, _: dict = Depends(require_admin)):
     doc = await clients_repo.find_by_client_id(cid)
     if not doc:
@@ -239,7 +318,7 @@ async def get_api_client(cid: str, _: dict = Depends(require_admin)):
     return doc
 
 
-@router.put("/api/clients/{cid}", summary="Modifier un client API (admin)")
+@router.put("/api/clients/{cid}", response_model=OkResponse, summary="Modifier un client API (admin)")
 async def update_api_client(cid: str, body: APIClientUpdate, _: dict = Depends(require_admin)):
     fields: dict = {}
     if body.name        is not None: fields["name"]        = body.name
@@ -261,7 +340,7 @@ async def delete_api_client(cid: str, _: dict = Depends(require_admin)):
         raise HTTPException(404, f"Client '{cid}' introuvable")
 
 
-@router.post("/api/clients/{cid}/regenerate-secret", summary="Régénérer le secret (admin)")
+@router.post("/api/clients/{cid}/regenerate-secret", response_model=SecretRegenerated, summary="Régénérer le secret (admin)")
 async def regenerate_client_secret(cid: str, _: dict = Depends(require_admin)):
     """
     Génère un nouveau secret et invalide l'ancien.
@@ -308,7 +387,7 @@ def _catalogue_summary(doc: dict) -> dict:
 # Programmations automatiques (schedules)
 # ---------------------------------------------------------------------------
 
-@router.get("/api/schedules", summary="Liste des programmations auto (admin)")
+@router.get("/api/schedules", response_model=list[ScheduleResponse], summary="Liste des programmations auto (admin)")
 async def list_schedules(_: dict = Depends(require_admin)):
     schedules = await schedules_repo.list_all()
     # Enrichir avec la prochaine exécution APScheduler
@@ -317,7 +396,7 @@ async def list_schedules(_: dict = Depends(require_admin)):
     return schedules
 
 
-@router.post("/api/schedules", status_code=201, summary="Créer une programmation (admin)")
+@router.post("/api/schedules", response_model=ScheduleResponse, status_code=201, summary="Créer une programmation (admin)")
 async def create_schedule(body: ScheduleCreate, _: dict = Depends(require_admin)):
     # Vérifier que le catalogue existe
     doc = await repo.find_by_slug(body.slug)
@@ -339,7 +418,7 @@ async def create_schedule(body: ScheduleCreate, _: dict = Depends(require_admin)
     return sched_doc
 
 
-@router.put("/api/schedules/{sid}", summary="Modifier une programmation (admin)")
+@router.put("/api/schedules/{sid}", response_model=ScheduleResponse, summary="Modifier une programmation (admin)")
 async def update_schedule(sid: str, body: ScheduleUpdate, _: dict = Depends(require_admin)):
     existing = await schedules_repo.find_by_id(sid)
     if not existing:
@@ -364,7 +443,7 @@ async def delete_schedule(sid: str, _: dict = Depends(require_admin)):
     sched_svc.remove_job(sid)
 
 
-@router.post("/api/schedules/{sid}/run", summary="Déclencher manuellement une programmation (admin)")
+@router.post("/api/schedules/{sid}/run", response_model=StatusStarted, summary="Déclencher manuellement une programmation (admin)")
 async def run_schedule_now(sid: str, _: dict = Depends(require_admin)):
     """Lance immédiatement la sync programmée, sans attendre l'heure prévue."""
     import asyncio
@@ -412,7 +491,7 @@ async def update_dl_perms(username: str, body: dict, _: dict = Depends(require_a
 # Sécurité — Verrouillage API + Ban IP
 # ---------------------------------------------------------------------------
 
-@router.get("/api/security/state", summary="État de sécurité (admin)")
+@router.get("/api/security/state", response_model=SecurityState, summary="État de sécurité (admin)")
 async def security_state(_: dict = Depends(require_admin)):
     import services.api_guard as guard
     import db.ip_bans_repository as ip_repo
@@ -429,7 +508,7 @@ async def set_lock(body: dict, admin: dict = Depends(require_admin)):
             "by": admin.get("username", "admin")}
 
 
-@router.get("/api/security/ip-bans", summary="Liste des IPs bannies (admin)")
+@router.get("/api/security/ip-bans", response_model=list[IpBan], summary="Liste des IPs bannies (admin)")
 async def list_ip_bans(_: dict = Depends(require_admin)):
     import db.ip_bans_repository as ip_repo
     return await ip_repo.list_bans()

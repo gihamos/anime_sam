@@ -14,7 +14,9 @@
       "PowerShell(py -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/api/routes/admin.py', encoding='utf-8'\\).read\\(\\)\\); print\\('admin.py OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('api/routes/download.py'\\).read\\(\\)\\); ast.parse\\(open\\('api/routes/admin.py'\\).read\\(\\)\\); ast.parse\\(open\\('api/dependencies.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "PowerShell(python -c \"import ast; ast.parse\\(open\\('e:/mes_projets/anime_sam/admin_main.py'\\).read\\(\\)\\); print\\('admin_main OK'\\)\")",
-      "Bash(pip show *)"
+      "Bash(pip show *)",
+      "Bash(grep -n \"^\\\\`\\\\`\\\\`$\" \"e:/mes_projets/anime_sam/README.md\")",
+      "Bash(python -c \"from api.routes.auth import router; from api.routes.catalogues import router; from api.routes.planning import router; from api.routes.download import router, admin_router; from api.routes.admin import router; from api.routes.groups import router; print\\('OK — tous les imports réussis'\\)\")"
     ]
   }
 }

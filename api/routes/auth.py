@@ -21,6 +21,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from models.user import UserCreate, UserUpdate, UserPublic, UserInDB, Role
+from models.responses import TokenResponse
 from api.dependencies import (
     get_current_user, require_admin,
     hash_password, verify_password, create_access_token, create_client_token,
@@ -41,7 +42,7 @@ class ClientTokenRequest(BaseModel):
 # Login
 # ---------------------------------------------------------------------------
 
-@router.post("/login", summary="Connexion — retourne un JWT")
+@router.post("/login", response_model=TokenResponse, summary="Connexion — retourne un JWT")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
     """
     Utilise le formulaire OAuth2 standard (username + password).
@@ -57,7 +58,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.post("/client-token", summary="Token pour une application tierce (client_id + secret)")
+@router.post("/client-token", response_model=TokenResponse, summary="Token pour une application tierce (client_id + secret)")
 async def client_token_endpoint(body: ClientTokenRequest):
     """
     Authentifie une application tierce via client_id + client_secret.

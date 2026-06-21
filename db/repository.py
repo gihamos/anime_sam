@@ -100,10 +100,24 @@ async def get_all_en_cours() -> list[dict]:
 
 
 async def get_all_summary() -> list[dict]:
+    """Résumé léger — admin uniquement (pas de filtrage visibilité)."""
     cursor = _col().find(
         {},
         {"slug": 1, "nom": 1, "etat": 1, "type_contenu": 1,
          "genres": 1, "langues": 1, "updated_at": 1, "episodes_synced": 1}
+    )
+    return [_clean(d) async for d in cursor]
+
+
+async def get_visible_summary() -> list[dict]:
+    """
+    Résumé complet avec visibilité, structure saisons/films/scans,
+    mais sans épisodes/chapitres/vidéos (données lourdes exclues).
+    Utilisé par la route publique pour filtrer selon les droits d'accès.
+    """
+    cursor = _col().find(
+        {},
+        {"saisons.episodes": 0, "films.videos": 0, "scans.chapitres": 0},
     )
     return [_clean(d) async for d in cursor]
 

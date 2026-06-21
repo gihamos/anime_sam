@@ -119,7 +119,7 @@ class CatalogueVisibility(BaseModel):
     Contrôle ce que les utilisateurs non authentifiés (ou restreints) peuvent voir.
     Pour chaque type de contenu, une liste vide = tout le contenu est visible.
     """
-    is_public:      bool      = True   # catalogue accessible sans authentification
+    is_public:      bool      = False  # privé par défaut — activer explicitement dans l'admin
     public_saisons: list[str] = Field(default_factory=list)  # slugs visibles publiquement
     public_films:   list[str] = Field(default_factory=list)
     public_scans:   list[str] = Field(default_factory=list)

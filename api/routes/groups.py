@@ -17,6 +17,8 @@ POST   /admin/api/genres/sync                   → synchronise les genres depui
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from models.group import GroupCreate, GroupUpdate
+from models.responses import GroupResponse, MemberAdded, StatusStarted
+from models.user import UserPublic
 import db.groups_repository as groups_repo
 import db.genres_repository as genres_repo
 import db.user_repository as user_repo
@@ -29,7 +31,7 @@ router = APIRouter(prefix="/admin", tags=["Groupes"])
 # Genres
 # ---------------------------------------------------------------------------
 
-@router.get("/api/genres", summary="Genres disponibles (DB + fallback)")
+@router.get("/api/genres", response_model=list[str], summary="Genres disponibles (DB + fallback)")
 async def list_genres(_: dict = Depends(require_admin)):
     """
     Retourne les genres scrappés depuis anime-sama.to/catalogue/ (stockés en DB).
@@ -41,7 +43,7 @@ async def list_genres(_: dict = Depends(require_admin)):
     return genres
 
 
-@router.post("/api/genres/sync", summary="Synchronise les genres depuis anime-sama.to")
+@router.post("/api/genres/sync", response_model=StatusStarted, summary="Synchronise les genres depuis anime-sama.to")
 async def sync_genres(_: dict = Depends(require_admin)):
     """
     Scrape anime-sama.to/catalogue/ pour récupérer tous les genres disponibles
@@ -89,7 +91,7 @@ async def sync_genres(_: dict = Depends(require_admin)):
 # Groupes CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/api/groups", summary="Liste des groupes (admin)")
+@router.get("/api/groups", response_model=list[GroupResponse], summary="Liste des groupes (admin)")
 async def list_groups(_: dict = Depends(require_admin)):
     groups = await groups_repo.list_all()
     for g in groups:
@@ -97,7 +99,7 @@ async def list_groups(_: dict = Depends(require_admin)):
     return groups
 
 
-@router.post("/api/groups", status_code=201, summary="Créer un groupe (admin)")
+@router.post("/api/groups", response_model=GroupResponse, status_code=201, summary="Créer un groupe (admin)")
 async def create_group(body: GroupCreate, _: dict = Depends(require_admin)):
     now = datetime.now(timezone.utc).isoformat()
     # Copie pour éviter que insert_one ne modifie doc en ajoutant _id (ObjectId non sérialisable)
@@ -106,7 +108,7 @@ async def create_group(body: GroupCreate, _: dict = Depends(require_admin)):
     return {**body.model_dump(), "id": gid, "created_at": now, "updated_at": now, "member_count": 0}
 
 
-@router.get("/api/groups/{gid}", summary="Détail d'un groupe (admin)")
+@router.get("/api/groups/{gid}", response_model=GroupResponse, summary="Détail d'un groupe (admin)")
 async def get_group(gid: str, _: dict = Depends(require_admin)):
     g = await groups_repo.find_by_id(gid)
     if not g:
@@ -115,7 +117,7 @@ async def get_group(gid: str, _: dict = Depends(require_admin)):
     return g
 
 
-@router.put("/api/groups/{gid}", summary="Modifier un groupe (admin)")
+@router.put("/api/groups/{gid}", response_model=GroupResponse, summary="Modifier un groupe (admin)")
 async def update_group(gid: str, body: GroupUpdate, _: dict = Depends(require_admin)):
     if not await groups_repo.find_by_id(gid):
         raise HTTPException(404, f"Groupe '{gid}' introuvable")
@@ -138,14 +140,14 @@ async def delete_group(gid: str, _: dict = Depends(require_admin)):
 # Membres
 # ---------------------------------------------------------------------------
 
-@router.get("/api/groups/{gid}/members", summary="Membres du groupe (admin)")
+@router.get("/api/groups/{gid}/members", response_model=list[UserPublic], summary="Membres du groupe (admin)")
 async def get_members(gid: str, _: dict = Depends(require_admin)):
     if not await groups_repo.find_by_id(gid):
         raise HTTPException(404, f"Groupe '{gid}' introuvable")
     return await groups_repo.list_members(gid)
 
 
-@router.post("/api/groups/{gid}/members", summary="Ajouter un membre au groupe (admin)")
+@router.post("/api/groups/{gid}/members", response_model=MemberAdded, summary="Ajouter un membre au groupe (admin)")
 async def add_member(gid: str, body: dict, _: dict = Depends(require_admin)):
     username = body.get("username", "").strip()
     if not username:

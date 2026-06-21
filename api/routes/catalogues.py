@@ -37,8 +37,14 @@ from api.dependencies import (
     decode_ws_token,
 )
 from fastapi import Depends
+from models.catalogue import Catalogue
+from models.responses import (
+    CatalogueSummary, SiteSearchResult, SyncGlobalStatus, SyncStarted,
+    SyncStatusResponse, SlugStatus, MessageResponse,
+)
 
 router = APIRouter(prefix="/catalogues", tags=["Catalogues"])
+my_router = APIRouter(prefix="/mycatalogues", tags=["Mes catalogues"])
 
 
 def _apply_content_filter(cat: dict, saisons: list, films: list, scans: list) -> dict:
@@ -58,22 +64,29 @@ def _apply_content_filter(cat: dict, saisons: list, films: list, scans: list) ->
 
 def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
     """
-    Filtre le contenu du catalogue selon le profil de l'utilisateur :
-      - Admin          → tout visible
-      - Non authentifié → selon visibility.is_public + public_*
-      - Utilisateur    → permissions directes + groupes (catalogue / genre)
+    Filtre le catalogue selon le profil de l'utilisateur.
+
+    Règles :
+      Admin              → tout le contenu, sans restriction
+      Anonyme            → seulement si is_public=True, contenu limité à public_*
+      Authentifié sans restriction de groupe → idem anonyme (vue publique)
+      Authentifié avec accès explicite (slug dans groupe catalogue ou genre correspondant)
+                         → contenu personnalisé du groupe (cat_content),
+                           ou tout le contenu si cat_content vide
+      Authentifié sans accès explicite à ce catalogue
+                         → si public : vue publique ; si privé : 404
+
+    Les groupes accordent un accès SUPPLÉMENTAIRE aux privés,
+    ils ne retirent PAS l'accès aux catalogues publics.
     """
     from api.dependencies import EffectiveAccess
 
     slug       = cat.get("slug", "")
     visibility = cat.get("visibility", {})
+    is_public  = visibility.get("is_public", False)
 
-    if user and user.get("role") == "admin":
-        return cat
-
-    if user is None:
-        if not visibility.get("is_public", False):
-            raise HTTPException(status_code=404, detail="Not found")
+    # ── Retourne uniquement le contenu autorisé publiquement ──────────────────
+    def _public_view() -> dict:
         return _apply_content_filter(
             cat,
             visibility.get("public_saisons", []),
@@ -81,44 +94,102 @@ def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
             visibility.get("public_scans",   []),
         )
 
-    # Utilisateur authentifié non-admin — utiliser _eff (résolu par get_current_user)
+    # ── Admin — accès total ───────────────────────────────────────────────────
+    if user and user.get("role") == "admin":
+        return cat
+
+    # ── Non authentifié ───────────────────────────────────────────────────────
+    if user is None:
+        if not is_public:
+            raise HTTPException(status_code=404, detail="Not found")
+        return _public_view()
+
+    # ── Utilisateur authentifié non-admin ─────────────────────────────────────
     eff: Optional[EffectiveAccess] = user.get("_eff")
 
     if eff and isinstance(eff, EffectiveAccess):
-        allowed_slugs = eff.allowed_slugs or set()
-        genre_access  = eff.genre_access  or set()
+        allowed_slugs    = eff.allowed_slugs or set()
+        genre_access     = eff.genre_access  or set()
         has_restrictions = bool(allowed_slugs or genre_access)
-        if has_restrictions:
-            cat_genres = {g.lower() for g in cat.get("genres", [])}
-            if slug not in allowed_slugs and not (cat_genres & genre_access):
-                raise HTTPException(status_code=404, detail="Not found")
-        cat_content = (eff.cat_content or {}).get(slug, {})
-    else:
-        # Fallback sans _eff
-        perms        = user.get("permissions", {})
-        allowed_cats = perms.get("allowed_catalogues", [])
-        if allowed_cats and slug not in allowed_cats:
-            raise HTTPException(status_code=404, detail="Not found")
-        cat_content = perms.get("catalogue_content", {}).get(slug, {})
 
-    return _apply_content_filter(
-        cat,
-        cat_content.get("saisons", []),
-        cat_content.get("films",   []),
-        cat_content.get("scans",   []),
-    )
+        if has_restrictions:
+            cat_genres   = {g.lower() for g in cat.get("genres", [])}
+            has_explicit = (slug in allowed_slugs) or bool(cat_genres & genre_access)
+
+            if has_explicit:
+                # Accès explicite via groupe → contenu personnalisé (ou tout si absent)
+                cat_content = (eff.cat_content or {}).get(slug, {})
+                return _apply_content_filter(
+                    cat,
+                    cat_content.get("saisons", []),
+                    cat_content.get("films",   []),
+                    cat_content.get("scans",   []),
+                )
+            else:
+                # Pas d'accès explicite → retomber sur la visibilité publique
+                if not is_public:
+                    raise HTTPException(status_code=404, detail="Not found")
+                return _public_view()
+
+        else:
+            # Aucune restriction de groupe → vue publique uniquement
+            if not is_public:
+                raise HTTPException(status_code=404, detail="Not found")
+            return _public_view()
+
+    else:
+        # Fallback si _eff absent (ne devrait pas arriver avec get_optional_user)
+        perms        = user.get("permissions", {})
+        allowed_cats = set(perms.get("allowed_catalogues", []))
+        if allowed_cats:
+            if slug in allowed_cats:
+                cat_content = perms.get("catalogue_content", {}).get(slug, {})
+                return _apply_content_filter(
+                    cat,
+                    cat_content.get("saisons", []),
+                    cat_content.get("films",   []),
+                    cat_content.get("scans",   []),
+                )
+            if not is_public:
+                raise HTTPException(status_code=404, detail="Not found")
+            return _public_view()
+        else:
+            if not is_public:
+                raise HTTPException(status_code=404, detail="Not found")
+            return _public_view()
 
 
 # ------------------------------------------------------------------
 # Routes fixes (avant les routes dynamiques {slug})
 # ------------------------------------------------------------------
 
-@router.get("/", summary="Liste les catalogues en DB")
-async def lister_db():
+@router.get("/", response_model=list[CatalogueSummary], summary="Liste tous les catalogues (admin)")
+async def lister_db(_: dict = Depends(require_admin)):
+    """Retourne tous les catalogues sans filtrage — réservé aux administrateurs."""
     return await repo.get_all_summary()
 
 
-@router.get("/rechercher", summary="Recherche avec filtres")
+@my_router.get("/", response_model=list[CatalogueSummary],
+               summary="Catalogues accessibles selon l'utilisateur")
+async def lister_accessibles(user: Optional[dict] = Depends(get_optional_user)):
+    """
+    Retourne uniquement les catalogues que l'utilisateur a le droit de voir.
+
+    - Anonyme / utilisateur sans restriction → catalogues avec `is_public = true`
+    - Utilisateur avec groupes/permissions → ses catalogues autorisés (public ou privé)
+    - Admin → utiliser `GET /catalogues/` à la place
+    """
+    cats = await repo.get_visible_summary()
+    result = []
+    for cat in cats:
+        try:
+            result.append(filter_catalogue_for_user(cat, user))
+        except HTTPException:
+            pass  # catalogue non accessible pour cet utilisateur → exclu silencieusement
+    return result
+
+
+@router.get("/rechercher", response_model=list[CatalogueSummary], summary="Recherche avec filtres")
 async def rechercher_catalogue(
     q:     Optional[str] = Query(None, description="Titre (recherche partielle)"),
     type:  Optional[str] = Query(None, description="anime | scan | film | autre"),
@@ -139,7 +210,7 @@ async def rechercher_catalogue(
     return results
 
 
-@router.get("/site/rechercher", summary="Scrape /catalogue/ avec filtres réels anime-sama.to")
+@router.get("/site/rechercher", response_model=list[SiteSearchResult], summary="Scrape /catalogue/ avec filtres réels anime-sama.to")
 async def rechercher_sur_site_route(
     search:        Optional[str] = Query(None,  description="Texte libre"),
     type:          Optional[str] = Query(None,  description="Anime,Scans,Film,Autres (virgule)"),
@@ -171,7 +242,7 @@ async def rechercher_sur_site_route(
     return results
 
 
-@router.get("/sync/status", summary="État de toutes les syncs actives")
+@router.get("/sync/status", response_model=SyncGlobalStatus, summary="État de toutes les syncs actives")
 async def sync_global_status():
     return {
         "active_syncs":   sync_manager.active_syncs(),
@@ -180,7 +251,7 @@ async def sync_global_status():
     }
 
 
-@router.post("/mettre-a-jour-tous", summary="Update tous les catalogues EN_COURS")
+@router.post("/mettre-a-jour-tous", response_model=MessageResponse, summary="Update tous les catalogues EN_COURS")
 async def update_all(background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
     check_can_refresh(user)
     background_tasks.add_task(mettre_a_jour_tous)
@@ -191,7 +262,7 @@ async def update_all(background_tasks: BackgroundTasks, user: dict = Depends(get
 # Routes dynamiques {slug}
 # ------------------------------------------------------------------
 
-@router.get("/{slug}", summary="Catalogue complet")
+@router.get("/{slug}", response_model=Catalogue, summary="Catalogue complet")
 async def obtenir_catalogue(
     slug: str,
     user: Optional[dict] = Depends(get_optional_user),
@@ -216,7 +287,7 @@ async def obtenir_catalogue(
     return filter_catalogue_for_user(catalogue, user)
 
 
-@router.post("/{slug}/rafraichir", summary="Re-scrape la structure")
+@router.post("/{slug}/rafraichir", response_model=Catalogue, summary="Re-scrape la structure")
 async def rafraichir(slug: str, user: dict = Depends(get_current_user)):
     check_can_refresh(user)
     await check_catalogue_access(user, slug)
@@ -226,7 +297,7 @@ async def rafraichir(slug: str, user: dict = Depends(get_current_user)):
     return catalogue
 
 
-@router.post("/{slug}/sync-content/pause", summary="Met la sync en pause")
+@router.post("/{slug}/sync-content/pause", response_model=SlugStatus, summary="Met la sync en pause")
 async def pause_sync(slug: str, user: dict = Depends(get_current_user)):
     check_can_sync(user)
     if not sync_manager.is_active(slug):
@@ -235,7 +306,7 @@ async def pause_sync(slug: str, user: dict = Depends(get_current_user)):
     return {"status": "pausing", "slug": slug}
 
 
-@router.post("/{slug}/sync-content/resume", summary="Reprend une sync en pause")
+@router.post("/{slug}/sync-content/resume", response_model=SlugStatus, summary="Reprend une sync en pause")
 async def resume_sync(slug: str, user: dict = Depends(get_current_user)):
     check_can_sync(user)
     if not sync_manager.is_active(slug):
@@ -244,7 +315,7 @@ async def resume_sync(slug: str, user: dict = Depends(get_current_user)):
     return {"status": "resumed", "slug": slug}
 
 
-@router.delete("/{slug}/sync-content", summary="Annule la sync en cours")
+@router.delete("/{slug}/sync-content", response_model=SlugStatus, summary="Annule la sync en cours")
 async def cancel_sync(slug: str, user: dict = Depends(get_current_user)):
     check_can_sync(user)
     if not sync_manager.is_active(slug):
@@ -253,7 +324,7 @@ async def cancel_sync(slug: str, user: dict = Depends(get_current_user)):
     return {"status": "cancelling", "slug": slug}
 
 
-@router.get("/{slug}/sync-content/status", summary="État de la sync pour ce slug")
+@router.get("/{slug}/sync-content/status", response_model=SyncStatusResponse, summary="État de la sync pour ce slug")
 async def sync_status(slug: str):
     """
     Retourne l'état de synchronisation du catalogue :
@@ -264,7 +335,7 @@ async def sync_status(slug: str):
     return sync_manager.status(slug)
 
 
-@router.post("/{slug}/sync-content", summary="Démarre la sync (HTTP)")
+@router.post("/{slug}/sync-content", response_model=SyncStarted, summary="Démarre la sync (HTTP)")
 async def start_sync_http(slug: str, user: dict = Depends(get_current_user)):
     """
     Démarre la synchronisation de tout le contenu (saisons, films, scans).

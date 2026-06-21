@@ -7,7 +7,7 @@ from utils.logger import logger
 from db.connection import setup_indexes
 import db.ip_bans_repository as ip_bans_repo
 import services.api_guard as api_guard
-from api.routes.catalogues import router as catalogues_router
+from api.routes.catalogues import router as catalogues_router, my_router as mycatalogues_router
 from api.routes.planning import router as planning_router
 from api.routes.auth import router as auth_router
 from api.routes.admin import router as admin_router
@@ -83,18 +83,25 @@ app = FastAPI(
     description=(
         "API de scraping et catalogue pour anime-sama.to.\n\n"
         "## Authentification\n"
-        "Routes protégées : utiliser le bouton **Authorize** avec `username` / `password`.\n\n"
+        "Toutes les routes protégées attendent l'en-tête :\n"
+        "`Authorization: Bearer <token>`\n\n"
+        "Obtenez un token via `POST /auth/login` (utilisateur) "
+        "ou `POST /auth/client-token` (application).\n\n"
         "## Flux d'utilisation\n"
         "1. **Login** : `POST /auth/login`\n"
         "2. **Recherche** : `GET /catalogues/rechercher?q=naruto`\n"
-        "3. **Catalogue** : `GET /catalogues/naruto` (scrape si absent en DB)\n"
-        "4. **Sync** : `POST /catalogues/naruto/sync-content` (authentifié)\n"
+        "3. **Catalogue** : `GET /catalogues/{slug}` (scrape si absent en DB)\n"
+        "4. **Sync** : `POST /catalogues/{slug}/sync-content`\n"
         "5. **Planning** : `GET /planning/`\n"
     ),
+    # Swagger UI désactivé (permet l'exécution de vraies requêtes)
+    # Documentation en lecture seule uniquement via ReDoc
+    docs_url=None,
+    redoc_url="/docs",
     lifespan=lifespan,
 )
 
-_ALWAYS_OPEN = {"/auth/login", "/docs", "/openapi.json", "/redoc", "/"}
+_ALWAYS_OPEN = {"/auth/login", "/docs", "/openapi.json", "/"}
 
 
 @app.middleware("http")
@@ -123,11 +130,13 @@ async def security_middleware(request: Request, call_next):
                     from jose import jwt
                     from params import JWT_SECRET
                     payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-                    sub = payload.get("sub")
-                    if sub:
-                        from db.user_repository import find_by_username
-                        u = await find_by_username(sub)
-                        is_admin = bool(u and u.get("role") == "admin")
+                    # Les tokens client (applications API) ne sont jamais admin
+                    if payload.get("type") != "client":
+                        sub = payload.get("sub")
+                        if sub:
+                            from db.user_repository import find_by_username
+                            u = await find_by_username(sub)
+                            is_admin = bool(u and u.get("role") == "admin")
                 except Exception:
                     pass
             if not is_admin:
@@ -149,6 +158,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(groups_router)
 app.include_router(catalogues_router)
+app.include_router(mycatalogues_router)
 app.include_router(planning_router)
 app.include_router(download_router)
 app.include_router(dl_admin_router)

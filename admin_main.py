@@ -195,7 +195,8 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
 .ep-chip.playable{cursor:pointer;background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.5)}.ep-chip.playable:hover{background:rgba(16,185,129,.32);transform:scale(1.07)}
 .lecteur-pill.playable{cursor:pointer;background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.3);color:var(--info)}.lecteur-pill.playable:hover{background:rgba(56,189,248,.22)}
 .btn-danger{background:rgba(244,63,94,.15);color:var(--er);border:1px solid rgba(244,63,94,.35)}.btn-danger:hover{background:rgba(244,63,94,.28);border-color:var(--er)}
-#bulk-del-btn{display:none}
+#bulk-bar{display:none;gap:.4rem;align-items:center;flex-wrap:wrap}
+#bulk-bar .bulk-count{font-size:.78rem;color:var(--mu);white-space:nowrap;padding:0 .25rem}
 /* Player modal */
 #m-player .mbox{max-width:960px;height:85vh}
 #mp-frame-wrap{flex:1;background:#000;position:relative;min-height:200px}
@@ -407,7 +408,12 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           <select id="cf-etat" onchange="filterCats()"><option value="">Tout état</option><option value="en_cours">En cours</option><option value="termine">Terminé</option><option value="abandonne">Abandonné</option></select>
           <select id="cf-sync" onchange="filterCats()"><option value="">Toute sync</option><option value="no">Non synchronisé</option><option value="yes">Synchronisé</option></select>
           <select id="cf-genre" onchange="filterCats()"><option value="">Tous les genres</option></select>
-          <button id="bulk-del-btn" class="btn btn-danger btn-sm" onclick="openDeleteSelected()">🗑 Supprimer la sélection (<span id="bulk-del-count">0</span>)</button>
+          <div id="bulk-bar">
+            <span class="bulk-count"><span id="bulk-sel-count">0</span> sélectionné(s)</span>
+            <button class="btn btn-warn btn-sm"      onclick="openRefreshSelected()">↺ Rafraîchir</button>
+            <button class="btn btn-secondary btn-sm" onclick="openBlockSelected()">🔒 Rendre privé</button>
+            <button class="btn btn-danger btn-sm"    onclick="openDeleteSelected()">🗑 Supprimer</button>
+          </div>
         </div>
         <div class="dtw"><table class="dt">
           <thead><tr><th style="width:32px"><input type="checkbox" id="ct-chk-all" title="Tout sélectionner" onchange="selectAllCats(this)"></th><th>Catalogue</th><th>Type</th><th>Contenu</th><th>État</th><th>Sync</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
@@ -833,6 +839,21 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
   </div>
 </div>
 
+<!-- Modale confirmation action groupée (refresh / rendre privé) -->
+<div class="mbk" id="m-bulk-confirm" style="display:none" onclick="if(event.target===this)cm('m-bulk-confirm')">
+  <div class="mbox sm">
+    <div class="mhd"><h3 id="mbc-title">Confirmer</h3><button class="btn btn-ghost btn-icon" onclick="cm('m-bulk-confirm')">✕</button></div>
+    <div class="mbd">
+      <p id="mbc-text" style="color:var(--tx);line-height:1.6;margin-bottom:.6rem"></p>
+      <div class="alert" id="mbc-alert" style="display:none"></div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-secondary" onclick="cm('m-bulk-confirm')">Annuler</button>
+      <button id="mbc-ok-btn" class="btn btn-primary" onclick="if(_bulkPendingFn)_bulkPendingFn()">Confirmer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal lecteur vidéo -->
 <div class="mbk" id="m-player" style="display:none" onclick="if(event.target===this)closePlayer()">
   <div class="mbox" style="max-width:960px;height:85vh;display:flex;flex-direction:column">
@@ -1163,7 +1184,7 @@ function copyText(txt,msg){navigator.clipboard.writeText(txt).then(()=>toast(msg
 function om(id){document.getElementById(id).style.display='flex';}
 function cm(id){document.getElementById(id).style.display='none';}
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('m-player').style.display!=='none'){closePlayer();return;}['m-user','m-access','m-dl-perm','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block','m-del-cat','m-dl-quota'].forEach(cm);}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('m-player').style.display!=='none'){closePlayer();return;}['m-user','m-access','m-dl-perm','m-add','m-detail','m-content','m-vis','m-client','m-clt-access','m-schedule','m-block','m-del-cat','m-dl-quota','m-bulk-confirm'].forEach(cm);}});
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 document.getElementById('lp').onkeydown=e=>{if(e.key==='Enter')doLogin();};
@@ -1532,9 +1553,9 @@ function selectAllCats(cb){
 }
 function updateCatBulkBtn(){
   const n=document.querySelectorAll('.ct-sel:checked').length;
-  const btn=document.getElementById('bulk-del-btn');
-  btn.style.display=n?'':'none';
-  document.getElementById('bulk-del-count').textContent=n;
+  const bar=document.getElementById('bulk-bar');
+  bar.style.display=n?'flex':'none';
+  document.getElementById('bulk-sel-count').textContent=n;
   const allCb=document.getElementById('ct-chk-all');
   const total=document.querySelectorAll('.ct-sel').length;
   if(allCb) allCb.indeterminate=n>0&&n<total,allCb.checked=n===total&&total>0;
@@ -1556,14 +1577,77 @@ function openDeleteSelected(){
 async function confirmDeleteCats(){
   if(!_delCatSlugs.length)return;
   cm('m-del-cat');
-  let ok=0,er=0;
-  for(const slug of _delCatSlugs){
-    try{await api('DELETE',`/admin/api/catalogues/${slug}`);ok++;}
-    catch(e){er++;toast(`Erreur suppression ${slug}: ${e}`,'er');}
-  }
-  if(ok)toast(`${ok} catalogue${ok>1?'s':''} supprimé${ok>1?'s':''}`, 'ok');
+  try{
+    const r=await api('POST','/admin/api/catalogues/bulk-delete',{slugs:_delCatSlugs});
+    if(r.ok?.length) toast(`${r.ok.length} catalogue${r.ok.length>1?'s':''} supprimé${r.ok.length>1?'s':''}`, 'ok');
+    const errCount=Object.keys(r.errors||{}).length;
+    if(errCount) toast(`${errCount} erreur${errCount>1?'s':''}`, 'er');
+  }catch(e){toast(String(e),'er');}
   _delCatSlugs=[];
   await loadCats();
+}
+
+// ─── Actions groupées partagées ───────────────────────────────────────────
+let _bulkPendingFn=null;
+
+function _openBulkConfirm(title,text,alertMsg,alertClass,btnText,btnClass,action){
+  _bulkPendingFn=action;
+  document.getElementById('mbc-title').textContent=title;
+  document.getElementById('mbc-text').innerHTML=text;
+  const al=document.getElementById('mbc-alert');
+  if(alertMsg){al.className='alert '+alertClass;al.textContent=alertMsg;al.style.display='';}
+  else{al.style.display='none';}
+  const okBtn=document.getElementById('mbc-ok-btn');
+  okBtn.textContent=btnText;okBtn.className='btn '+btnClass;
+  om('m-bulk-confirm');
+}
+
+function _selectedSlugs(){return[...document.querySelectorAll('.ct-sel:checked')].map(c=>c.value);}
+function _slugNames(slugs){return slugs.map(s=>{const c=allCats.find(x=>x.slug===s);return esc(c?.nom||s);});}
+
+function openRefreshSelected(){
+  const slugs=_selectedSlugs();
+  if(!slugs.length){toast('Aucun catalogue sélectionné','wa');return;}
+  const names=_slugNames(slugs);
+  _openBulkConfirm(
+    'Rafraîchir les catalogues',
+    `Rafraîchir ${slugs.length} catalogue${slugs.length>1?'s':''} ?<br><span style="font-size:.8rem;color:var(--mu)">${names.map(n=>`• ${n}`).join('<br>')}</span>`,
+    'Le scraping peut prendre quelques secondes par catalogue.','a-info',
+    '↺ Rafraîchir','btn-warn',
+    async()=>{
+      cm('m-bulk-confirm');_bulkPendingFn=null;
+      toast(`Rafraîchissement de ${slugs.length} catalogue${slugs.length>1?'s':''}…`,'info');
+      try{
+        const r=await api('POST','/admin/api/catalogues/bulk-rafraichir',{slugs});
+        if(r.ok?.length) toast(`${r.ok.length} catalogue${r.ok.length>1?'s':''} rafraîchi${r.ok.length>1?'s':''}`, 'ok');
+        const errCount=Object.keys(r.errors||{}).length;
+        if(errCount) toast(`${errCount} erreur${errCount>1?'s':''}`, 'er');
+        await loadCats();
+      }catch(e){toast(String(e),'er');}
+    }
+  );
+}
+
+function openBlockSelected(){
+  const slugs=_selectedSlugs();
+  if(!slugs.length){toast('Aucun catalogue sélectionné','wa');return;}
+  const names=_slugNames(slugs);
+  _openBulkConfirm(
+    'Rendre privé',
+    `Rendre ${slugs.length} catalogue${slugs.length>1?'s':''} privé${slugs.length>1?'s':''} ?<br><span style="font-size:.8rem;color:var(--mu)">${names.map(n=>`• ${n}`).join('<br>')}</span>`,
+    'Les utilisateurs non connectés ne pourront plus accéder à ces catalogues.','a-wa',
+    '🔒 Rendre privé','btn-secondary',
+    async()=>{
+      cm('m-bulk-confirm');_bulkPendingFn=null;
+      try{
+        const r=await api('PUT','/admin/api/catalogues/bulk-visibility',{slugs,is_public:false});
+        if(r.ok?.length) toast(`${r.ok.length} catalogue${r.ok.length>1?'s':''} rendu${r.ok.length>1?'s':''} privé${r.ok.length>1?'s':''}`, 'ok');
+        const errCount=Object.keys(r.errors||{}).length;
+        if(errCount) toast(`${errCount} erreur${errCount>1?'s':''}`, 'er');
+        await loadCats();
+      }catch(e){toast(String(e),'er');}
+    }
+  );
 }
 
 // ─── Lecteur vidéo ───────────────────────────────────────────────────────
@@ -1938,7 +2022,7 @@ function toggleCItem(id){document.getElementById(id).classList.toggle('open');}
 // ─── Visibilité ────────────────────────────────────────────────────────────
 function openVis(slug){
   visSlug=slug;const cat=allCats.find(c=>c.slug===slug);
-  const v=cat.visibility||{is_public:true,public_saisons:[],public_films:[],public_scans:[]};
+  const v=cat.visibility||{is_public:false,public_saisons:[],public_films:[],public_scans:[]};
   document.getElementById('mv-title').textContent=`Visibilité — ${cat.nom}`;
   const sec=(key,label,items)=>{if(!items?.length)return'';const al=v['public_'+key]||[],ia=al.length===0;
     return `<div class="cs" style="margin-bottom:.65rem"><label>${label}</label><div class="pills"><label class="pill"><input type="checkbox" id="va-${key}" ${ia?'checked':''} onchange="onVisAll('${key}')">✓ Tous</label>${items.map(i=>`<label class="pill"><input type="checkbox" class="vi" data-type="${key}" value="${esc(i.slug)}" ${(ia||al.includes(i.slug))?'checked':''}>${esc(i.nom||i.slug)}${i.lang?` <span style="opacity:.55">(${i.lang})</span>`:''}</label>`).join('')}</div></div>`;};

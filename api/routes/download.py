@@ -45,6 +45,7 @@ import db.repository as repo
 from api.dependencies import _validate_token, _enrich_user, require_admin
 from services import downloader
 from utils.logger import logger
+from models.responses import JobCreated, JobStatus, DownloadRecord, DlQuota, OkResponse
 
 router       = APIRouter(prefix="/api/download", tags=["Téléchargement"])
 admin_router = APIRouter(prefix="/admin",        tags=["Téléchargement (admin)"])
@@ -214,7 +215,7 @@ async def _run_job(job: _Job) -> None:
 
 # ══ Routes jobs ════════════════════════════════════════════════════════════════
 
-@router.post("/jobs", status_code=202, summary="Créer un job de téléchargement")
+@router.post("/jobs", response_model=JobCreated, status_code=202, summary="Créer un job de téléchargement")
 async def create_job(
     body:       dict,
     background: BackgroundTasks,
@@ -339,7 +340,7 @@ async def create_job(
     }
 
 
-@router.get("/jobs/{job_id}", summary="Statut d'un job")
+@router.get("/jobs/{job_id}", response_model=JobStatus, summary="Statut d'un job")
 async def job_status(job_id: str, user: dict = Depends(_get_dl_user)):
     job = _get_job(job_id, user.get("username", "?"))
     return {
@@ -396,17 +397,17 @@ async def delete_job(job_id: str, user: dict = Depends(_get_dl_user)):
 
 # ══ Routes admin ══════════════════════════════════════════════════════════════
 
-@admin_router.get("/api/downloads", summary="Historique des téléchargements")
+@admin_router.get("/api/downloads", response_model=list[DownloadRecord], summary="Historique des téléchargements")
 async def list_downloads(limit: int = 200, _: dict = Depends(require_admin)):
     return await dl_repo.list_recent(limit)
 
 
-@admin_router.get("/api/dl-quotas", summary="Liste des quotas configurés")
+@admin_router.get("/api/dl-quotas", response_model=list[DlQuota], summary="Liste des quotas configurés")
 async def list_quotas(_: dict = Depends(require_admin)):
     return await dl_repo.list_quotas()
 
 
-@admin_router.put("/api/dl-quotas/{username}", summary="Configurer le quota d'un utilisateur")
+@admin_router.put("/api/dl-quotas/{username}", response_model=DlQuota, summary="Configurer le quota d'un utilisateur")
 async def set_quota(username: str, body: dict, _: dict = Depends(require_admin)):
     max_files = int(body.get("max_files_per_day", 20))
     max_gb    = float(body.get("max_gb_per_day", 10.0))

@@ -200,8 +200,10 @@ async def get_optional_user(
     try:
         user = await _validate_token(token)
         return await _enrich_user(user)
-    except HTTPException:
-        return None
+    except HTTPException as e:
+        if e.status_code == 403:
+            raise  # compte bloqué → propager l'erreur (ne pas traiter comme anonyme)
+        return None  # token invalide/expiré → traiter comme anonyme
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:

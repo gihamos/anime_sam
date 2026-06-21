@@ -6,11 +6,12 @@ GET /planning/   → planning de la semaine en cours
 
 from fastapi import APIRouter, HTTPException
 from services.scraper import get_planning
+from models.responses import PlanningJour
 
 router = APIRouter(prefix="/planning", tags=["Planning"])
 
 
-@router.get("/", summary="Planning de la semaine")
+@router.get("/", response_model=list[PlanningJour], summary="Planning de la semaine")
 async def get_planning_route():
     """
     Retourne le planning de diffusion de la semaine en cours.
