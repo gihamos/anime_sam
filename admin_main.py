@@ -559,7 +559,10 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
         <div id="pt-history" class="ptab-content">
           <div class="section-hd" style="margin-top:.25rem">
             <h2>🕒 Historique des synchronisations</h2>
-            <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualiser</button>
+            <div style="display:flex;gap:.4rem">
+              <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualiser</button>
+              <button class="btn btn-danger btn-sm" onclick="clearSyncHistory()">🗑 Vider</button>
+            </div>
           </div>
           <div class="fbar" style="margin-bottom:.65rem">
             <input id="hq" placeholder="🔍 Filtrer par slug…" oninput="filterHistory()">
@@ -590,7 +593,10 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
         <div id="dl-history" class="ptab-content active">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
             <span style="font-size:.82rem;color:var(--mu)">Derniers téléchargements (200 max)</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadDlHistory()">↺ Actualiser</button>
+            <div style="display:flex;gap:.4rem">
+              <button class="btn btn-secondary btn-sm" onclick="loadDlHistory()">↺ Actualiser</button>
+              <button class="btn btn-danger btn-sm" onclick="clearDlHistory()">🗑 Vider</button>
+            </div>
           </div>
           <div class="dtw"><table class="dt">
             <thead><tr><th>Utilisateur</th><th>Catalogue</th><th>Type</th><th>Fichiers</th><th>Taille</th><th>Détails</th><th>Date</th></tr></thead>
@@ -1801,6 +1807,14 @@ async function loadDlHistory(){
     </tr>`).join('');
   }catch(e){document.getElementById('dl-htbody').innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">⚠</div>${esc(String(e))}</div></td></tr>`;}
 }
+async function clearDlHistory(){
+  if(!confirm('Vider tout l\'historique des téléchargements ? Cette action est irréversible.'))return;
+  try{
+    const r=await api('DELETE','/admin/api/downloads');
+    toast(`Historique vidé (${r.deleted} entrée${r.deleted!==1?'s':''} supprimée${r.deleted!==1?'s':''})`, 'ok');
+    await loadDlHistory();
+  }catch(e){toast(String(e),'er');}
+}
 function _fmtSize(b){
   if(b>=1073741824)return(b/1073741824).toFixed(1)+' Go';
   if(b>=1048576)   return(b/1048576).toFixed(1)+' Mo';
@@ -2855,6 +2869,14 @@ async function runScheduleNow(sid,slug){
 async function loadHistory(){
   try{allHistory=await api('GET','/admin/api/history');filterHistory();}
   catch(e){toast(String(e),'er');}
+}
+async function clearSyncHistory(){
+  if(!confirm('Vider tout l\'historique des synchronisations ? Cette action est irréversible.'))return;
+  try{
+    const r=await api('DELETE','/admin/api/history');
+    toast(`Historique vidé (${r.deleted} entrée${r.deleted!==1?'s':''} supprimée${r.deleted!==1?'s':''})`, 'ok');
+    allHistory=[];filterHistory();
+  }catch(e){toast(String(e),'er');}
 }
 function filterHistory(){
   const q=document.getElementById('hq').value.toLowerCase(),st=document.getElementById('hf-status').value,tr=document.getElementById('hf-trig').value;

@@ -402,6 +402,27 @@ async def list_downloads(limit: int = 200, _: dict = Depends(require_admin)):
     return await dl_repo.list_recent(limit)
 
 
+@admin_router.delete("/api/downloads", status_code=200,
+                     summary="Vider tout l'historique des téléchargements")
+async def clear_all_downloads(_: dict = Depends(require_admin)):
+    count = await dl_repo.delete_all()
+    return {"deleted": count}
+
+
+@admin_router.delete("/api/downloads/user/{username}", status_code=200,
+                     summary="Supprimer l'historique d'un utilisateur")
+async def clear_downloads_by_user(username: str, _: dict = Depends(require_admin)):
+    count = await dl_repo.delete_by_username(username)
+    return {"deleted": count, "username": username}
+
+
+@admin_router.delete("/api/downloads/catalogue/{slug}", status_code=200,
+                     summary="Supprimer l'historique d'un catalogue")
+async def clear_downloads_by_catalogue(slug: str, _: dict = Depends(require_admin)):
+    count = await dl_repo.delete_by_slug(slug)
+    return {"deleted": count, "slug": slug}
+
+
 @admin_router.get("/api/dl-quotas", response_model=list[DlQuota], summary="Liste des quotas configurés")
 async def list_quotas(_: dict = Depends(require_admin)):
     return await dl_repo.list_quotas()

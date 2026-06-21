@@ -545,3 +545,15 @@ async def get_history(_: dict = Depends(require_admin)):
 @router.get("/api/history/{slug}", summary="Historique d'un catalogue (admin)")
 async def get_history_for_slug(slug: str, _: dict = Depends(require_admin)):
     return await history_repo.get_for_slug(slug, limit=30)
+
+
+@router.delete("/api/history", status_code=200, summary="Vider tout l'historique des syncs")
+async def clear_all_history(_: dict = Depends(require_admin)):
+    count = await history_repo.delete_all()
+    return {"deleted": count}
+
+
+@router.delete("/api/history/{slug}", status_code=200, summary="Supprimer l'historique d'un catalogue")
+async def clear_history_for_slug(slug: str, _: dict = Depends(require_admin)):
+    count = await history_repo.delete_by_slug(slug)
+    return {"deleted": count, "slug": slug}

@@ -107,6 +107,23 @@ async def list_quotas() -> list[dict]:
     return await cursor.to_list(None)
 
 
+# ── Suppression historique ───────────────────────────────────────────────────
+
+async def delete_all() -> int:
+    r = await _hist().delete_many({})
+    return r.deleted_count
+
+
+async def delete_by_username(username: str) -> int:
+    r = await _hist().delete_many({"username": username})
+    return r.deleted_count
+
+
+async def delete_by_slug(slug: str) -> int:
+    r = await _hist().delete_many({"slug": slug})
+    return r.deleted_count
+
+
 # ── Vérification ──────────────────────────────────────────────────────────────
 
 async def check(username: str, nb_files: int = 1) -> tuple[bool, str]:
