@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <title>Anime Sama</title>
+</head>
+<body>
+<div data-role="page" class="ui-page-theme-a page" id="AnimeSamaConfigPage">
+    <div data-role="content">
+        <div class="verticalSection">
+            <div class="sectionTitleContainer sectionTitleContainerFlex">
+                <h2 class="sectionTitle">Anime Sama — Configuration</h2>
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="apiUrl">URL de l'API</label>
+                <input id="apiUrl" type="text" is="emby-input" placeholder="http://192.168.1.x:8000" />
+                <div class="fieldDescription">Adresse du serveur Anime Sama (sans slash final)</div>
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="username">Nom d'utilisateur</label>
+                <input id="username" type="text" is="emby-input" />
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="password">Mot de passe</label>
+                <input id="password" type="password" is="emby-input" />
+            </div>
+
+            <div>
+                <button is="emby-button" type="submit" class="raised button-submit block emby-button" onclick="AnimeSamaConfig.save()">
+                    <span>Sauvegarder</span>
+                </button>
+            </div>
+
+            <div id="saveMessage" style="display:none; margin-top:1em; color: var(--theme-button-flat-focused);">
+                Configuration sauvegardée. Redémarrez Jellyfin pour appliquer les changements.
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        const PLUGIN_ID = 'a4b1c2d3-e4f5-6789-abcd-ef0123456789';
+
+        const AnimeSamaConfig = {
+            load: function () {
+                ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
+                    document.getElementById('apiUrl').value = config.ApiUrl || '';
+                    document.getElementById('username').value = config.Username || '';
+                    document.getElementById('password').value = config.Password || '';
+                });
+            },
+
+            save: function () {
+                ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
+                    config.ApiUrl = document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
+                    config.Username = document.getElementById('username').value.trim();
+                    config.Password = document.getElementById('password').value;
+
+                    ApiClient.updatePluginConfiguration(PLUGIN_ID, config).then(function () {
+                        document.getElementById('saveMessage').style.display = 'block';
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    });
+                });
+            }
+        };
+
+        document.getElementById('AnimeSamaConfigPage').addEventListener('pageshow', function () {
+            AnimeSamaConfig.load();
+        });
+    </script>
+</div>
+</body>
+</html>

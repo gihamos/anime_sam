@@ -32,7 +32,9 @@
       "Bash(curl -s http://localhost:8000/)",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('name:', d.get\\('name'\\)\\); print\\('version:', d.get\\('version'\\)\\); [print\\(k,':', v\\) for k,v in d.get\\('dependencies',{}\\).items\\(\\)]\")",
       "Bash(npx eas-cli *)",
-      "Bash(npx eas *)"
+      "Bash(npx eas *)",
+      "Bash(dotnet --version)",
+      "PowerShell(dotnet --version)"
     ]
   }
 }
