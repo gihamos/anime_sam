@@ -1,6 +1,6 @@
 # Anime Sama — Application Mobile
 
-> Client mobile officiel de l'API Anime Sama.  
+> Client mobile  non officiel de l'API Anime Sama.  
 > Parcourez, lisez et téléchargez votre catalogue d'animés, films et scans — même hors ligne.
 
 ![React Native](https://img.shields.io/badge/React_Native-0.81-61dafb?logo=react&logoColor=white)
