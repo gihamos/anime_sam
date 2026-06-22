@@ -30,7 +30,9 @@
       "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; $out = npx tsc --noEmit 2>&1; $out | Where-Object { $_ -match \"downloads|scan-reader|slug|useDownloads|downloadStore|scanReader|ScanPanel\" } | Select-Object -First 30)",
       "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; $out = npx tsc --noEmit 2>&1; $out | ForEach-Object { $_ } | Select-Object -First 80)",
       "Bash(curl -s http://localhost:8000/)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('name:', d.get\\('name'\\)\\); print\\('version:', d.get\\('version'\\)\\); [print\\(k,':', v\\) for k,v in d.get\\('dependencies',{}\\).items\\(\\)]\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('name:', d.get\\('name'\\)\\); print\\('version:', d.get\\('version'\\)\\); [print\\(k,':', v\\) for k,v in d.get\\('dependencies',{}\\).items\\(\\)]\")",
+      "Bash(npx eas-cli *)",
+      "Bash(npx eas *)"
     ]
   }
 }

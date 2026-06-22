@@ -29,7 +29,8 @@
       "permissions": [
         "INTERNET",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -50,6 +51,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "scheme": "animesama"
+    "scheme": "animesama",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fde226df-ae02-469a-8a39-e448a90f019a"
+      }
+    },
+    "owner": "gihamos"
   }
 }
