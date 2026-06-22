@@ -532,3 +532,6 @@ anime_sam/
 ## Licence
 
 Usage privé. Projet non officiel, sans affiliation avec anime-sama.to.
+
+##  Auteur
+Développé par Taïse De Thèse NGANGA YABIE
