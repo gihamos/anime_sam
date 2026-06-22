@@ -148,7 +148,7 @@ async def security_middleware(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{ADMIN_PORT}", f"http://127.0.0.1:{ADMIN_PORT}"],
+    allow_origins=[f"http://localhost:{ADMIN_PORT}", f"http://127.0.0.1:8082","http://localhost:8082","http://10.237.9.204:8082"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
