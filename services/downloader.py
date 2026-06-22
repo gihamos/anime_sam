@@ -125,6 +125,75 @@ async def download_to_file(
     )
 
 
+def _resolve_sync(embed_url: str) -> dict:
+    """Résout une URL embed en URL de stream directe via yt-dlp (sans télécharger)."""
+    opts = {
+        **_YDL_BASE,
+        # On préfère un flux unique (vidéo + audio dans un seul fichier)
+        # pour éviter d'avoir à merger côté Jellyfin
+        "format": "best[ext=mp4]/best[ext=m3u8]/bestvideo[ext=mp4]+bestaudio/best",
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(embed_url, download=False)
+
+    if not info:
+        raise ValueError("Impossible d'extraire l'URL de stream")
+
+    title    = info.get("title", "")
+    duration = info.get("duration")
+
+    def _pick_headers(d: dict) -> dict:
+        raw = d.get("http_headers", {})
+        # On garde seulement les headers utiles pour la lecture (pas user-agent, etc.)
+        keep = {"Referer", "Origin", "Cookie"}
+        return {k: v for k, v in raw.items() if k in keep}
+
+    # ── Formats mergés (video + audio séparés) ─────────────────────────────────
+    req = info.get("requested_formats")
+    if req:
+        video = next((f for f in req if f.get("vcodec", "none") != "none"), None)
+        audio = next(
+            (f for f in req if f.get("acodec", "none") != "none"
+             and f.get("vcodec", "none") == "none"),
+            None,
+        )
+        return {
+            "url":       video["url"] if video else None,
+            "audio_url": audio["url"] if audio else None,
+            "ext":       video.get("ext", "mp4") if video else "mp4",
+            "protocol":  video.get("protocol", "https") if video else "https",
+            "headers":   _pick_headers(video) if video else {},
+            "title":     title,
+            "duration":  duration,
+            "merged":    True,
+        }
+
+    # ── Flux unique (HLS, DASH, MP4 direct) ───────────────────────────────────
+    url = info.get("url")
+    if not url:
+        raise ValueError("Aucune URL de stream trouvée")
+
+    proto = info.get("protocol", "https")
+    ext   = "m3u8" if "m3u8" in proto else info.get("ext", "mp4")
+
+    return {
+        "url":       url,
+        "audio_url": None,
+        "ext":       ext,
+        "protocol":  proto,
+        "headers":   _pick_headers(info),
+        "title":     title,
+        "duration":  duration,
+        "merged":    False,
+    }
+
+
+async def resolve_stream_url(embed_url: str) -> dict:
+    """Résout une URL embed en URL de stream directe (async wrapper, thread pool)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _resolve_sync, embed_url)
+
+
 async def build_zip(
     items:            list[dict],
     zip_path:         Path,

@@ -15,6 +15,7 @@ from api.routes.admin import router as admin_router
 from api.routes.groups import router as groups_router
 from api.routes.download import router as download_router, admin_router as dl_admin_router
 from api.routes.scan_download import router as scan_dl_router, admin_router as scan_dl_admin_router
+from api.routes.stream import router as stream_router
 from services.catalogue_service import mettre_a_jour_tous
 from services.scheduler_service import scheduler, load_schedules_from_db
 from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT
@@ -198,6 +199,7 @@ app.include_router(download_router)
 app.include_router(dl_admin_router)
 app.include_router(scan_dl_router)
 app.include_router(scan_dl_admin_router)
+app.include_router(stream_router)
 
 
 @app.get("/", tags=["Root"])
