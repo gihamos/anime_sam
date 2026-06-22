@@ -28,6 +28,7 @@ class UserPermissions(BaseModel):
     can_sync:           bool        = False
     can_delete:         bool        = False
     can_refresh:        bool        = False
+    can_download:       bool        = False
     allowed_catalogues: list[str]   = Field(default_factory=list)
     catalogue_content:  dict        = Field(default_factory=dict)
     quota:              QuotaConfig = Field(default_factory=QuotaConfig)
@@ -44,6 +45,7 @@ class UserInDB(BaseModel):
     blocked_until:   Optional[str]   = None   # ISO datetime ou None (permanent)
     permissions:     UserPermissions = Field(default_factory=UserPermissions)
     groups:          list[str]       = Field(default_factory=list)   # IDs de groupes
+    favoris:         list[str]       = Field(default_factory=list)   # slugs des catalogues favoris
     oidc_sub:        Optional[str]   = None   # subject OIDC (ex : "1234567890")
     oidc_provider:   Optional[str]   = None   # "google" | "github" | "custom"
 

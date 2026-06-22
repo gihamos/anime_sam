@@ -109,6 +109,20 @@ async def get_all_summary() -> list[dict]:
     return [_clean(d) async for d in cursor]
 
 
+async def get_reco_candidates() -> list[dict]:
+    """Champs pour le moteur de recommandations (inclut image, annee, note, visibility)."""
+    cursor = _col().find(
+        {},
+        {
+            "slug": 1, "nom": 1, "image": 1, "genres": 1,
+            "type_contenu": 1, "etat": 1, "annee": 1,
+            "langue": 1, "note": 1, "updated_at": 1,
+            "visibility": 1,
+        }
+    )
+    return [_clean(d) async for d in cursor]
+
+
 async def get_visible_summary() -> list[dict]:
     """
     Résumé complet avec visibilité, structure saisons/films/scans,

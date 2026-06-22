@@ -33,3 +33,24 @@ async def list_users() -> list[dict]:
 
 async def count_users() -> int:
     return await _col().count_documents({})
+
+
+# ─── Favoris ─────────────────────────────────────────────────────────────────
+
+async def get_favoris(username: str) -> list[str]:
+    doc = await _col().find_one({"username": username}, {"_id": 0, "favoris": 1})
+    return doc.get("favoris", []) if doc else []
+
+
+async def add_favori(username: str, slug: str) -> None:
+    await _col().update_one(
+        {"username": username},
+        {"$addToSet": {"favoris": slug}},
+    )
+
+
+async def remove_favori(username: str, slug: str) -> None:
+    await _col().update_one(
+        {"username": username},
+        {"$pull": {"favoris": slug}},
+    )

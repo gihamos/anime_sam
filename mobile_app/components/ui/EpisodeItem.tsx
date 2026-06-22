@@ -11,37 +11,23 @@ interface Props {
 
 export default function EpisodeItem({ episode, onPlay }: Props) {
   const [expanded, setExpanded] = React.useState(false);
-
-  const groupedVideos = episode.videos.reduce<Record<string, Video[]>>((acc, v) => {
-    const lang = v.langue || 'inconnu';
-    if (!acc[lang]) acc[lang] = [];
-    acc[lang].push(v);
-    return acc;
-  }, {});
-
-  const langColors: Record<string, string> = {
-    vf: Colors.vf,
-    vostfr: Colors.vostfr,
-    vo: Colors.vo,
-  };
+  const hasVideos = episode.videos && episode.videos.length > 0;
 
   return (
     <View style={styles.container}>
       <Pressable style={styles.header} onPress={() => setExpanded(!expanded)}>
         <View style={styles.epInfo}>
           <Text style={styles.epNum}>Épisode {episode.numero}</Text>
-          {episode.titre && <Text style={styles.epTitle} numberOfLines={1}>{episode.titre}</Text>}
+          {episode.titre && (
+            <Text style={styles.epTitle} numberOfLines={1}>{episode.titre}</Text>
+          )}
         </View>
         <View style={styles.right}>
-          <View style={styles.langTags}>
-            {Object.keys(groupedVideos).map((lang) => (
-              <View key={lang} style={[styles.langTag, { backgroundColor: (langColors[lang] || Colors.primary) + '33' }]}>
-                <Text style={[styles.langText, { color: langColors[lang] || Colors.primary }]}>
-                  {lang.toUpperCase()}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {hasVideos && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{episode.videos.length}</Text>
+            </View>
+          )}
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={16}
@@ -52,22 +38,23 @@ export default function EpisodeItem({ episode, onPlay }: Props) {
 
       {expanded && (
         <View style={styles.videoList}>
-          {Object.entries(groupedVideos).map(([lang, videos]) => (
-            <View key={lang}>
-              <Text style={styles.langLabel}>{lang.toUpperCase()}</Text>
-              {videos.map((video, idx) => (
-                <Pressable
-                  key={idx}
-                  style={styles.videoItem}
-                  onPress={() => onPlay(video, episode)}
-                >
-                  <Ionicons name="play-circle" size={20} color={langColors[lang] || Colors.primary} />
-                  <Text style={styles.playerName}>{video.player}</Text>
-                  <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} />
-                </Pressable>
-              ))}
-            </View>
-          ))}
+          {!hasVideos ? (
+            <Text style={styles.noVideos}>
+              Aucun lecteur disponible — synchronisez d'abord cet anime.
+            </Text>
+          ) : (
+            episode.videos.map((video, idx) => (
+              <Pressable
+                key={idx}
+                style={styles.videoItem}
+                onPress={() => onPlay(video, episode)}
+              >
+                <Ionicons name="play-circle" size={20} color={Colors.primary} />
+                <Text style={styles.playerName}>{video.lecteur || `Lecteur ${idx + 1}`}</Text>
+                <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} />
+              </Pressable>
+            ))
+          )}
         </View>
       )}
     </View>
@@ -87,9 +74,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
-  epInfo: {
-    flex: 1,
-  },
+  epInfo: { flex: 1 },
   epNum: {
     color: Colors.text,
     fontSize: FontSize.md,
@@ -105,37 +90,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  langTags: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  langTag: {
-    paddingHorizontal: 6,
+  countBadge: {
+    backgroundColor: Colors.primary + '33',
+    borderRadius: Radius.full,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: Radius.sm,
   },
-  langText: {
-    fontSize: 10,
+  countText: {
+    color: Colors.primary,
+    fontSize: FontSize.xs,
     fontWeight: '700',
   },
   videoList: {
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     padding: Spacing.md,
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
-  langLabel: {
+  noVideos: {
     color: Colors.textMuted,
-    fontSize: FontSize.xs,
-    fontWeight: '700',
-    marginBottom: Spacing.xs,
-    letterSpacing: 1,
+    fontSize: FontSize.sm,
+    fontStyle: 'italic',
   },
   videoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: Spacing.sm,
     gap: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   playerName: {
     flex: 1,

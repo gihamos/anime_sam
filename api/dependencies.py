@@ -18,7 +18,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
-from params import JWT_SECRET, JWT_EXPIRE_MINUTES
+from params import JWT_SECRET, JWT_EXPIRE_MINUTES, JWT_REFRESH_EXPIRE_DAYS
 
 ALGORITHM     = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -39,6 +39,25 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
     return jwt.encode({"sub": username, "exp": expire}, JWT_SECRET, algorithm=ALGORITHM)
+
+
+def create_refresh_token(username: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_EXPIRE_DAYS)
+    return jwt.encode(
+        {"sub": username, "type": "refresh", "exp": expire},
+        JWT_SECRET, algorithm=ALGORITHM,
+    )
+
+
+def decode_refresh_token(token: str) -> Optional[str]:
+    """Valide un refresh token et retourne le username, ou None si invalide."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 
 def create_client_token(client_id: str) -> str:
@@ -163,6 +182,9 @@ async def _validate_token(token: str) -> dict:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         subject = payload.get("sub")
         if not subject:
+            raise exc
+        # Un refresh token ne peut pas être utilisé comme access token
+        if payload.get("type") == "refresh":
             raise exc
     except JWTError:
         raise exc

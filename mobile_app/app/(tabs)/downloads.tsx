@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,275 +6,331 @@ import {
   FlatList,
   Pressable,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
-import { downloadApi } from '@/services/api';
-import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthStore } from '@/stores/authStore';
-import { DownloadJob } from '@/types';
-import * as Linking from 'expo-linking';
+import { useDownloadStore } from '@/stores/downloadStore';
+import { usePlayerStore } from '@/stores/playerStore';
+import { useJobPoller, deleteLocalFile, formatSpeed, formatEta } from '@/hooks/useDownloads';
+import { downloadApi } from '@/services/api';
+import { ActiveJob, LocalFile } from '@/types';
 
-export default function DownloadsScreen() {
-  const [jobs, setJobs] = useState<DownloadJob[]>([]);
-  const { isAuthenticated } = useAuthStore();
-  const { apiUrl } = useSettingsStore();
+// ─── Active job card ──────────────────────────────────────────────────────────
 
-  const statusColor: Record<string, string> = {
-    pending: Colors.warning,
-    running: Colors.primary,
-    completed: Colors.success,
-    failed: Colors.error,
-    cancelled: Colors.textMuted,
-  };
+function JobCard({ job }: { job: ActiveJob }) {
+  const { removeJob } = useDownloadStore();
 
-  const statusIcon: Record<string, string> = {
-    pending: 'time-outline',
-    running: 'sync-outline',
-    completed: 'checkmark-circle',
-    failed: 'close-circle',
-    cancelled: 'ban-outline',
-  };
-
-  const cancelJob = async (id: string) => {
-    Alert.alert('Annuler', 'Annuler ce téléchargement ?', [
+  const handleCancel = () => {
+    Alert.alert('Annuler', `Annuler le téléchargement de "${job.label}" ?`, [
       { text: 'Non', style: 'cancel' },
       {
-        text: 'Oui',
-        style: 'destructive',
+        text: 'Oui', style: 'destructive',
         onPress: async () => {
-          try {
-            await downloadApi.cancel(id);
-            setJobs((prev) => prev.filter((j) => j.id !== id));
-          } catch {}
+          try { await downloadApi.cancel(job.job_id); } catch {}
+          removeJob(job.job_id);
         },
       },
     ]);
   };
 
-  const downloadFile = (jobId: string) => {
-    const url = downloadApi.getFileUrl(jobId, apiUrl);
-    Linking.openURL(url);
+  const statusColor = {
+    pending:     Colors.textMuted,
+    downloading: Colors.primary,
+    ready:       Colors.success,
+    error:       Colors.error,
+  }[job.status] ?? Colors.textMuted;
+
+  const statusLabel = {
+    pending:     'En attente…',
+    downloading: 'Téléchargement…',
+    ready:       'Finalisation…',
+    error:       'Erreur',
+  }[job.status] ?? job.status;
+
+  const pct = Math.round(job.progress ?? 0);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{job.label}</Text>
+          <Text style={styles.cardMeta}>{job.catalogue_nom}</Text>
+        </View>
+        <Pressable style={styles.cancelBtn} onPress={handleCancel}>
+          <Ionicons name="close-circle" size={22} color={Colors.textMuted} />
+        </Pressable>
+      </View>
+
+      <View style={styles.progressBg}>
+        <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: statusColor }]} />
+      </View>
+
+      <View style={styles.statusRow}>
+        <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+        <Text style={styles.pctText}>{pct}%</Text>
+      </View>
+
+      {job.status === 'downloading' && (
+        <View style={styles.statsRow}>
+          {job.dl_speed > 0 && <Text style={styles.stat}>{formatSpeed(job.dl_speed)}</Text>}
+          {job.dl_eta > 0  && <Text style={styles.stat}>⏱ {formatEta(job.dl_eta)}</Text>}
+          {job.nb_items > 1 && <Text style={styles.stat}>{job.nb_items} fichiers</Text>}
+        </View>
+      )}
+
+      {job.status === 'error' && job.error && (
+        <Text style={styles.errorText} numberOfLines={2}>{job.error}</Text>
+      )}
+    </View>
+  );
+}
+
+// ─── Local file card ──────────────────────────────────────────────────────────
+
+function LocalFileCard({ file }: { file: LocalFile }) {
+  const router = useRouter();
+  const { removeLocalFile } = useDownloadStore();
+  const setVideo = usePlayerStore((s) => s.setVideo);
+
+  const handleDelete = () => {
+    Alert.alert('Supprimer', `Supprimer "${file.label}" de l'appareil ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer', style: 'destructive',
+        onPress: () => deleteLocalFile(file, removeLocalFile),
+      },
+    ]);
   };
+
+  const handlePlay = () => {
+    if (file.is_single) {
+      setVideo({ url: file.local_uri, player: 'local', title: file.label });
+      router.push('/player');
+    } else {
+      Alert.alert(
+        'Archive ZIP',
+        'Ce contenu est un fichier ZIP contenant plusieurs épisodes. Extrayez-le pour lire les épisodes individuellement.'
+      );
+    }
+  };
+
+  const sizeMb  = (file.size_bytes / 1024 / 1024).toFixed(1);
+  const dateStr = new Date(file.downloaded_at).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Ionicons
+          name={file.is_single ? 'film' : 'archive'}
+          size={22}
+          color={Colors.primary}
+          style={{ marginRight: Spacing.sm }}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{file.label}</Text>
+          <Text style={styles.cardMeta}>{file.catalogue_nom}</Text>
+        </View>
+      </View>
+
+      <View style={styles.fileMetaRow}>
+        <Text style={styles.fileMeta}>{sizeMb} Mo</Text>
+        <Text style={styles.fileMeta}>·</Text>
+        <Text style={styles.fileMeta}>{dateStr}</Text>
+        {!file.is_single && (
+          <Text style={[styles.fileMeta, { color: Colors.warning }]}>ZIP</Text>
+        )}
+      </View>
+
+      <View style={styles.fileActions}>
+        {file.is_single && (
+          <Pressable style={styles.playBtn} onPress={handlePlay}>
+            <Ionicons name="play" size={14} color={Colors.text} />
+            <Text style={styles.playBtnText}>Lire hors ligne</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.deleteBtn} onPress={handleDelete}>
+          <Ionicons name="trash-outline" size={14} color={Colors.error} />
+          <Text style={styles.deleteBtnText}>Supprimer</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main screen ─────────────────────────────────────────────────────────────
+
+export default function DownloadsScreen() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
+  const { jobs, localFiles, loadFromStorage } = useDownloadStore();
+  const [section, setSection] = React.useState<'active' | 'local'>('active');
+
+  useJobPoller();
+
+  useEffect(() => { loadFromStorage(); }, []);
 
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.center}>
-          <Ionicons name="lock-closed" size={48} color={Colors.textMuted} />
-          <Text style={styles.centerTitle}>Connexion requise</Text>
-          <Text style={styles.centerText}>
-            Connectez-vous pour accéder aux téléchargements.
+        <View style={styles.empty}>
+          <Ionicons name="lock-closed-outline" size={56} color={Colors.textMuted} />
+          <Text style={styles.emptyTitle}>Connexion requise</Text>
+          <Text style={styles.emptySubtitle}>
+            Connectez-vous pour accéder à vos téléchargements.
           </Text>
+          <Pressable style={styles.loginBtn} onPress={() => router.push('/(tabs)/profile')}>
+            <Text style={styles.loginBtnText}>Se connecter</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
+  const activeJobs  = jobs.filter((j) => j.status !== 'error');
+  const errorJobs   = jobs.filter((j) => j.status === 'error');
+  const displayJobs = [...activeJobs, ...errorJobs];
+  const activeCount = activeJobs.length;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Téléchargements</Text>
+        <Text style={styles.headerTitle}>Téléchargements</Text>
+        {activeCount > 0 && (
+          <ActivityIndicator size="small" color={Colors.primary} style={{ marginLeft: Spacing.sm }} />
+        )}
       </View>
 
-      <FlatList
-        data={jobs}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="download-outline" size={64} color={Colors.textMuted} />
-            <Text style={styles.emptyTitle}>Aucun téléchargement</Text>
-            <Text style={styles.emptyText}>
-              Lance un téléchargement depuis la page d'un anime.
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.jobCard}>
-            <View style={styles.jobHeader}>
-              <View style={styles.jobInfo}>
-                <Text style={styles.jobSlug}>{item.slug}</Text>
-                {item.saison && (
-                  <Text style={styles.jobMeta}>
-                    Saison {item.saison}
-                    {item.episodes && ` · ${item.episodes.length} épisode(s)`}
-                  </Text>
-                )}
-              </View>
-              <Ionicons
-                name={statusIcon[item.status] as any}
-                size={22}
-                color={statusColor[item.status]}
-              />
-            </View>
+      {/* Segmented control */}
+      <View style={styles.segmented}>
+        <Pressable
+          style={[styles.segment, section === 'active' && styles.segmentActive]}
+          onPress={() => setSection('active')}
+        >
+          <Text style={[styles.segmentText, section === 'active' && styles.segmentTextActive]}>
+            En cours{activeCount > 0 ? ` (${activeCount})` : ''}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.segment, section === 'local' && styles.segmentActive]}
+          onPress={() => setSection('local')}
+        >
+          <Text style={[styles.segmentText, section === 'local' && styles.segmentTextActive]}>
+            Bibliothèque{localFiles.length > 0 ? ` (${localFiles.length})` : ''}
+          </Text>
+        </Pressable>
+      </View>
 
-            {item.status === 'running' && item.progress !== undefined && (
-              <View style={styles.progressSection}>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
-                </View>
-                <View style={styles.progressInfo}>
-                  <Text style={styles.progressText}>{Math.round(item.progress)}%</Text>
-                  {item.speed && <Text style={styles.progressText}>{item.speed}</Text>}
-                  {item.eta && <Text style={styles.progressText}>ETA: {item.eta}</Text>}
-                </View>
-              </View>
-            )}
-
-            {item.error && <Text style={styles.errorText}>{item.error}</Text>}
-
-            <View style={styles.jobActions}>
-              <Text style={[styles.statusText, { color: statusColor[item.status] }]}>
-                {item.status}
+      {section === 'active' ? (
+        <FlatList
+          data={displayJobs}
+          keyExtractor={(j) => j.job_id}
+          renderItem={({ item }) => <JobCard job={item} />}
+          contentContainerStyle={displayJobs.length === 0 ? { flex: 1 } : styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="download-outline" size={56} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>Aucun téléchargement actif</Text>
+              <Text style={styles.emptySubtitle}>
+                Ouvrez un anime et appuyez sur Télécharger pour démarrer.
               </Text>
-              {item.status === 'completed' && (
-                <Pressable style={styles.actionBtn} onPress={() => downloadFile(item.id)}>
-                  <Ionicons name="cloud-download-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.actionBtnText}>Télécharger</Text>
-                </Pressable>
-              )}
-              {(item.status === 'pending' || item.status === 'running') && (
-                <Pressable style={styles.cancelBtn} onPress={() => cancelJob(item.id)}>
-                  <Text style={styles.cancelBtnText}>Annuler</Text>
-                </Pressable>
-              )}
             </View>
-          </View>
-        )}
-      />
+          }
+        />
+      ) : (
+        <FlatList
+          data={localFiles}
+          keyExtractor={(f) => f.id}
+          renderItem={({ item }) => <LocalFileCard file={item} />}
+          contentContainerStyle={localFiles.length === 0 ? { flex: 1 } : styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="folder-open-outline" size={56} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>Bibliothèque vide</Text>
+              <Text style={styles.emptySubtitle}>
+                Les fichiers téléchargés apparaîtront ici et seront disponibles hors ligne.
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
   },
-  title: {
-    color: Colors.text,
-    fontSize: FontSize.xxl,
-    fontWeight: '800',
+  headerTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800' },
+
+  segmented: {
+    flexDirection: 'row', marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
+    backgroundColor: Colors.surfaceAlt, borderRadius: Radius.md, padding: 3,
   },
-  list: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+  segment: { flex: 1, paddingVertical: Spacing.sm, alignItems: 'center', borderRadius: Radius.sm },
+  segmentActive:     { backgroundColor: Colors.primary },
+  segmentText:       { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '600' },
+  segmentTextActive: { color: Colors.text },
+
+  list: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
+
+  card: {
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: Spacing.md, borderWidth: 1, borderColor: Colors.border,
   },
-  empty: {
-    alignItems: 'center',
-    paddingTop: Spacing.xxl * 2,
-    gap: Spacing.md,
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
+  cardTitle:  { color: Colors.text, fontSize: FontSize.md, fontWeight: '700', lineHeight: 20 },
+  cardMeta:   { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
+  cancelBtn:  { padding: 4, marginLeft: Spacing.sm },
+
+  progressBg:   { height: 4, backgroundColor: Colors.border, borderRadius: 2, marginBottom: Spacing.sm, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+
+  statusRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusText: { fontSize: FontSize.xs, fontWeight: '600' },
+  pctText:    { color: Colors.textSecondary, fontSize: FontSize.xs },
+
+  statsRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xs },
+  stat:     { color: Colors.textMuted, fontSize: FontSize.xs },
+  errorText: { color: Colors.error, fontSize: FontSize.xs, marginTop: Spacing.sm },
+
+  fileMetaRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginBottom: Spacing.sm },
+  fileMeta:    { color: Colors.textMuted, fontSize: FontSize.xs },
+
+  fileActions: { flexDirection: 'row', gap: Spacing.sm },
+  playBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.xs, backgroundColor: Colors.primary,
+    borderRadius: Radius.sm, paddingVertical: Spacing.sm,
   },
-  emptyTitle: {
-    color: Colors.text,
-    fontSize: FontSize.lg,
-    fontWeight: '700',
+  playBtnText:  { color: Colors.text, fontSize: FontSize.xs, fontWeight: '700' },
+  deleteBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.xs, backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.sm, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+    borderWidth: 1, borderColor: Colors.error + '55',
   },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: FontSize.md,
-    textAlign: 'center',
+  deleteBtnText: { color: Colors.error, fontSize: FontSize.xs, fontWeight: '700' },
+
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing.xl },
+  emptyTitle:    { color: Colors.text, fontSize: FontSize.xl, fontWeight: '700', textAlign: 'center' },
+  emptySubtitle: { color: Colors.textMuted, fontSize: FontSize.md, textAlign: 'center', lineHeight: 22 },
+  loginBtn: {
+    backgroundColor: Colors.primary, borderRadius: Radius.full,
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.xl, marginTop: Spacing.sm,
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-  },
-  centerTitle: {
-    color: Colors.text,
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-  },
-  centerText: {
-    color: Colors.textMuted,
-    fontSize: FontSize.md,
-    textAlign: 'center',
-  },
-  jobCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
-  jobInfo: { flex: 1 },
-  jobSlug: {
-    color: Colors.text,
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
-  jobMeta: {
-    color: Colors.textMuted,
-    fontSize: FontSize.sm,
-    marginTop: 2,
-  },
-  progressSection: { gap: 4 },
-  progressBar: {
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.full,
-  },
-  progressInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressText: {
-    color: Colors.textMuted,
-    fontSize: FontSize.xs,
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: FontSize.sm,
-  },
-  jobActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statusText: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.primary + '22',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-  },
-  actionBtnText: {
-    color: Colors.primary,
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
-  cancelBtn: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.error + '66',
-  },
-  cancelBtnText: {
-    color: Colors.error,
-    fontSize: FontSize.sm,
-  },
+  loginBtnText: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
 });

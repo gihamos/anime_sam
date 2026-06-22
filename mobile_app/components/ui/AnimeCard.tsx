@@ -2,19 +2,43 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, Radius, FontSize, Spacing } from '@/constants/colors';
 import { CatalogueSummary } from '@/types';
+import { useIsFavori, useToggleFavori } from '@/hooks/useFavorites';
+import { useAuthStore } from '@/stores/authStore';
 
 const CARD_WIDTH = (Dimensions.get('window').width - Spacing.md * 3) / 2;
 
 interface Props {
   item: CatalogueSummary;
   width?: number;
+  showFavori?: boolean;
 }
 
-export default function AnimeCard({ item, width = CARD_WIDTH }: Props) {
+function FavoriButton({ slug }: { slug: string }) {
+  const isFavori = useIsFavori(slug);
+  const toggle = useToggleFavori(slug);
+
+  return (
+    <Pressable
+      style={fav.btn}
+      onPress={(e) => { e.stopPropagation(); toggle.mutate(); }}
+      hitSlop={8}
+    >
+      <Ionicons
+        name={isFavori ? 'heart' : 'heart-outline'}
+        size={18}
+        color={isFavori ? Colors.error : Colors.text}
+      />
+    </Pressable>
+  );
+}
+
+export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true }: Props) {
   const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
 
   const stateColor =
     item.etat === 'termine'
@@ -49,6 +73,9 @@ export default function AnimeCard({ item, width = CARD_WIDTH }: Props) {
             <Text style={styles.langText}>{item.langue.toUpperCase()}</Text>
           </View>
         )}
+        {isAuthenticated && showFavori && (
+          <FavoriButton slug={item.slug} />
+        )}
       </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={2}>{item.nom}</Text>
@@ -57,6 +84,20 @@ export default function AnimeCard({ item, width = CARD_WIDTH }: Props) {
     </Pressable>
   );
 }
+
+const fav = StyleSheet.create({
+  btn: {
+    position: 'absolute',
+    top: Spacing.xs,
+    left: Spacing.xs,
+    width: 30,
+    height: 30,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   card: {

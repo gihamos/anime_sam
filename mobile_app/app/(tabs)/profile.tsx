@@ -149,10 +149,31 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Configuration API</Text>
           <Text style={styles.sectionDesc}>
-            Adresse de votre instance Anime Sama API
+            URL actuelle : <Text style={{ color: Colors.primary }}>{apiUrl}</Text>
           </Text>
+
+          {/* Raccourcis */}
+          <Text style={styles.hintLabel}>Sélection rapide :</Text>
+          <View style={styles.hintRow}>
+            {[
+              { label: 'Émulateur Android', url: 'http://10.0.2.2:8000' },
+              { label: 'Wi-Fi (192.168.1.48)', url: 'http://192.168.1.48:8000' },
+              { label: 'Localhost', url: 'http://localhost:8000' },
+            ].map(({ label, url }) => (
+              <Pressable
+                key={url}
+                style={[styles.hintChip, apiUrlInput === url && styles.hintChipActive]}
+                onPress={() => setApiUrlInput(url)}
+              >
+                <Text style={[styles.hintChipText, apiUrlInput === url && styles.hintChipTextActive]}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
           <TextInput
-            style={styles.input}
+            style={[styles.input, { marginTop: Spacing.sm }]}
             value={apiUrlInput}
             onChangeText={setApiUrlInput}
             placeholder="http://192.168.1.x:8000"
@@ -162,13 +183,21 @@ export default function ProfileScreen() {
             keyboardType="url"
           />
           <Pressable style={styles.saveBtn} onPress={handleSaveApiUrl}>
-            <Text style={styles.saveBtnText}>Sauvegarder</Text>
+            <Text style={styles.saveBtnText}>Sauvegarder et reconnecter</Text>
           </Pressable>
         </View>
 
         <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>Anime Sama App v1.0.0</Text>
-          <Text style={styles.appInfoText}>Propulsé par anime-sama.to API</Text>
+          <Text style={styles.appInfoTitle}>Anime Sama App v1.0.0</Text>
+          <Text style={styles.appInfoText}>Développé par Taïse de thèse Yabie</Text>
+          <Text style={styles.appInfoText}>github.com/gihamos</Text>
+          <View style={styles.appInfoDivider} />
+          <Text style={styles.appInfoDisclaimer}>
+            Cette application n'est pas affiliée à anime-sama.to
+          </Text>
+          <Text style={styles.appInfoDisclaimer}>
+            et n'a aucun lien officiel avec ce site.
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -339,13 +368,64 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: '700',
   },
+  hintLabel: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    marginBottom: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  hintRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  hintChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  hintChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '22',
+  },
+  hintChipText: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  hintChipTextActive: {
+    color: Colors.primary,
+  },
   appInfo: {
     alignItems: 'center',
     paddingBottom: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
     gap: 4,
+  },
+  appInfoTitle: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   appInfoText: {
     color: Colors.textMuted,
     fontSize: FontSize.xs,
+  },
+  appInfoDivider: {
+    width: 40,
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: Spacing.xs,
+  },
+  appInfoDisclaimer: {
+    color: Colors.textMuted,
+    fontSize: 10,
+    textAlign: 'center',
+    opacity: 0.6,
   },
 });

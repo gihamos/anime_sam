@@ -1,6 +1,6 @@
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { catalogueApi } from '@/services/api';
-import { SearchFilters } from '@/types';
+import { SearchFilters, EpisodesResponse } from '@/types';
 
 export function useCatalogueList() {
   return useQuery({
@@ -53,5 +53,21 @@ export function useRefreshCatalogue(slug: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalogue', slug] });
     },
+  });
+}
+
+// Épisodes on-demand — scraping côté serveur, peut prendre 5-30s
+export function useEpisodes(
+  slug: string,
+  saisonSlug: string,
+  lang: string,
+  enabled: boolean,
+) {
+  return useQuery<EpisodesResponse>({
+    queryKey: ['episodes', slug, saisonSlug, lang],
+    queryFn: () => catalogueApi.getEpisodes(slug, saisonSlug, lang),
+    enabled: enabled && !!slug && !!saisonSlug && !!lang,
+    staleTime: 30 * 60 * 1000, // cache 30 min — le scraping est lent
+    retry: 1,
   });
 }

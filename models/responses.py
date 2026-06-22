@@ -18,15 +18,85 @@ from pydantic import BaseModel, ConfigDict, Field
 #  AUTH
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  FAVORIS & RECOMMANDATIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+class FavorisItem(BaseModel):
+    """Résumé d'un catalogue favori."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "slug": "naruto", "nom": "Naruto",
+        "image": "https://cdn.anime-sama.fr/s2/illus/naruto.jpg",
+        "genres": ["Action", "Aventure"], "type": "anime",
+        "etat": "termine", "langues": ["vostfr", "vf"],
+        "annee": 2002, "note": 8.5,
+    }})
+    slug:    str           = Field(description="Identifiant unique")
+    nom:     str           = Field(description="Titre principal")
+    image:   Optional[str] = Field(default=None)
+    genres:  list[str]     = Field(default_factory=list)
+    type:    Optional[str] = Field(default=None, description="anime | scan | film | autre")
+    etat:    Optional[str] = Field(default=None, description="en_cours | termine | abandonne")
+    langues: list[str]     = Field(default_factory=list)
+    annee:   Optional[int] = Field(default=None)
+    note:    Optional[float] = Field(default=None, description="Note sur 10")
+
+
+class FavorisResponse(BaseModel):
+    """Réponse de GET /auth/me/favoris."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "slugs": ["naruto", "one-piece"],
+        "catalogues": [
+            {"slug": "naruto", "nom": "Naruto", "image": "...", "genres": ["Action"],
+             "type": "anime", "etat": "termine", "langues": ["vostfr"], "annee": 2002, "note": 8.5},
+        ],
+    }})
+    slugs:      list[str]        = Field(description="Slugs des catalogues favoris")
+    catalogues: list[FavorisItem] = Field(description="Détails des catalogues favoris")
+
+
+class RecommendationItem(BaseModel):
+    """Élément retourné par le moteur de recommandations."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "slug": "bleach", "nom": "Bleach",
+        "image": "https://cdn.anime-sama.fr/s2/illus/bleach.jpg",
+        "genres": ["Action", "Aventure", "Shônen"],
+        "type": "anime", "langue": "vostfr", "etat": "termine",
+        "annee": 2004, "note": 8.2, "score": 0.8750,
+    }})
+    slug:   str            = Field(description="Identifiant unique")
+    nom:    str            = Field(description="Titre principal")
+    image:  Optional[str]  = Field(default=None)
+    genres: list[str]      = Field(default_factory=list)
+    type:   Optional[str]  = Field(default=None, description="anime | scan | film | autre")
+    langue: Optional[str]  = Field(default=None)
+    etat:   Optional[str]  = Field(default=None)
+    annee:  Optional[int]  = Field(default=None)
+    note:   Optional[float] = Field(default=None, description="Note sur 10")
+    score:  float           = Field(
+        default=0.0,
+        description=(
+            "Score de pertinence calculé par le moteur de recommandations. "
+            "0.0 = cold start (aucun favori). Plus élevé = plus pertinent."
+        ),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  AUTH
+# ══════════════════════════════════════════════════════════════════════════════
+
 class TokenResponse(BaseModel):
     """Jeton d'accès retourné après une authentification réussie."""
     model_config = ConfigDict(json_schema_extra={"example": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc1MzA1NjAwMH0.abc123",
-        "token_type": "bearer",
+        "access_token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc1MzA1NjAwMH0.abc123",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInR5cGUiOiJyZWZyZXNoIn0.xyz789",
+        "token_type":    "bearer",
     }})
 
-    access_token: str   = Field(description="JWT Bearer token — à passer dans Authorization: Bearer <token>")
-    token_type:   str   = Field(default="bearer", description="Toujours 'bearer'")
+    access_token:  str            = Field(description="JWT Bearer — passer dans Authorization: Bearer <token>")
+    refresh_token: Optional[str]  = Field(default=None, description="Refresh token (30 jours) — utiliser sur POST /auth/refresh")
+    token_type:    str            = Field(default="bearer", description="Toujours 'bearer'")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -86,6 +156,8 @@ class CatalogueSummary(BaseModel):
     genres:           list[str]         = Field(default_factory=list)
     langues:          list[str]         = Field(default_factory=list, description="Langues disponibles")
     episodes_synced:  bool              = Field(default=False, description="True si les épisodes ont été synchronisés")
+    annee:            Optional[int]     = Field(default=None, description="Année de sortie")
+    note:             Optional[float]   = Field(default=None, description="Note sur 10")
     updated_at:       Optional[str]     = Field(default=None, description="Date ISO de dernière mise à jour")
     created_at:       Optional[str]     = Field(default=None, description="Date ISO de création")
     saisons:          list[SaisonSummary] = Field(default_factory=list)

@@ -17,8 +17,9 @@ PLAYWRIGHT_PROXY = os.getenv("PLAYWRIGHT_PROXY", "")
 
 # --- Authentification JWT ---
 # Clé secrète pour signer les tokens. Changer OBLIGATOIREMENT en production.
-JWT_SECRET          = os.getenv("JWT_SECRET",         "7fec5aa449ceea4967ab78f52063fff3247adf8d91f204a612339c2366daea74")
-JWT_EXPIRE_MINUTES  = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24 h par défaut
+JWT_SECRET               = os.getenv("JWT_SECRET",              "7fec5aa449ceea4967ab78f52063fff3247adf8d91f204a612339c2366daea74")
+JWT_EXPIRE_MINUTES       = int(os.getenv("JWT_EXPIRE_MINUTES",       "1440"))   # 24 h par défaut
+JWT_REFRESH_EXPIRE_DAYS  = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS",  "30"))     # 30 jours
 
 # Compte admin créé automatiquement au démarrage si aucun utilisateur n'existe.
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")

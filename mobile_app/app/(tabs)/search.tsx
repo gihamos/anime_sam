@@ -15,14 +15,23 @@ import AnimeCard from '@/components/ui/AnimeCard';
 import FilterSheet from '@/components/ui/FilterSheet';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useCatalogueSearch, useSiteSearch } from '@/hooks/useAnime';
+import { useAuthStore } from '@/stores/authStore';
 import { SearchFilters } from '@/types';
 
 export default function SearchScreen() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
+
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
   const [showFilters, setShowFilters] = useState(false);
   const [searchOnSite, setSearchOnSite] = useState(false);
+
+  // Réinitialise la recherche sur le site si l'user perd le droit admin
+  useEffect(() => {
+    if (!isAdmin && searchOnSite) setSearchOnSite(false);
+  }, [isAdmin, searchOnSite]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 500);
@@ -70,24 +79,27 @@ export default function SearchScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.toggleRow}>
-          <Pressable
-            style={[styles.toggle, !searchOnSite && styles.toggleActive]}
-            onPress={() => setSearchOnSite(false)}
-          >
-            <Text style={[styles.toggleText, !searchOnSite && styles.toggleTextActive]}>
-              Catalogue local
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggle, searchOnSite && styles.toggleActive]}
-            onPress={() => setSearchOnSite(true)}
-          >
-            <Text style={[styles.toggleText, searchOnSite && styles.toggleTextActive]}>
-              Anime-sama.to
-            </Text>
-          </Pressable>
-        </View>
+        {isAdmin && (
+          <View style={styles.toggleRow}>
+            <Pressable
+              style={[styles.toggle, !searchOnSite && styles.toggleActive]}
+              onPress={() => setSearchOnSite(false)}
+            >
+              <Text style={[styles.toggleText, !searchOnSite && styles.toggleTextActive]}>
+                Catalogue local
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.toggle, searchOnSite && styles.toggleActive]}
+              onPress={() => setSearchOnSite(true)}
+            >
+              <Ionicons name="globe-outline" size={13} color={searchOnSite ? Colors.text : Colors.textMuted} />
+              <Text style={[styles.toggleText, searchOnSite && styles.toggleTextActive]}>
+                Anime-sama.to
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
@@ -192,7 +204,10 @@ const styles = StyleSheet.create({
   toggle: {
     flex: 1,
     paddingVertical: Spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     borderRadius: Radius.sm,
   },
   toggleActive: {

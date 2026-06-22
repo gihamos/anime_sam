@@ -1,16 +1,30 @@
 """
-Routes d'authentification et gestion des utilisateurs.
+Routes d'authentification, favoris et recommandations.
 
-POST /auth/login                      → retourne un JWT (public)
+── Auth ─────────────────────────────────────────────────────────────────────
+POST /auth/login                      → retourne access + refresh token (public)
+POST /auth/refresh                    → renouvelle l'access token via refresh token (public)
 GET  /auth/me                         → profil de l'utilisateur courant
+
+── Favoris & Recommandations ────────────────────────────────────────────────
+GET  /auth/me/favoris                 → liste des favoris (slugs + détails catalogue)
+POST /auth/me/favoris/{slug}          → ajouter un favori
+DELETE /auth/me/favoris/{slug}        → retirer un favori
+GET  /auth/me/recommendations         → recommandations personnalisées (moteur scoring)
+
+── Administration ────────────────────────────────────────────────────────────
 POST /auth/register                   → crée un utilisateur (admin)
 GET  /auth/users                      → liste tous les utilisateurs (admin)
 PUT  /auth/users/{username}           → modifie rôle/permissions (admin)
 DELETE /auth/users/{username}         → supprime un utilisateur (admin)
 
+── OIDC ─────────────────────────────────────────────────────────────────────
 GET  /auth/oidc/providers             → fournisseurs OIDC configurés (public)
 GET  /auth/oidc/authorize             → URL d'autorisation OIDC (public)
 GET  /auth/oidc/callback              → callback OIDC (redirect depuis le fournisseur)
+
+L'algorithme de recommandation est dans services/recommendation_engine.py
+et peut être utilisé indépendamment par d'autres parties du backend.
 """
 
 import secrets as _secrets
@@ -21,13 +35,20 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from models.user import UserCreate, UserUpdate, UserPublic, UserInDB, Role
-from models.responses import TokenResponse
+from models.responses import TokenResponse, FavorisResponse, RecommendationItem
 from api.dependencies import (
     get_current_user, require_admin,
-    hash_password, verify_password, create_access_token, create_client_token,
+    hash_password, verify_password,
+    create_access_token, create_refresh_token,
+    decode_refresh_token, create_client_token,
 )
 import db.user_repository as user_repo
+import db.repository as catalogue_repo
 import db.clients_repository as clients_repo
+from services.recommendation_engine import (
+    get_favourites_for_user,
+    compute_recommendations,
+)
 from params import OIDC_ADMIN_REDIRECT
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
@@ -54,8 +75,38 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Compte désactivé")
 
-    token = create_access_token(user["username"])
-    return {"access_token": token, "token_type": "bearer"}
+    access  = create_access_token(user["username"])
+    refresh = create_refresh_token(user["username"])
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
+
+
+# ---------------------------------------------------------------------------
+# Refresh token
+# ---------------------------------------------------------------------------
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh", response_model=TokenResponse, summary="Renouveler le token d'accès")
+async def refresh_access_token(body: RefreshRequest):
+    """
+    Échange un refresh token valide contre un nouvel access token + un nouveau refresh token.
+    Le refresh token est à usage unique (rotation) — le nouveau doit être sauvegardé.
+    """
+    username = decode_refresh_token(body.refresh_token)
+    if not username:
+        raise HTTPException(status_code=401, detail="Refresh token invalide ou expiré")
+
+    user = await user_repo.find_by_username(username)
+    if not user or not user.get("is_active", True):
+        raise HTTPException(status_code=401, detail="Utilisateur introuvable ou inactif")
+    if user.get("is_blocked", False):
+        raise HTTPException(status_code=403, detail="Compte bloqué")
+
+    access  = create_access_token(username)
+    refresh = create_refresh_token(username)
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
 
 
 @router.post("/client-token", response_model=TokenResponse, summary="Token pour une application tierce (client_id + secret)")
@@ -80,6 +131,82 @@ async def client_token_endpoint(body: ClientTokenRequest):
 @router.get("/me", response_model=UserPublic, summary="Mon profil")
 async def me(user: dict = Depends(get_current_user)):
     return user
+
+
+# ---------------------------------------------------------------------------
+# Favoris
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/me/favoris",
+    response_model=FavorisResponse,
+    summary="Mes catalogues favoris",
+    tags=["Favoris & Recommandations"],
+)
+async def get_favoris(user: dict = Depends(get_current_user)):
+    """
+    Retourne la liste des slugs favoris et les résumés des catalogues associés.
+
+    Utilisable depuis n'importe quelle plateforme via `Authorization: Bearer <token>`.
+    """
+    slugs, catalogues = await get_favourites_for_user(user["username"])
+    return {"slugs": slugs, "catalogues": catalogues}
+
+
+@router.post(
+    "/me/favoris/{slug}",
+    status_code=204,
+    summary="Ajouter un catalogue aux favoris",
+    tags=["Favoris & Recommandations"],
+)
+async def add_favori(slug: str, user: dict = Depends(get_current_user)):
+    """Ajoute le catalogue `slug` aux favoris de l'utilisateur connecté."""
+    doc = await catalogue_repo.find_by_slug(slug)
+    if not doc:
+        raise HTTPException(404, f"Catalogue '{slug}' introuvable")
+    await user_repo.add_favori(user["username"], slug)
+
+
+@router.delete(
+    "/me/favoris/{slug}",
+    status_code=204,
+    summary="Retirer un catalogue des favoris",
+    tags=["Favoris & Recommandations"],
+)
+async def remove_favori(slug: str, user: dict = Depends(get_current_user)):
+    """Retire le catalogue `slug` des favoris de l'utilisateur connecté."""
+    await user_repo.remove_favori(user["username"], slug)
+
+
+# ---------------------------------------------------------------------------
+# Recommandations
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/me/recommendations",
+    response_model=list[RecommendationItem],
+    summary="Recommandations personnalisées basées sur les favoris",
+    tags=["Favoris & Recommandations"],
+)
+async def get_recommendations(
+    user:  dict = Depends(get_current_user),
+    limit: int  = Query(20, ge=1, le=50, description="Nombre maximum de résultats"),
+):
+    """
+    Retourne une liste de catalogues recommandés pour l'utilisateur connecté,
+    triés par score de pertinence décroissant.
+
+    **Algorithme multi-critères** (voir `services/recommendation_engine.py`) :
+    - **Genre weighting** — les genres les plus fréquents dans les favoris ont plus de poids
+    - **Type preference** — +0.30 si le type dominant (anime/film/scan) correspond
+    - **State bonus** — +0.10 pour les séries en cours de diffusion
+    - **Note bonus** — jusqu'à +0.20 selon la note (/10)
+    - **Cold start** — si aucun favori, retourne le contenu récent accessible
+    - **Filtrage d'accès** — seuls les catalogues accessibles à l'utilisateur sont candidats
+
+    Compatible avec n'importe quelle plateforme via `Authorization: Bearer <token>`.
+    """
+    return await compute_recommendations(user, limit=limit)
 
 
 # ---------------------------------------------------------------------------
