@@ -5,7 +5,9 @@ interface ScanReaderState {
   // Données du chapitre en cours
   chapitre: ChapitreScan | null;
   catalogueNom: string;
+  catalogueSlug: string;
   scanNom: string;
+  scanSlug: string;
   // Index du chapitre dans la liste (pour navigation prev/next)
   chapitres: ChapitreScan[];
   chapitreIndex: number;
@@ -15,7 +17,9 @@ interface ScanReaderState {
     chapitres: ChapitreScan[];
     chapitreIndex: number;
     catalogueNom: string;
+    catalogueSlug: string;
     scanNom: string;
+    scanSlug: string;
   }) => void;
   goToNext: () => void;
   goToPrev: () => void;
@@ -25,12 +29,14 @@ interface ScanReaderState {
 export const useScanReaderStore = create<ScanReaderState>((set, get) => ({
   chapitre: null,
   catalogueNom: '',
+  catalogueSlug: '',
   scanNom: '',
+  scanSlug: '',
   chapitres: [],
   chapitreIndex: 0,
 
-  setChapitre: ({ chapitre, chapitres, chapitreIndex, catalogueNom, scanNom }) =>
-    set({ chapitre, chapitres, chapitreIndex, catalogueNom, scanNom }),
+  setChapitre: ({ chapitre, chapitres, chapitreIndex, catalogueNom, catalogueSlug, scanNom, scanSlug }) =>
+    set({ chapitre, chapitres, chapitreIndex, catalogueNom, catalogueSlug, scanNom, scanSlug }),
 
   goToNext: () => {
     const { chapitres, chapitreIndex } = get();
@@ -48,5 +54,5 @@ export const useScanReaderStore = create<ScanReaderState>((set, get) => ({
     }
   },
 
-  clear: () => set({ chapitre: null, catalogueNom: '', scanNom: '', chapitres: [], chapitreIndex: 0 }),
+  clear: () => set({ chapitre: null, catalogueNom: '', catalogueSlug: '', scanNom: '', scanSlug: '', chapitres: [], chapitreIndex: 0 }),
 }));

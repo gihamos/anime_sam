@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,13 +20,13 @@ const queryClient = new QueryClient({
 
 // Composant séparé pour le polling (doit être dans le QueryClientProvider)
 function AppInit() {
-  const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const router = useRouter();
+  const { loadSettings, ready, apiUrl } = useSettingsStore();
   const loadFromStorage = useDownloadStore((s) => s.loadFromStorage);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   useJobPoller();
 
   useEffect(() => {
-    // Ordre important : d'abord l'URL de l'API, puis la restauration de session
     async function init() {
       await loadSettings();
       await checkAuth();
@@ -34,6 +34,14 @@ function AppInit() {
     }
     init();
   }, []);
+
+  // Rediriger vers l'écran de configuration si l'API n'a jamais été configurée
+  useEffect(() => {
+    if (!ready) return;
+    if (!apiUrl) {
+      router.replace('/setup');
+    }
+  }, [ready, apiUrl]);
 
   return null;
 }
@@ -52,6 +60,8 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         >
+          <Stack.Screen name="setup" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="admin/connections" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="anime/[slug]" options={{ headerShown: false }} />
           <Stack.Screen

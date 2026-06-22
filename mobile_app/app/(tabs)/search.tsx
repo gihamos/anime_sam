@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
 import SearchBar from '@/components/ui/SearchBar';
 import AnimeCard from '@/components/ui/AnimeCard';
@@ -21,12 +22,24 @@ import { SearchFilters } from '@/types';
 export default function SearchScreen() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'admin';
+  const params = useLocalSearchParams<{ type?: string; etat?: string }>();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [filters, setFilters] = useState<SearchFilters>({});
+  const [filters, setFilters] = useState<SearchFilters>(() => ({
+    type: params.type,
+    etat: params.etat,
+  }));
   const [showFilters, setShowFilters] = useState(false);
   const [searchOnSite, setSearchOnSite] = useState(false);
+
+  // Ré-appliquer les filtres quand on arrive depuis la page d'accueil
+  useEffect(() => {
+    if (params.type !== undefined || params.etat !== undefined) {
+      setFilters({ type: params.type, etat: params.etat });
+      setQuery('');
+    }
+  }, [params.type, params.etat]);
 
   // Réinitialise la recherche sur le site si l'user perd le droit admin
   useEffect(() => {
@@ -54,10 +67,16 @@ export default function SearchScreen() {
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
+  const contextTitle = params.type === 'film' ? 'Films'
+    : params.type === 'scan' ? 'Scans & Manga'
+    : params.type === 'anime' ? 'Animés'
+    : params.etat === 'en_cours' ? 'En cours de diffusion'
+    : null;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Recherche</Text>
+        <Text style={styles.title}>{contextTitle ?? 'Recherche'}</Text>
         <View style={styles.searchRow}>
           <View style={styles.searchBarWrapper}>
             <SearchBar

@@ -140,11 +140,13 @@ function HRow({
   icon,
   items,
   cardWidth = 120,
+  seeAllParams,
 }: {
   title: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   items: CatalogueSummary[];
   cardWidth?: number;
+  seeAllParams?: Record<string, string>;
 }) {
   const router = useRouter();
   if (items.length === 0) return null;
@@ -158,9 +160,11 @@ function HRow({
             <Text style={styles.countChipText}>{items.length}</Text>
           </View>
         </View>
-        <Pressable onPress={() => router.push('/search')}>
-          <Text style={styles.seeAll}>Tout voir</Text>
-        </Pressable>
+        {seeAllParams && (
+          <Pressable onPress={() => router.push({ pathname: '/(tabs)/search', params: seeAllParams })}>
+            <Text style={styles.seeAll}>Tout voir</Text>
+          </Pressable>
+        )}
       </View>
       <FlatList
         data={items}
@@ -260,6 +264,7 @@ export default function HomeScreen() {
           title="En cours de diffusion"
           icon="radio-button-on"
           items={sorted.ongoing}
+          seeAllParams={{ etat: 'en_cours' }}
         />
 
         {/* ── Mieux notés ── */}
@@ -278,12 +283,22 @@ export default function HomeScreen() {
 
         {/* ── Films ── */}
         {sorted.films.length > 0 && (
-          <HRow title="Films" icon="film" items={sorted.films} />
+          <HRow
+            title="Films"
+            icon="film"
+            items={sorted.films}
+            seeAllParams={{ type: 'film' }}
+          />
         )}
 
         {/* ── Scans & Manga ── */}
         {sorted.scans.length > 0 && (
-          <HRow title="Scans & Manga" icon="book" items={sorted.scans} />
+          <HRow
+            title="Scans & Manga"
+            icon="book"
+            items={sorted.scans}
+            seeAllParams={{ type: 'scan' }}
+          />
         )}
 
         {/* ── Tout le catalogue (grille) ── */}

@@ -16,15 +16,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
-import { useCatalogue, useRefreshCatalogue, useEpisodes } from '@/hooks/useAnime';
+import { useCatalogue, useRefreshCatalogue, useSyncCatalogue, useEpisodes } from '@/hooks/useAnime';
+import { formatCacheAge } from '@/services/catalogueCache';
 import { useIsFavori, useToggleFavori } from '@/hooks/useFavorites';
-import { useStartEpisodeDownload, useStartFilmDownload } from '@/hooks/useDownloads';
+import { useStartEpisodeDownload, useStartFilmDownload, useStartScanDownload } from '@/hooks/useDownloads';
 import { getApiError } from '@/services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Badge from '@/components/ui/Badge';
 import { useAuthStore } from '@/stores/authStore';
 import { usePlayerStore } from '@/stores/playerStore';
 import { useScanReaderStore } from '@/stores/scanReaderStore';
+import { useDownloadStore } from '@/stores/downloadStore';
 import { SaisonMeta, FilmMeta, Video, ScanMeta, ChapitreScan } from '@/types';
 
 const { height } = Dimensions.get('window');
@@ -275,16 +277,22 @@ function FilmPanel({
 // ─── Panneau scans ────────────────────────────────────────────────────────────
 
 function ScanPanel({
+  slug,
   scans,
   catalogueNom,
+  canDownload,
   onOpenChapitre,
 }: {
+  slug: string;
   scans: ScanMeta[];
   catalogueNom: string;
+  canDownload: boolean;
   onOpenChapitre: (scan: ScanMeta, chapitre: ChapitreScan, idx: number) => void;
 }) {
   const [selectedScan, setSelectedScan] = useState<ScanMeta | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const startScanDownload = useStartScanDownload();
+  const { getScanChapter, jobs } = useDownloadStore();
 
   if (scans.length === 0) {
     return (
@@ -344,7 +352,34 @@ function ScanPanel({
         </View>
       ) : (
         chapitres.map((ch, idx) => {
-          const hasContent = (ch.images?.length ?? 0) > 0 || (ch.lecteurs?.length ?? 0) > 0;
+          const hasContent  = (ch.images?.length ?? 0) > 0 || (ch.lecteurs?.length ?? 0) > 0;
+          const hasImages   = (ch.images?.length ?? 0) > 0;
+          const localChap   = getScanChapter(slug, activeScan.slug, ch.numero);
+          const isDownloaded = !!localChap;
+          const isQueued     = jobs.some(
+            (j) => j.job_type === 'scan'
+              && j.slug === slug
+              && j.scan_slug === activeScan.slug
+              && (j.chapitre_nums ?? []).includes(ch.numero)
+              && (j.status === 'pending' || j.status === 'downloading')
+          );
+
+          const handleDownload = async () => {
+            try {
+              await startScanDownload({
+                slug,
+                catalogueNom,
+                scanSlug:     activeScan.slug,
+                scanNom:      activeScan.nom,
+                chapitreNums: [ch.numero],
+                chapitreLabel: ch.titre ? `Ch. ${ch.numero} — ${ch.titre}` : `Ch. ${ch.numero}`,
+              });
+              Alert.alert('Téléchargement lancé', `Chapitre ${ch.numero} ajouté à la file.`);
+            } catch (err) {
+              Alert.alert('Erreur', getApiError(err));
+            }
+          };
+
           return (
             <Pressable
               key={`${ch.numero}`}
@@ -360,7 +395,7 @@ function ScanPanel({
                   {ch.titre ? ch.titre : `Chapitre ${ch.numero}`}
                 </Text>
                 <View style={scan.meta}>
-                  {(ch.images?.length ?? 0) > 0 && (
+                  {hasImages && (
                     <View style={scan.badge}>
                       <Ionicons name="images-outline" size={11} color={Colors.success} />
                       <Text style={[scan.badgeText, { color: Colors.success }]}>
@@ -376,11 +411,33 @@ function ScanPanel({
                       </Text>
                     </View>
                   )}
+                  {isDownloaded && (
+                    <View style={scan.badge}>
+                      <Ionicons name="cloud-done-outline" size={11} color={Colors.vostfr} />
+                      <Text style={[scan.badgeText, { color: Colors.vostfr }]}>Hors ligne</Text>
+                    </View>
+                  )}
                   {!hasContent && (
                     <Text style={scan.unavail}>Non synchronisé</Text>
                   )}
                 </View>
               </View>
+
+              {/* Bouton téléchargement (visible si le chapitre a des images) */}
+              {canDownload && hasImages && !isDownloaded && (
+                <Pressable
+                  style={scan.dlBtn}
+                  hitSlop={12}
+                  onPress={(e) => { e.stopPropagation(); handleDownload(); }}
+                  disabled={isQueued}
+                >
+                  {isQueued
+                    ? <ActivityIndicator size="small" color={Colors.primary} />
+                    : <Ionicons name="download-outline" size={18} color={Colors.primary} />
+                  }
+                </Pressable>
+              )}
+
               {hasContent && (
                 <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
               )}
@@ -397,8 +454,9 @@ function ScanPanel({
 export default function AnimeDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
-  const { data: catalogue, isLoading, error } = useCatalogue(slug);
+  const { data: catalogue, isLoading, isFetching, dataUpdatedAt, error } = useCatalogue(slug);
   const refreshMutation = useRefreshCatalogue(slug);
+  const syncCatalogue   = useSyncCatalogue(slug);
   const { user, isAuthenticated } = useAuthStore();
   const setVideo = usePlayerStore((s) => s.setVideo);
   const isFavori = useIsFavori(slug);
@@ -488,13 +546,30 @@ export default function AnimeDetailScreen() {
                   />
                 </Pressable>
               )}
+              {/* Sync local — disponible pour tous les utilisateurs authentifiés */}
+              {isAuthenticated && (
+                <Pressable
+                  style={styles.iconBtn}
+                  onPress={syncCatalogue}
+                  disabled={isFetching}
+                >
+                  {isFetching
+                    ? <ActivityIndicator size="small" color={Colors.primary} />
+                    : <Ionicons name="sync-outline" size={20} color={Colors.text} />
+                  }
+                </Pressable>
+              )}
+              {/* Refresh admin — re-scrape les sources */}
               {isAuthenticated && user?.permissions?.can_refresh && (
                 <Pressable
                   style={styles.iconBtn}
                   onPress={() => refreshMutation.mutate()}
                   disabled={refreshMutation.isPending}
                 >
-                  <Ionicons name="refresh" size={20} color={Colors.text} />
+                  {refreshMutation.isPending
+                    ? <ActivityIndicator size="small" color={Colors.warning} />
+                    : <Ionicons name="cloud-download-outline" size={20} color={Colors.text} />
+                  }
                 </Pressable>
               )}
             </View>
@@ -506,6 +581,11 @@ export default function AnimeDetailScreen() {
           <Text style={styles.animeTitle}>{catalogue.nom}</Text>
           {catalogue.titre_alternatif && (
             <Text style={styles.altTitle}>{catalogue.titre_alternatif}</Text>
+          )}
+          {dataUpdatedAt > 0 && (
+            <Text style={styles.cacheAge}>
+              {isFetching ? 'Synchronisation…' : `Données : ${formatCacheAge(dataUpdatedAt)}`}
+            </Text>
           )}
           <View style={styles.metaRow}>
             {catalogue.type_contenu && <Badge label={catalogue.type_contenu} color={Colors.primary} />}
@@ -702,15 +782,19 @@ export default function AnimeDetailScreen() {
           {/* ── Scans ── */}
           {activeTab === 'scans' && (
             <ScanPanel
+              slug={slug}
               scans={catalogue.scans}
               catalogueNom={catalogue.nom}
+              canDownload={canDownload}
               onOpenChapitre={(scan, chapitre, idx) => {
                 setScanChapitre({
                   chapitre,
-                  chapitres: scan.chapitres,
+                  chapitres:     scan.chapitres,
                   chapitreIndex: idx,
-                  catalogueNom: catalogue.nom,
-                  scanNom: scan.nom,
+                  catalogueNom:  catalogue.nom,
+                  catalogueSlug: slug,
+                  scanNom:       scan.nom,
+                  scanSlug:      scan.slug,
                 });
                 router.push('/scan-reader');
               }}
@@ -750,6 +834,7 @@ const styles = StyleSheet.create({
   infoBlock: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, gap: Spacing.md },
   animeTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800', lineHeight: 30 },
   altTitle:   { color: Colors.textMuted, fontSize: FontSize.sm },
+  cacheAge:   { color: Colors.textMuted, fontSize: FontSize.xs, fontStyle: 'italic' },
   metaRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   genreRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   genreTag:   { paddingHorizontal: Spacing.sm, paddingVertical: 3, backgroundColor: Colors.surfaceAlt, borderRadius: Radius.sm },
@@ -849,7 +934,8 @@ const scan = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2,
   },
   badgeText: { fontSize: FontSize.xs, fontWeight: '600' },
-  unavail:  { color: Colors.textMuted, fontSize: FontSize.xs, fontStyle: 'italic' },
+  unavail:   { color: Colors.textMuted, fontSize: FontSize.xs, fontStyle: 'italic' },
+  dlBtn:     { padding: Spacing.xs, marginRight: Spacing.xs },
 });
 
 const mstyle = StyleSheet.create({

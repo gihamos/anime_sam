@@ -557,3 +557,45 @@ async def clear_all_history(_: dict = Depends(require_admin)):
 async def clear_history_for_slug(slug: str, _: dict = Depends(require_admin)):
     count = await history_repo.delete_by_slug(slug)
     return {"deleted": count, "slug": slug}
+
+
+# ---------------------------------------------------------------------------
+# Historique des connexions (access logs)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/access-logs", summary="Historique des connexions (admin)")
+async def get_access_logs(
+    ip:        str | None = None,
+    username:  str | None = None,
+    auth_only: bool       = False,
+    anon_only: bool       = False,
+    date_from: str | None = None,
+    date_to:   str | None = None,
+    limit:     int        = 200,
+    _: dict = Depends(require_admin),
+):
+    """
+    Retourne l'historique des requêtes reçues par l'API.
+    Filtres optionnels : ip, username, auth_only, anon_only, date_from/date_to (ISO 8601), limit.
+    """
+    import db.access_log_repository as log_repo
+    return await log_repo.get_logs(
+        ip=ip, username=username,
+        auth_only=auth_only, anon_only=anon_only,
+        date_from=date_from, date_to=date_to,
+        limit=min(limit, 1000),
+    )
+
+
+@router.get("/api/access-logs/stats", summary="Statistiques d'utilisation de l'API (admin)")
+async def get_access_stats(_: dict = Depends(require_admin)):
+    """Statistiques agrégées : total, IPs uniques, authentifiés vs visiteurs, top users, top IPs, activité 24 h."""
+    import db.access_log_repository as log_repo
+    return await log_repo.get_stats()
+
+
+@router.delete("/api/access-logs", status_code=200, summary="Vider l'historique des connexions (admin)")
+async def clear_access_logs(_: dict = Depends(require_admin)):
+    import db.access_log_repository as log_repo
+    count = await log_repo.clear_logs()
+    return {"deleted": count}

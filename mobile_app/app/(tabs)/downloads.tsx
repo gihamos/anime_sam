@@ -15,9 +15,10 @@ import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { useDownloadStore } from '@/stores/downloadStore';
 import { usePlayerStore } from '@/stores/playerStore';
-import { useJobPoller, deleteLocalFile, formatSpeed, formatEta } from '@/hooks/useDownloads';
+import { useScanReaderStore } from '@/stores/scanReaderStore';
+import { deleteLocalFile, deleteLocalScanChapter, formatSpeed, formatEta } from '@/hooks/useDownloads';
 import { downloadApi } from '@/services/api';
-import { ActiveJob, LocalFile } from '@/types';
+import { ActiveJob, LocalFile, LocalScanChapter } from '@/types';
 
 // ─── Active job card ──────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ function JobCard({ job }: { job: ActiveJob }) {
 
   const statusLabel = {
     pending:     'En attente…',
-    downloading: 'Téléchargement…',
+    downloading: job.job_type === 'scan' ? 'Téléchargement pages…' : 'Téléchargement…',
     ready:       'Finalisation…',
     error:       'Erreur',
   }[job.status] ?? job.status;
@@ -56,6 +57,12 @@ function JobCard({ job }: { job: ActiveJob }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
+        <Ionicons
+          name={job.job_type === 'scan' ? 'book-outline' : 'film-outline'}
+          size={16}
+          color={Colors.textMuted}
+          style={{ marginRight: Spacing.xs, marginTop: 2 }}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle} numberOfLines={2}>{job.label}</Text>
           <Text style={styles.cardMeta}>{job.catalogue_nom}</Text>
@@ -74,12 +81,18 @@ function JobCard({ job }: { job: ActiveJob }) {
         <Text style={styles.pctText}>{pct}%</Text>
       </View>
 
-      {job.status === 'downloading' && (
+      {job.status === 'downloading' && job.job_type !== 'scan' && (
         <View style={styles.statsRow}>
           {job.dl_speed > 0 && <Text style={styles.stat}>{formatSpeed(job.dl_speed)}</Text>}
-          {job.dl_eta > 0  && <Text style={styles.stat}>⏱ {formatEta(job.dl_eta)}</Text>}
+          {job.dl_eta > 0   && <Text style={styles.stat}>⏱ {formatEta(job.dl_eta)}</Text>}
           {job.nb_items > 1 && <Text style={styles.stat}>{job.nb_items} fichiers</Text>}
         </View>
+      )}
+
+      {job.status === 'downloading' && job.job_type === 'scan' && job.nb_items > 0 && (
+        <Text style={styles.stat}>
+          {Math.round(pct * job.nb_items / 100)}/{job.nb_items} pages
+        </Text>
       )}
 
       {job.status === 'error' && job.error && (
@@ -89,7 +102,7 @@ function JobCard({ job }: { job: ActiveJob }) {
   );
 }
 
-// ─── Local file card ──────────────────────────────────────────────────────────
+// ─── Local video/film file card ───────────────────────────────────────────────
 
 function LocalFileCard({ file }: { file: LocalFile }) {
   const router = useRouter();
@@ -163,15 +176,94 @@ function LocalFileCard({ file }: { file: LocalFile }) {
   );
 }
 
+// ─── Local scan chapter card ──────────────────────────────────────────────────
+
+function ScanChapterCard({ chapter }: { chapter: LocalScanChapter }) {
+  const router = useRouter();
+  const { removeScanChapter } = useDownloadStore();
+  const setScanChapitre = useScanReaderStore((s) => s.setChapitre);
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Supprimer',
+      `Supprimer le chapitre ${chapter.chapitre_num} de "${chapter.catalogue_nom}" ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer', style: 'destructive',
+          onPress: () => deleteLocalScanChapter(chapter, removeScanChapter),
+        },
+      ]
+    );
+  };
+
+  const handleRead = () => {
+    const chapitre = {
+      numero:   chapter.chapitre_num,
+      titre:    chapter.chapitre_titre,
+      url:      '',
+      lecteurs: [],
+      images:   chapter.local_pages.filter(Boolean),
+    };
+    setScanChapitre({
+      chapitre,
+      chapitres:     [chapitre],
+      chapitreIndex: 0,
+      catalogueNom:  chapter.catalogue_nom,
+      catalogueSlug: chapter.slug,
+      scanNom:       chapter.scan_nom,
+      scanSlug:      chapter.scan_slug,
+    });
+    router.push('/scan-reader');
+  };
+
+  const sizeMb  = (chapter.size_bytes / 1024 / 1024).toFixed(1);
+  const dateStr = new Date(chapter.downloaded_at).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Ionicons name="book" size={22} color={Colors.vostfr} style={{ marginRight: Spacing.sm }} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {chapter.catalogue_nom} · Ch. {chapter.chapitre_num}
+            {chapter.chapitre_titre ? ` — ${chapter.chapitre_titre}` : ''}
+          </Text>
+          <Text style={styles.cardMeta}>{chapter.scan_nom}</Text>
+        </View>
+      </View>
+
+      <View style={styles.fileMetaRow}>
+        <Text style={styles.fileMeta}>{chapter.page_count} pages</Text>
+        <Text style={styles.fileMeta}>·</Text>
+        <Text style={styles.fileMeta}>{sizeMb} Mo</Text>
+        <Text style={styles.fileMeta}>·</Text>
+        <Text style={styles.fileMeta}>{dateStr}</Text>
+      </View>
+
+      <View style={styles.fileActions}>
+        <Pressable style={styles.playBtn} onPress={handleRead}>
+          <Ionicons name="book-outline" size={14} color={Colors.text} />
+          <Text style={styles.playBtnText}>Lire hors ligne</Text>
+        </Pressable>
+        <Pressable style={styles.deleteBtn} onPress={handleDelete}>
+          <Ionicons name="trash-outline" size={14} color={Colors.error} />
+          <Text style={styles.deleteBtnText}>Supprimer</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function DownloadsScreen() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const { jobs, localFiles, loadFromStorage } = useDownloadStore();
-  const [section, setSection] = React.useState<'active' | 'local'>('active');
-
-  useJobPoller();
+  const { jobs, localFiles, scanChapters, loadFromStorage } = useDownloadStore();
+  const [section, setSection] = React.useState<'active' | 'local' | 'scans'>('active');
 
   useEffect(() => { loadFromStorage(); }, []);
 
@@ -206,7 +298,7 @@ export default function DownloadsScreen() {
         )}
       </View>
 
-      {/* Segmented control */}
+      {/* Segmented control — 3 onglets */}
       <View style={styles.segmented}>
         <Pressable
           style={[styles.segment, section === 'active' && styles.segmentActive]}
@@ -221,12 +313,20 @@ export default function DownloadsScreen() {
           onPress={() => setSection('local')}
         >
           <Text style={[styles.segmentText, section === 'local' && styles.segmentTextActive]}>
-            Bibliothèque{localFiles.length > 0 ? ` (${localFiles.length})` : ''}
+            Vidéos{localFiles.length > 0 ? ` (${localFiles.length})` : ''}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.segment, section === 'scans' && styles.segmentActive]}
+          onPress={() => setSection('scans')}
+        >
+          <Text style={[styles.segmentText, section === 'scans' && styles.segmentTextActive]}>
+            Scans{scanChapters.length > 0 ? ` (${scanChapters.length})` : ''}
           </Text>
         </Pressable>
       </View>
 
-      {section === 'active' ? (
+      {section === 'active' && (
         <FlatList
           data={displayJobs}
           keyExtractor={(j) => j.job_id}
@@ -238,12 +338,14 @@ export default function DownloadsScreen() {
               <Ionicons name="download-outline" size={56} color={Colors.textMuted} />
               <Text style={styles.emptyTitle}>Aucun téléchargement actif</Text>
               <Text style={styles.emptySubtitle}>
-                Ouvrez un anime et appuyez sur Télécharger pour démarrer.
+                Ouvrez un anime ou un manga et appuyez sur Télécharger pour démarrer.
               </Text>
             </View>
           }
         />
-      ) : (
+      )}
+
+      {section === 'local' && (
         <FlatList
           data={localFiles}
           keyExtractor={(f) => f.id}
@@ -252,10 +354,31 @@ export default function DownloadsScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="folder-open-outline" size={56} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>Bibliothèque vide</Text>
+              <Ionicons name="film-outline" size={56} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>Aucune vidéo hors ligne</Text>
               <Text style={styles.emptySubtitle}>
-                Les fichiers téléchargés apparaîtront ici et seront disponibles hors ligne.
+                Les épisodes et films téléchargés apparaîtront ici.
+              </Text>
+            </View>
+          }
+        />
+      )}
+
+      {section === 'scans' && (
+        <FlatList
+          data={scanChapters}
+          keyExtractor={(c) => c.id}
+          renderItem={({ item }) => <ScanChapterCard chapter={item} />}
+          contentContainerStyle={scanChapters.length === 0 ? { flex: 1 } : styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="book-outline" size={56} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>Aucun scan hors ligne</Text>
+              <Text style={styles.emptySubtitle}>
+                Ouvrez un manga et appuyez sur{' '}
+                <Ionicons name="download-outline" size={13} color={Colors.textMuted} />
+                {' '}sur un chapitre pour le télécharger.
               </Text>
             </View>
           }
@@ -280,9 +403,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
     backgroundColor: Colors.surfaceAlt, borderRadius: Radius.md, padding: 3,
   },
-  segment: { flex: 1, paddingVertical: Spacing.sm, alignItems: 'center', borderRadius: Radius.sm },
+  segment:           { flex: 1, paddingVertical: Spacing.sm, alignItems: 'center', borderRadius: Radius.sm },
   segmentActive:     { backgroundColor: Colors.primary },
-  segmentText:       { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '600' },
+  segmentText:       { color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '600' },
   segmentTextActive: { color: Colors.text },
 
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
@@ -291,10 +414,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card, borderRadius: Radius.lg,
     padding: Spacing.md, borderWidth: 1, borderColor: Colors.border,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
-  cardTitle:  { color: Colors.text, fontSize: FontSize.md, fontWeight: '700', lineHeight: 20 },
-  cardMeta:   { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
-  cancelBtn:  { padding: 4, marginLeft: Spacing.sm },
+  cardHeader:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
+  cardTitle:   { color: Colors.text, fontSize: FontSize.md, fontWeight: '700', lineHeight: 20 },
+  cardMeta:    { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
+  cancelBtn:   { padding: 4, marginLeft: Spacing.sm },
 
   progressBg:   { height: 4, backgroundColor: Colors.border, borderRadius: 2, marginBottom: Spacing.sm, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 2 },
@@ -304,7 +427,7 @@ const styles = StyleSheet.create({
   pctText:    { color: Colors.textSecondary, fontSize: FontSize.xs },
 
   statsRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xs },
-  stat:     { color: Colors.textMuted, fontSize: FontSize.xs },
+  stat:     { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: Spacing.xs },
   errorText: { color: Colors.error, fontSize: FontSize.xs, marginTop: Spacing.sm },
 
   fileMetaRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginBottom: Spacing.sm },

@@ -371,6 +371,7 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
       <div class="ni"        data-tab="downloads"  onclick="switchTab(this)"><span>⬇</span> Téléchargements</div>
       <div class="ni"        data-tab="security"   onclick="switchTab(this)"><span>🔒</span> Sécurité</div>
+      <div class="ni"        data-tab="connections" onclick="switchTab(this)"><span>📡</span> Connexions</div>
     </nav>
     <div class="sb-foot">
       <div class="me" id="me-lbl"></div>
@@ -654,6 +655,81 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
           </div>
         </div>
       </div>
+
+      <!-- CONNEXIONS -->
+      <div id="tab-connections" style="display:none">
+
+        <!-- Statistiques -->
+        <div id="conn-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1rem">
+          <div class="card" style="text-align:center;padding:.75rem">
+            <div style="font-size:1.5rem;font-weight:800;color:var(--tx)" id="cs-total">—</div>
+            <div style="font-size:.72rem;color:var(--mu);margin-top:.2rem">Requêtes totales</div>
+          </div>
+          <div class="card" style="text-align:center;padding:.75rem">
+            <div style="font-size:1.5rem;font-weight:800;color:var(--info)" id="cs-ips">—</div>
+            <div style="font-size:.72rem;color:var(--mu);margin-top:.2rem">IPs uniques</div>
+          </div>
+          <div class="card" style="text-align:center;padding:.75rem">
+            <div style="font-size:1.5rem;font-weight:800;color:var(--ac)" id="cs-auth">—</div>
+            <div style="font-size:.72rem;color:var(--mu);margin-top:.2rem">Connectés</div>
+          </div>
+          <div class="card" style="text-align:center;padding:.75rem">
+            <div style="font-size:1.5rem;font-weight:800;color:var(--mu)" id="cs-anon">—</div>
+            <div style="font-size:.72rem;color:var(--mu);margin-top:.2rem">Visiteurs anonymes</div>
+          </div>
+        </div>
+
+        <!-- Sous-onglets -->
+        <div class="ptab-nav" style="margin-bottom:.7rem">
+          <div class="ptab active" id="ctab-all"  onclick="setConnTab('all')">Tous</div>
+          <div class="ptab"        id="ctab-auth" onclick="setConnTab('auth')">Connectés</div>
+          <div class="ptab"        id="ctab-anon" onclick="setConnTab('anon')">Visiteurs</div>
+        </div>
+
+        <!-- Filtres -->
+        <div class="fbar">
+          <input id="conn-q-ip"   placeholder="🔍 Filtrer par IP…"          oninput="filterConns()" style="flex:1;min-width:140px">
+          <input id="conn-q-user" placeholder="🔍 Filtrer par utilisateur…"  oninput="filterConns()" style="flex:1;min-width:140px">
+          <label class="fcheck" style="white-space:nowrap;cursor:pointer">
+            <input type="checkbox" id="conn-hide-admin" onchange="filterConns()"> Masquer les admins
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="loadConnections()">↺ Actualiser</button>
+          <button class="btn btn-danger btn-sm"    onclick="clearConnLogs()">🗑 Vider les logs</button>
+        </div>
+
+        <!-- Tableau principal -->
+        <div class="dtw" style="margin-bottom:1rem">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>IP</th>
+                <th>Utilisateur</th>
+                <th>Méthode</th>
+                <th>Chemin</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="conn-tbody">
+              <tr><td colspan="7"><div class="empty"><div class="ic">⏳</div>Chargement…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Top IPs & Top Utilisateurs -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="card">
+            <div class="card-hd">🔝 Top 10 IPs</div>
+            <div class="card-bd" id="conn-top-ips"><div class="empty" style="padding:.5rem 0">Chargement…</div></div>
+          </div>
+          <div class="card">
+            <div class="card-hd">👤 Top 10 utilisateurs</div>
+            <div class="card-bd" id="conn-top-users"><div class="empty" style="padding:.5rem 0">Chargement…</div></div>
+          </div>
+        </div>
+
+      </div><!-- /tab-connections -->
 
     </div><!-- /content -->
   </div>
@@ -1258,14 +1334,14 @@ function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').c
 function switchTab(el){
   const tab=el.dataset.tab;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
-  ['users','catalogues','groups','search','apps','planning','downloads','security'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification',downloads:'Téléchargements',security:'Sécurité'};
+  ['users','catalogues','groups','search','apps','planning','downloads','security','connections'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification',downloads:'Téléchargements',security:'Sécurité',connections:'Connexions & IPs'};
   const actions={
     users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
     catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
     groups:`<button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ Nouveau groupe</button>`,
     apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
-    search:'',planning:'',downloads:'',security:'',
+    search:'',planning:'',downloads:'',security:'',connections:'',
   };
   document.getElementById('tb-title').textContent=titles[tab]||tab;
   document.getElementById('tb-actions').innerHTML=actions[tab]||'';
@@ -1274,6 +1350,7 @@ function switchTab(el){
   if(tab==='search'){initSearch();}
   if(tab==='downloads'){loadDlHistory();loadDlQuotas();}
   if(tab==='security'){loadSecurity();}
+  if(tab==='connections'){loadConnections();}
 }
 
 function showPTab(el,target){
@@ -3039,6 +3116,147 @@ async function addFromSearch(slug,titre,btn){
 const _srStyle=document.createElement('style');
 _srStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(_srStyle);
+
+// ═══════════════════════ CONNEXIONS ══════════════════════════════════════════
+
+let _allConns=[], _connTab='all', _connBanned=new Set();
+
+async function loadConnections(){
+  try{
+    const [stats, banned] = await Promise.all([
+      api('GET','/admin/api/access-logs/stats'),
+      api('GET','/admin/api/security/ip-bans'),
+    ]);
+    _connBanned = new Set((banned||[]).map(b=>b.ip));
+    // Afficher les stats
+    document.getElementById('cs-total').textContent = (stats.total||0).toLocaleString('fr');
+    document.getElementById('cs-ips').textContent   = (stats.unique_ips||0).toLocaleString('fr');
+    document.getElementById('cs-auth').textContent  = (stats.auth_count||0).toLocaleString('fr');
+    document.getElementById('cs-anon').textContent  = (stats.anon_count||0).toLocaleString('fr');
+    // Top IPs
+    const topIpEl = document.getElementById('conn-top-ips');
+    if(stats.top_ips && stats.top_ips.length){
+      topIpEl.innerHTML = stats.top_ips.map(t=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--bdr)">
+          <span class="mono" style="${_connBanned.has(t.ip)?'color:var(--er)':''}">${esc(t.ip)}${_connBanned.has(t.ip)?' 🚫':''}</span>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <span style="font-size:.78rem;color:var(--mu)">${t.count.toLocaleString('fr')} req.</span>
+            ${!_connBanned.has(t.ip)?`<button class="btn btn-danger btn-sm btn-icon" onclick="banIpFromLog('${esc(t.ip)}')" title="Bannir">🚫</button>`:`<button class="btn btn-ok btn-sm btn-icon" onclick="unbanIpFromLog('${esc(t.ip)}')" title="Débannir">✓</button>`}
+          </div>
+        </div>`).join('');
+    } else { topIpEl.innerHTML='<div class="empty" style="padding:.5rem 0">Aucune donnée</div>'; }
+    // Top users
+    const topUsrEl = document.getElementById('conn-top-users');
+    if(stats.top_users && stats.top_users.length){
+      topUsrEl.innerHTML = stats.top_users.map(u=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--bdr)">
+          <span style="font-size:.83rem;font-weight:600">${esc(u.username)}</span>
+          <span style="font-size:.78rem;color:var(--mu)">${u.count.toLocaleString('fr')} req.</span>
+        </div>`).join('');
+    } else { topUsrEl.innerHTML='<div class="empty" style="padding:.5rem 0">Aucune donnée</div>'; }
+  }catch(e){ toast(String(e),'er'); }
+
+  // Charger les logs
+  try{
+    const p = new URLSearchParams({limit:300});
+    if(_connTab==='auth') p.set('auth_only','true');
+    if(_connTab==='anon') p.set('anon_only','true');
+    _allConns = await api('GET',`/admin/api/access-logs?${p}`);
+    filterConns();
+  }catch(e){ toast(String(e),'er'); }
+}
+
+function setConnTab(tab){
+  _connTab = tab;
+  ['all','auth','anon'].forEach(t=>{
+    document.getElementById(`ctab-${t}`).classList.toggle('active', t===tab);
+  });
+  loadConnections();
+}
+
+function filterConns(){
+  const qIp       = (document.getElementById('conn-q-ip')?.value||'').toLowerCase().trim();
+  const qUser     = (document.getElementById('conn-q-user')?.value||'').toLowerCase().trim();
+  const hideAdmin = document.getElementById('conn-hide-admin')?.checked || false;
+  const adminSet  = hideAdmin ? new Set(allUsers.filter(u=>u.role==='admin').map(u=>u.username)) : null;
+  const list = _allConns.filter(c=>{
+    if(qIp       && !c.ip.toLowerCase().includes(qIp))            return false;
+    if(qUser     && !(c.username||'').toLowerCase().includes(qUser)) return false;
+    if(adminSet  && c.username && adminSet.has(c.username))        return false;
+    return true;
+  });
+  renderConns(list);
+}
+
+function _statusColor(s){
+  if(s<300)return'var(--ok)';
+  if(s<400)return'var(--info)';
+  if(s<500)return'var(--wa)';
+  return'var(--er)';
+}
+
+function renderConns(list){
+  const b = document.getElementById('conn-tbody');
+  if(!list.length){
+    b.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ic">📡</div>Aucune connexion enregistrée</div></td></tr>`;
+    return;
+  }
+  b.innerHTML = list.map(c=>{
+    const isBanned = _connBanned.has(c.ip);
+    const date = new Date(c.timestamp).toLocaleString('fr');
+    const userCell = c.username
+      ? `<span class="badge b-ac" style="font-size:.72rem">${esc(c.username)}</span>`
+      : `<span style="color:var(--mu);font-style:italic;font-size:.78rem">Anonyme</span>`;
+    const banBtn = isBanned
+      ? `<button class="btn btn-ok btn-sm btn-icon"   onclick="unbanIpFromLog('${esc(c.ip)}')" title="Débannir">✓</button>`
+      : `<button class="btn btn-danger btn-sm btn-icon" onclick="banIpFromLog('${esc(c.ip)}')" title="Bannir">🚫</button>`;
+    const bannedStyle = isBanned ? 'background:rgba(244,63,94,.05)' : '';
+    return `<tr style="${bannedStyle}">
+      <td>
+        <span class="mono">${esc(c.ip)}</span>
+        ${isBanned?'<span class="badge b-er" style="font-size:.65rem;margin-left:.3rem">BANNI</span>':''}
+      </td>
+      <td>${userCell}</td>
+      <td><span class="badge b-info" style="font-size:.65rem">${esc(c.method)}</span></td>
+      <td style="font-size:.78rem;color:var(--tx2);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.path)}">${esc(c.path)}</td>
+      <td><span style="font-weight:700;font-size:.8rem;color:${_statusColor(c.status_code)}">${c.status_code}</span></td>
+      <td style="font-size:.78rem;color:var(--mu);white-space:nowrap">${date}</td>
+      <td><div class="actions">${banBtn}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function banIpFromLog(ip){
+  const reason = prompt(`Raison du ban pour ${ip} (optionnel) :`) ?? '';
+  if(reason === null) return; // annulé
+  try{
+    await api('POST','/admin/api/security/ip-bans',{ip, reason});
+    toast(`IP ${ip} bannie`,'ok');
+    await loadConnections();
+  }catch(e){ toast(String(e),'er'); }
+}
+
+async function unbanIpFromLog(ip){
+  if(!confirm(`Débannir l'IP ${ip} ?`))return;
+  try{
+    await api('DELETE',`/admin/api/security/ip-bans/${ip}`);
+    toast(`IP ${ip} débannie`,'ok');
+    await loadConnections();
+  }catch(e){ toast(String(e),'er'); }
+}
+
+async function clearConnLogs(){
+  if(!confirm('Supprimer tout l\'historique des connexions ? Cette action est irréversible.'))return;
+  try{
+    const r = await api('DELETE','/admin/api/access-logs');
+    toast(`${r.deleted} entrée${r.deleted!==1?'s':''} supprimée${r.deleted!==1?'s':''}`, 'ok');
+    _allConns=[];
+    filterConns();
+    document.getElementById('cs-total').textContent='0';
+    document.getElementById('cs-auth').textContent='0';
+    document.getElementById('cs-anon').textContent='0';
+  }catch(e){ toast(String(e),'er'); }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 

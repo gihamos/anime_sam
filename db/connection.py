@@ -62,6 +62,15 @@ async def setup_indexes():
         # Index sur les groupes
         await db["groups"].create_index("name")
 
+        # Index access_logs — recherche + TTL 90 jours
+        await db["access_logs"].create_index("timestamp")
+        await db["access_logs"].create_index("ip")
+        await db["access_logs"].create_index("username")
+        await db["access_logs"].create_index(
+            "expires_at",
+            expireAfterSeconds=0,  # TTL : expire à la date stockée dans expires_at
+        )
+
         logger.info("Index MongoDB créés")
 
     except OperationFailure as e:

@@ -23,7 +23,14 @@
       "Bash(python -m py_compile services/recommendation_engine.py)",
       "Bash(python -m py_compile api/routes/auth.py)",
       "Bash(python -m py_compile models/responses.py)",
-      "PowerShell(Get-Command uvicorn -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Command uvicorn -ErrorAction SilentlyContinue)",
+      "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -notmatch \"player/index|EpisodeItem\" } | Select-Object -First 20)",
+      "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"downloads|scan-reader|slug|useDownloads|downloadStore|scanReader\" } | Select-Object -First 30)",
+      "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; \\(npx tsc --noEmit 2>&1\\) | Out-String | Select-String -Pattern \"error TS\" -AllMatches | ForEach-Object { $_.Matches } | Select-Object -First 5 | ForEach-Object { $_.Value })",
+      "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; $out = npx tsc --noEmit 2>&1; $out | Where-Object { $_ -match \"downloads|scan-reader|slug|useDownloads|downloadStore|scanReader|ScanPanel\" } | Select-Object -First 30)",
+      "PowerShell(cd \"e:\\\\mes_projets\\\\anime_sam\\\\mobile_app\"; $out = npx tsc --noEmit 2>&1; $out | ForEach-Object { $_ } | Select-Object -First 80)",
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('name:', d.get\\('name'\\)\\); print\\('version:', d.get\\('version'\\)\\); [print\\(k,':', v\\) for k,v in d.get\\('dependencies',{}\\).items\\(\\)]\")"
     ]
   }
 }

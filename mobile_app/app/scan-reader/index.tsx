@@ -20,6 +20,7 @@ import { useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
 import { useScanReaderStore } from '@/stores/scanReaderStore';
+import { useDownloadStore } from '@/stores/downloadStore';
 import { LecteurScan } from '@/types';
 
 // ─── Page zoomable (PanResponder — fonctionne dans Expo Go sans Reanimated) ──
@@ -409,8 +410,9 @@ function LecteurPicker({
 export default function ScanReaderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { chapitre, catalogueNom, scanNom, chapitreIndex, chapitres, goToNext, goToPrev } =
+  const { chapitre, catalogueNom, catalogueSlug, scanNom, scanSlug, chapitreIndex, chapitres, goToNext, goToPrev } =
     useScanReaderStore();
+  const getScanChapter = useDownloadStore((s) => s.getScanChapter);
 
   const [selectedLecteur, setSelectedLecteur] = useState<LecteurScan | null>(null);
   const [showLecteurPicker, setShowLecteurPicker] = useState(false);
@@ -432,14 +434,27 @@ export default function ScanReaderScreen() {
     );
   }
 
+  // Vérifier si une version hors-ligne est disponible pour ce chapitre
+  const localChapter = catalogueSlug && scanSlug
+    ? getScanChapter(catalogueSlug, scanSlug, chapitre.numero)
+    : undefined;
+  const offlinePages = localChapter?.local_pages.filter(Boolean) ?? [];
+  const isOffline    = offlinePages.length > 0;
+
   const title = `${catalogueNom} · ${scanNom} · Ch. ${chapitre.numero}${chapitre.titre ? ` — ${chapitre.titre}` : ''}`;
-  const hasImages   = chapitre.images && chapitre.images.length > 0;
-  const hasLecteurs = chapitre.lecteurs && chapitre.lecteurs.length > 0;
+  // Priorité : pages locales → images réseau
+  const images      = isOffline ? offlinePages : (chapitre.images ?? []);
+  const hasImages   = images.length > 0;
+  const hasLecteurs = !isOffline && chapitre.lecteurs && chapitre.lecteurs.length > 0;
 
   if (hasImages && !selectedLecteur) {
     return (
       <>
-        <ImageReader images={chapitre.images} onBack={handleBack} title={title} />
+        <ImageReader
+          images={images}
+          onBack={handleBack}
+          title={isOffline ? `${title} · 📥` : title}
+        />
         <ChapitreNav
           onPrev={chapitreIndex > 0 ? goToPrev : undefined}
           onNext={chapitreIndex < chapitres.length - 1 ? goToNext : undefined}

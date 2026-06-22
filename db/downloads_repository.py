@@ -33,6 +33,16 @@ async def list_recent(limit: int = 200) -> list[dict]:
     return await cursor.to_list(None)
 
 
+async def list_recent_by_type(dl_type: str, limit: int = 200) -> list[dict]:
+    cursor = _hist().find({"type": dl_type}, {"_id": 0}).sort("date", -1).limit(limit)
+    return await cursor.to_list(None)
+
+
+async def list_recent_by_type_and_user(dl_type: str, username: str, limit: int = 100) -> list[dict]:
+    cursor = _hist().find({"type": dl_type, "username": username}, {"_id": 0}).sort("date", -1).limit(limit)
+    return await cursor.to_list(None)
+
+
 async def usage_today(username: str) -> dict:
     """Retourne {count, bytes} pour les dernières 24 h."""
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()

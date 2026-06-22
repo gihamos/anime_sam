@@ -9,6 +9,9 @@ import {
   User,
   JobCreated,
   JobStatus,
+  ScanJobCreated,
+  ScanJobStatus,
+  ScanJobManifest,
   SyncStatus,
   EpisodesResponse,
   FavorisResponse,
@@ -282,6 +285,121 @@ export const downloadApi = {
     return `${baseUrl}/api/download/jobs/${jobId}/file${t}`;
   },
 };
+
+// ─── Téléchargements scans ────────────────────────────────────────────────────
+
+export const scanDownloadApi = {
+  createJob: async (params: {
+    slug: string;
+    scan_slug: string;
+    chapitre_nums: number[];
+  }): Promise<ScanJobCreated> => {
+    const { data } = await getApiClient().post<ScanJobCreated>('/api/download/scan/jobs', params);
+    return data;
+  },
+
+  getStatus: async (jobId: string): Promise<ScanJobStatus> => {
+    const { data } = await getApiClient().get<ScanJobStatus>(`/api/download/scan/jobs/${jobId}`);
+    return data;
+  },
+
+  getManifest: async (jobId: string): Promise<ScanJobManifest> => {
+    const { data } = await getApiClient().get<ScanJobManifest>(`/api/download/scan/jobs/${jobId}/manifest`);
+    return data;
+  },
+
+  getPageUrl: (jobId: string, c: number, p: number, baseUrl: string, token: string | null): string => {
+    const t = token ? `&token=${encodeURIComponent(token)}` : '';
+    return `${baseUrl}/api/download/scan/jobs/${jobId}/page?c=${c}&p=${p}${t}`;
+  },
+
+  cancel: async (jobId: string): Promise<void> => {
+    await getApiClient().delete(`/api/download/scan/jobs/${jobId}`);
+  },
+};
+
+// ─── Admin : logs de connexion ───────────────────────────────────────────────
+
+export interface AccessLog {
+  ip:          string;
+  username:    string | null;
+  method:      string;
+  path:        string;
+  status_code: number;
+  user_agent:  string;
+  timestamp:   string;
+}
+
+export interface AccessStats {
+  total:      number;
+  unique_ips: number;
+  auth_count: number;
+  anon_count: number;
+  top_users:  { username: string; count: number }[];
+  top_ips:    { ip: string;       count: number }[];
+  hourly_24h: { hour: string;     count: number }[];
+}
+
+export const adminLogsApi = {
+  getLogs: async (params?: {
+    ip?:        string;
+    username?:  string;
+    auth_only?: boolean;
+    anon_only?: boolean;
+    date_from?: string;
+    date_to?:   string;
+    limit?:     number;
+  }): Promise<AccessLog[]> => {
+    const { data } = await getApiClient().get<AccessLog[]>('/admin/api/access-logs', { params });
+    return data;
+  },
+
+  getStats: async (): Promise<AccessStats> => {
+    const { data } = await getApiClient().get<AccessStats>('/admin/api/access-logs/stats');
+    return data;
+  },
+
+  clearLogs: async (): Promise<{ deleted: number }> => {
+    const { data } = await getApiClient().delete<{ deleted: number }>('/admin/api/access-logs');
+    return data;
+  },
+
+  banIp: async (ip: string, reason?: string): Promise<void> => {
+    await getApiClient().post('/admin/api/security/ip-bans', { ip, reason: reason ?? '' });
+  },
+
+  unbanIp: async (ip: string): Promise<void> => {
+    await getApiClient().delete(`/admin/api/security/ip-bans/${ip}`);
+  },
+
+  getBannedIps: async (): Promise<{ ip: string; reason: string; banned_by: string; created_at: string }[]> => {
+    const { data } = await getApiClient().get('/admin/api/security/ip-bans');
+    return data;
+  },
+};
+
+// ─── Test de connexion ────────────────────────────────────────────────────────
+
+export async function testApiConnection(
+  url: string,
+): Promise<{ ok: boolean; message: string }> {
+  const clean = url.trim().replace(/\/$/, '');
+  try {
+    const res = await axios.get<{ message?: string }>(`${clean}/`, { timeout: 6000 });
+    if (res.status === 200 && res.data?.message) {
+      return { ok: true, message: res.data.message };
+    }
+    return { ok: false, message: `Réponse inattendue (HTTP ${res.status})` };
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      if (!err.response) {
+        return { ok: false, message: 'Serveur inaccessible — vérifiez l\'adresse et le réseau' };
+      }
+      return { ok: false, message: `Erreur HTTP ${err.response.status}` };
+    }
+    return { ok: false, message: 'Erreur inconnue' };
+  }
+}
 
 // ─── Utilitaire erreur ────────────────────────────────────────────────────────
 

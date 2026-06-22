@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 from utils.logger import logger
 from db.connection import setup_indexes
 import db.ip_bans_repository as ip_bans_repo
+import db.access_log_repository as access_log_repo
 import services.api_guard as api_guard
 from api.routes.catalogues import router as catalogues_router, my_router as mycatalogues_router
 from api.routes.planning import router as planning_router
@@ -13,6 +14,7 @@ from api.routes.auth import router as auth_router
 from api.routes.admin import router as admin_router
 from api.routes.groups import router as groups_router
 from api.routes.download import router as download_router, admin_router as dl_admin_router
+from api.routes.scan_download import router as scan_dl_router, admin_router as scan_dl_admin_router
 from services.catalogue_service import mettre_a_jour_tous
 from services.scheduler_service import scheduler, load_schedules_from_db
 from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT
@@ -104,6 +106,25 @@ app = FastAPI(
 _ALWAYS_OPEN = {"/auth/login", "/docs", "/openapi.json", "/"}
 
 
+def _extract_username_from_token(request: Request) -> str | None:
+    """Extrait le username du JWT sans accès DB (lecture du claim 'sub' uniquement)."""
+    token = (
+        request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        or request.query_params.get("token", "")
+    )
+    if not token:
+        return None
+    try:
+        from jose import jwt
+        from params import JWT_SECRET
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get("type") == "client":
+            return f"[client:{payload.get('sub', '?')}]"
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     ip = (request.client.host if request.client else "") or ""
@@ -130,7 +151,6 @@ async def security_middleware(request: Request, call_next):
                     from jose import jwt
                     from params import JWT_SECRET
                     payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-                    # Les tokens client (applications API) ne sont jamais admin
                     if payload.get("type") != "client":
                         sub = payload.get("sub")
                         if sub:
@@ -143,7 +163,21 @@ async def security_middleware(request: Request, call_next):
                 reason = api_guard.get_state()["reason"] or "API temporairement verrouillée — maintenance en cours"
                 return JSONResponse({"detail": reason}, status_code=503)
 
-    return await call_next(request)
+    # ── Traitement de la requête ──────────────────────────────────────────────
+    username   = _extract_username_from_token(request)
+    response   = await call_next(request)
+    user_agent = request.headers.get("user-agent", "")
+
+    access_log_repo.log_request_bg(
+        ip          = ip,
+        username    = username,
+        method      = request.method,
+        path        = request.url.path,
+        status_code = response.status_code,
+        user_agent  = user_agent,
+    )
+
+    return response
 #f"http://localhost:{ADMIN_PORT}", f"http://127.0.0.1:8082","http://localhost:8082","http://10.237.9.204:8082"
 
 app.add_middleware(
@@ -162,6 +196,8 @@ app.include_router(mycatalogues_router)
 app.include_router(planning_router)
 app.include_router(download_router)
 app.include_router(dl_admin_router)
+app.include_router(scan_dl_router)
+app.include_router(scan_dl_admin_router)
 
 
 @app.get("/", tags=["Root"])

@@ -1,6 +1,12 @@
+import { useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { catalogueApi } from '@/services/api';
 import { SearchFilters, EpisodesResponse } from '@/types';
+import {
+  loadCatalogueCache,
+  saveCatalogueCache,
+  CATALOGUE_CACHE_TTL,
+} from '@/services/catalogueCache';
 
 export function useCatalogueList() {
   return useQuery({
@@ -29,11 +35,46 @@ export function useSiteSearch(q: string, enabled = false) {
 }
 
 export function useCatalogue(slug: string) {
+  const queryClient = useQueryClient();
+
+  // Injecter le cache disque dans React Query avant que le réseau réponde.
+  // Si les données sont encore fraîches (< TTL), React Query n'enverra pas de requête.
+  useEffect(() => {
+    let cancelled = false;
+    loadCatalogueCache(slug).then((entry) => {
+      if (cancelled || !entry) return;
+      // Ne pas écraser si React Query a déjà des données (réseau plus rapide que disque)
+      const state = queryClient.getQueryState(['catalogue', slug]);
+      if (!state?.data) {
+        queryClient.setQueryData(['catalogue', slug], entry.data, {
+          updatedAt: entry.cached_at,
+        });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [slug, queryClient]);
+
   return useQuery({
     queryKey: ['catalogue', slug],
-    queryFn: () => catalogueApi.get(slug),
-    staleTime: 10 * 60 * 1000,
+    queryFn: async () => {
+      const data = await catalogueApi.get(slug);
+      saveCatalogueCache(slug, data); // fire-and-forget — ne bloque pas l'UI
+      return data;
+    },
+    staleTime: CATALOGUE_CACHE_TTL, // 1 h : pas de refetch si cache récent
   });
+}
+
+/**
+ * Force la re-synchronisation du catalogue depuis le serveur.
+ * Met à jour le cache disque en arrière-plan (via le queryFn de useCatalogue).
+ * Disponible pour tous les utilisateurs authentifiés.
+ */
+export function useSyncCatalogue(slug: string) {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['catalogue', slug] });
+  }, [slug, queryClient]);
 }
 
 export function useSyncContent(slug: string) {

@@ -205,6 +205,53 @@ export interface ActiveJob {
   nb_items: number;
   error: string;
   created_at: number;      // timestamp ms
+  job_type?: 'video' | 'scan';
+  // Contexte scan (présent si job_type === 'scan')
+  scan_slug?: string;
+  chapitre_nums?: number[];
+}
+
+// ─── Scan téléchargement ──────────────────────────────────────────────────────
+
+export interface ScanJobCreated {
+  job_id: string;
+  slug: string;
+  scan_slug: string;
+  chapters: Array<{ num: number; titre: string | null; page_count: number }>;
+  total_pages: number;
+  status: string;
+}
+
+export interface ScanJobStatus {
+  job_id: string;
+  status: 'pending' | 'downloading' | 'ready' | 'error';
+  progress: number;
+  total_pages: number;
+  done_pages: number;
+  error: string;
+  ready: boolean;
+}
+
+export interface ScanJobManifest {
+  job_id: string;
+  slug: string;
+  scan_slug: string;
+  chapters: Array<{ num: number; titre: string | null; page_count: number }>;
+}
+
+// Chapitre scan stocké localement sur l'appareil
+export interface LocalScanChapter {
+  id: string;              // "{slug}_{scan_slug}_{num}"
+  slug: string;
+  catalogue_nom: string;
+  scan_slug: string;
+  scan_nom: string;
+  chapitre_num: number;
+  chapitre_titre: string | null;
+  local_pages: string[];   // URIs expo-file-system (file://…)
+  page_count: number;
+  size_bytes: number;
+  downloaded_at: number;   // timestamp ms
 }
 
 // Fichier téléchargé et enregistré localement sur l'appareil
