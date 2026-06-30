@@ -72,6 +72,11 @@ def _best_video(videos: list[dict]) -> Optional[dict]:
     return next((v for v in videos if v.get("player_url")), None)
 
 
+def _video_urls(videos: list[dict]) -> list[str]:
+    """Toutes les URLs de lecteurs disponibles, dans l'ordre — pour fallback en cascade."""
+    return [v["player_url"] for v in videos if v.get("player_url")]
+
+
 def _safe(s: str) -> str:
     import re
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(s)).strip() or "fichier"
@@ -86,7 +91,7 @@ class _Job:
     slug:        str
     output_name: str           # nom du fichier final (.mp4 ou .zip)
     is_single:   bool          # True → fichier unique mp4 ; False → ZIP
-    items:       list[dict]    # [{filename, player_url}, ...]
+    items:       list[dict]    # [{filename, player_urls}, ...]
     status:      str  = "pending"   # pending | downloading | ready | error
     progress:    int  = 0           # 0-100
     current:     str  = ""
@@ -148,7 +153,7 @@ async def _run_job(job: _Job) -> None:
             item = job.items[0]
             job.current = item["filename"]
             path = await downloader.download_to_file(
-                item["player_url"], tmp_path, item["filename"],
+                item["player_urls"], tmp_path, item["filename"],
                 cancel=job._cancel, on_progress=_byte_progress,
             )
             if job._cancel.is_set():
@@ -255,11 +260,11 @@ async def create_job(
         films    = doc.get("films", [])
         if film_idx >= len(films):
             raise HTTPException(404, "Film introuvable")
-        vid = _best_video(films[film_idx].get("videos", []))
-        if not vid:
+        urls = _video_urls(films[film_idx].get("videos", []))
+        if not urls:
             raise HTTPException(404, "Aucun lecteur disponible — synchronisez d'abord")
         nom_film = _safe(films[film_idx].get("nom", f"film-{film_idx}"))
-        items    = [{"filename": f"{nom_cat} - {nom_film}", "player_url": vid["player_url"]}]
+        items    = [{"filename": f"{nom_cat} - {nom_film}", "player_urls": urls}]
         output_name = f"{nom_cat} - {nom_film}.mp4"
 
     # ── Épisode(s) d'une saison ─────────────────────────────────────────────
@@ -284,11 +289,11 @@ async def create_job(
 
         nom_sai = _safe(saisons[saison_idx].get("nom", f"saison-{saison_idx}"))
         for ep in eps:
-            vid = _best_video(ep.get("videos", []))
-            if vid:
+            urls = _video_urls(ep.get("videos", []))
+            if urls:
                 items.append({
-                    "filename":   f"{nom_cat} - {nom_sai} - Episode {ep['numero']:02d}",
-                    "player_url": vid["player_url"],
+                    "filename":    f"{nom_cat} - {nom_sai} - Episode {ep['numero']:02d}",
+                    "player_urls": urls,
                 })
 
         if not items:

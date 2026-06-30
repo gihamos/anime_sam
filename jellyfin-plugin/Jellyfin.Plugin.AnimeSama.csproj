@@ -13,10 +13,11 @@
 
   <ItemGroup>
     <!--
-      PrivateAssets="all" : les assemblies Jellyfin ne sont pas copiées dans le output.
+      PrivateAssets="all" : les assemblies Jellyfin/ASP.NET ne sont pas copiées dans le output.
       Elles sont déjà présentes sur le serveur Jellyfin.
     -->
     <PackageReference Include="Jellyfin.Controller" Version="10.9.11" PrivateAssets="all" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

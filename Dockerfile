@@ -1,6 +1,5 @@
 FROM python:3.12-slim
 
-# System deps: ffmpeg for yt-dlp, Playwright Chromium runtime libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
@@ -16,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt && playwright install chromiu
 
 COPY . .
 
+
 EXPOSE 8000 8001
 
-CMD ["python", "main.py"]
+CMD ["python", "start.py"]

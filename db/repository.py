@@ -99,13 +99,17 @@ async def get_all_en_cours() -> list[dict]:
     return [_clean(d) async for d in cursor]
 
 
-async def get_all_summary() -> list[dict]:
+async def count_all() -> int:
+    return await _col().count_documents({})
+
+
+async def get_all_summary(skip: int = 0, limit: int = 100) -> list[dict]:
     """Résumé léger — admin uniquement (pas de filtrage visibilité)."""
     cursor = _col().find(
         {},
         {"slug": 1, "nom": 1, "etat": 1, "type_contenu": 1,
          "genres": 1, "langues": 1, "updated_at": 1, "episodes_synced": 1}
-    )
+    ).skip(skip).limit(limit)
     return [_clean(d) async for d in cursor]
 
 
@@ -123,7 +127,11 @@ async def get_reco_candidates() -> list[dict]:
     return [_clean(d) async for d in cursor]
 
 
-async def get_visible_summary() -> list[dict]:
+async def count_visible() -> int:
+    return await _col().count_documents({})
+
+
+async def get_visible_summary(skip: int = 0, limit: int = 100) -> list[dict]:
     """
     Résumé complet avec visibilité, structure saisons/films/scans,
     mais sans épisodes/chapitres/vidéos (données lourdes exclues).
@@ -132,7 +140,7 @@ async def get_visible_summary() -> list[dict]:
     cursor = _col().find(
         {},
         {"saisons.episodes": 0, "films.videos": 0, "scans.chapitres": 0},
-    )
+    ).skip(skip).limit(limit)
     return [_clean(d) async for d in cursor]
 
 

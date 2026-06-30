@@ -1,0 +1,13 @@
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.csproj.AssemblyReference.cache
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.GeneratedMSBuildEditorConfig.editorconfig
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.AssemblyInfoInputs.cache
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.AssemblyInfo.cs
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.csproj.CoreCompileInputs.cache
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.sourcelink.json
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/bin/Debug/net8.0/Jellyfin.Plugin.AnimeSama.deps.json
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/bin/Debug/net8.0/Jellyfin.Plugin.AnimeSama.dll
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/bin/Debug/net8.0/Jellyfin.Plugin.AnimeSama.pdb
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.dll
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/refint/Jellyfin.Plugin.AnimeSama.dll
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/Jellyfin.Plugin.AnimeSama.pdb
+/home/taise/mes_projets/anime_sam/jellyfin-plugin/obj/Debug/net8.0/ref/Jellyfin.Plugin.AnimeSama.dll

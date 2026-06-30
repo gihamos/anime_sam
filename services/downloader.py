@@ -112,17 +112,34 @@ def _download_to_dir_sync(
 # ── API publique asynchrone ───────────────────────────────────────────────────
 
 async def download_to_file(
-    player_url:  str,
+    player_url:  str | list[str],
     dest:        Path,
     stem:        str,
     cancel:      Optional[threading.Event] = None,
     on_progress: Optional[Callable]        = None,
 ) -> Optional[Path]:
-    """Télécharge une vidéo sur disque via yt-dlp (async wrapper)."""
+    """
+    Télécharge une vidéo sur disque via yt-dlp (async wrapper).
+
+    `player_url` accepte une URL unique ou une liste d'URLs candidates
+    (plusieurs lecteurs pour le même épisode) — la première qui aboutit
+    est utilisée, les suivantes ne sont tentées qu'en cas d'échec.
+    """
+    urls = player_url if isinstance(player_url, list) else [player_url]
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
-        None, _download_to_dir_sync, player_url, dest, stem, cancel, on_progress
-    )
+
+    for i, url in enumerate(urls):
+        if cancel and cancel.is_set():
+            return None
+        result = await loop.run_in_executor(
+            None, _download_to_dir_sync, url, dest, stem, cancel, on_progress
+        )
+        if result is not None:
+            return result
+        if i < len(urls) - 1:
+            logger.warning(f"download_to_file: source {i + 1}/{len(urls)} a échoué, tentative avec la suivante…")
+
+    return None
 
 
 def _resolve_sync(embed_url: str) -> dict:
@@ -221,7 +238,7 @@ async def build_zip(
                 logger.info("build_zip : annulation demandée, arrêt.")
                 break
             path = await download_to_file(
-                item["player_url"], tmp_path, item["filename"],
+                item.get("player_urls") or item["player_url"], tmp_path, item["filename"],
                 cancel=cancel, on_progress=on_file_progress,
             )
             if path and path.exists():

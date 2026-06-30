@@ -9,5 +9,4 @@ logs
 .devcontainer
 .gitignore
 README.md
-start.py
 mobile_app

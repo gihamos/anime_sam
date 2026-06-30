@@ -12,9 +12,9 @@
             </div>
 
             <div class="inputContainer">
-                <label class="inputLabel inputLabelUnfocused" for="apiUrl">URL de l'API</label>
-                <input id="apiUrl" type="text" is="emby-input" placeholder="http://192.168.1.x:8000" />
-                <div class="fieldDescription">Adresse du serveur Anime Sama (sans slash final)</div>
+                <label class="inputLabel inputLabelUnfocused" for="apiUrl">URL de l'API Anime Sama</label>
+                <input id="apiUrl" type="text" is="emby-input" placeholder="https://anime.mondomaine.fr" />
+                <div class="fieldDescription">Adresse publique de l'API (sans slash final)</div>
             </div>
 
             <div class="inputContainer">
@@ -27,6 +27,29 @@
                 <input id="password" type="password" is="emby-input" />
             </div>
 
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="jellyfinPublicUrl">URL publique de Jellyfin</label>
+                <input id="jellyfinPublicUrl" type="text" is="emby-input" placeholder="https://jellyfin.mondomaine.fr" />
+                <div class="fieldDescription">Utilisée dans les .strm pour résoudre les streams (ignoré si téléchargement activé)</div>
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="libraryPath">Chemin de la bibliothèque (sur le serveur Jellyfin)</label>
+                <input id="libraryPath" type="text" is="emby-input" placeholder="/config/data/anime-sama" />
+                <div class="fieldDescription">Dossier où les fichiers seront créés. Pointez ensuite une bibliothèque Jellyfin vers ce dossier.</div>
+            </div>
+
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label>
+                    <input id="downloadVideos" type="checkbox" is="emby-checkbox" />
+                    <span>Télécharger les vidéos (au lieu de créer des .strm)</span>
+                </label>
+                <div class="fieldDescription">
+                    Plus lent et plus lourd en espace disque, mais lecture locale fiable.
+                    La sync est idempotente : les fichiers déjà téléchargés sont ignorés lors des syncs suivantes.
+                </div>
+            </div>
+
             <div>
                 <button is="emby-button" type="submit" class="raised button-submit block emby-button" onclick="AnimeSamaConfig.save()">
                     <span>Sauvegarder</span>
@@ -34,34 +57,176 @@
             </div>
 
             <div id="saveMessage" style="display:none; margin-top:1em; color: var(--theme-button-flat-focused);">
-                Configuration sauvegardée. Redémarrez Jellyfin pour appliquer les changements.
+                Configuration sauvegardée.
+            </div>
+
+            <br/>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Synchronisation de la bibliothèque</h3>
+                <p style="font-size:.85rem;color:#aaa;">
+                    Génère les fichiers (.strm ou vidéos) pour les catalogues <strong>déjà synchronisés</strong>
+                    (épisodes récupérés). Pour ajouter un nouvel animé, utilisez la recherche ci-dessous d'abord.
+                </p>
+                <button is="emby-button" class="raised emby-button" onclick="AnimeSamaConfig.sync()">
+                    <span>&#9654; Synchroniser la bibliothèque</span>
+                </button>
+                <div id="syncMessage" style="display:none; margin-top:.75em; font-size:.85rem;"></div>
+            </div>
+
+            <br/>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Rechercher un animé sur Anime Sama</h3>
+                <p style="font-size:.85rem;color:#aaa;">
+                    Réservé aux administrateurs. Recherche directement sur anime-sama.to et lance la
+                    récupération des épisodes (lecteurs vidéo) pour l'animé choisi.
+                </p>
+                <div class="inputContainer">
+                    <input id="searchQuery" type="text" is="emby-input" placeholder="Rechercher (ex: naruto)" onkeydown="if(event.key==='Enter')AnimeSamaConfig.search()" />
+                </div>
+                <button is="emby-button" class="raised emby-button" onclick="AnimeSamaConfig.search()">
+                    <span>&#128269; Rechercher</span>
+                </button>
+                <div id="searchResults" style="margin-top:1em;"></div>
             </div>
         </div>
     </div>
 
     <script type="text/javascript">
         const PLUGIN_ID = 'a4b1c2d3-e4f5-6789-abcd-ef0123456789';
+        const TASK_KEY  = 'AnimeSamaSyncLibrary';
 
         const AnimeSamaConfig = {
             load: function () {
                 ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
-                    document.getElementById('apiUrl').value = config.ApiUrl || '';
-                    document.getElementById('username').value = config.Username || '';
-                    document.getElementById('password').value = config.Password || '';
+                    document.getElementById('apiUrl').value            = config.ApiUrl || '';
+                    document.getElementById('username').value          = config.Username || '';
+                    document.getElementById('password').value          = config.Password || '';
+                    document.getElementById('jellyfinPublicUrl').value = config.JellyfinPublicUrl || '';
+                    document.getElementById('libraryPath').value       = config.LibraryPath || '/config/data/anime-sama';
+                    document.getElementById('downloadVideos').checked  = !!config.DownloadVideos;
                 });
             },
 
             save: function () {
                 ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
-                    config.ApiUrl = document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
-                    config.Username = document.getElementById('username').value.trim();
-                    config.Password = document.getElementById('password').value;
+                    config.ApiUrl            = document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
+                    config.Username          = document.getElementById('username').value.trim();
+                    config.Password          = document.getElementById('password').value;
+                    config.JellyfinPublicUrl = document.getElementById('jellyfinPublicUrl').value.trim().replace(/\/$/, '');
+                    config.LibraryPath       = document.getElementById('libraryPath').value.trim();
+                    config.DownloadVideos    = document.getElementById('downloadVideos').checked;
 
                     ApiClient.updatePluginConfiguration(PLUGIN_ID, config).then(function () {
                         document.getElementById('saveMessage').style.display = 'block';
                         Dashboard.processPluginConfigurationUpdateResult();
                     });
                 });
+            },
+
+            sync: function () {
+                const msg = document.getElementById('syncMessage');
+                msg.style.display = 'block';
+                msg.style.color   = '#aaa';
+                msg.textContent   = 'Recherche de la tâche en cours…';
+
+                ApiClient.getScheduledTasks().then(function (tasks) {
+                    const task = tasks.find(t => t.Key === TASK_KEY);
+                    if (!task) {
+                        msg.style.color = '#f44';
+                        msg.textContent = 'Tâche introuvable. Redémarrez Jellyfin et réessayez.';
+                        return;
+                    }
+                    ApiClient.startScheduledTask(task.Id).then(function () {
+                        msg.style.color = '#4c4';
+                        msg.textContent = 'Synchronisation lancée ! Consultez Tâches planifiées pour suivre la progression.';
+                    }).catch(function () {
+                        msg.style.color = '#f44';
+                        msg.textContent = 'Erreur au lancement — la tâche est peut-être déjà en cours.';
+                    });
+                });
+            },
+
+            search: function () {
+                const q = document.getElementById('searchQuery').value.trim();
+                const resultsDiv = document.getElementById('searchResults');
+                if (!q) return;
+
+                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche…</p>';
+
+                const url = ApiClient.getUrl('AnimeSama/admin/search', { q: q });
+                ApiClient.ajax({ type: 'GET', url: url, dataType: 'json' }).then(function (results) {
+                    if (!results || results.length === 0) {
+                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat.</p>';
+                        return;
+                    }
+                    resultsDiv.innerHTML = '';
+                    results.forEach(function (r) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.5em 0;border-bottom:1px solid rgba(255,255,255,.1);';
+                        const slug = r.Slug || r.slug || '';
+                        const nom  = r.Nom  || r.nom  || slug;
+                        row.innerHTML = `
+                            <span style="flex:1;">${nom}</span>
+                            <button is="emby-button" class="raised emby-button" style="width:auto;padding:.4em 1em;" ${slug ? '' : 'disabled'}>
+                                Synchroniser le contenu
+                            </button>
+                            <span class="syncStatusLabel" style="font-size:.8rem;color:#aaa;min-width:8em;"></span>
+                        `;
+                        const btn = row.querySelector('button');
+                        const statusLabel = row.querySelector('.syncStatusLabel');
+                        btn.onclick = function () {
+                            AnimeSamaConfig.syncContent(slug, btn, statusLabel);
+                        };
+                        resultsDiv.appendChild(row);
+                    });
+                }).catch(function () {
+                    resultsDiv.innerHTML = '<p style="color:#f44;font-size:.85rem;">Erreur de recherche.</p>';
+                });
+            },
+
+            syncContent: function (slug, btn, statusLabel) {
+                btn.disabled = true;
+                statusLabel.textContent = 'Démarrage…';
+                statusLabel.style.color = '#aaa';
+
+                const startUrl = ApiClient.getUrl('AnimeSama/admin/sync-content', { slug: slug });
+                ApiClient.ajax({ type: 'POST', url: startUrl, dataType: 'json' }).then(function () {
+                    statusLabel.textContent = 'Synchronisation en cours…';
+                    AnimeSamaConfig._pollSyncStatus(slug, btn, statusLabel);
+                }).catch(function () {
+                    statusLabel.textContent = 'Échec du démarrage';
+                    statusLabel.style.color = '#f44';
+                    btn.disabled = false;
+                });
+            },
+
+            _pollSyncStatus: function (slug, btn, statusLabel) {
+                const statusUrl = ApiClient.getUrl('AnimeSama/admin/sync-content/status', { slug: slug });
+                const poll = function () {
+                    ApiClient.ajax({ type: 'GET', url: statusUrl, dataType: 'json' }).then(function (s) {
+                        if (s.status === 'syncing') {
+                            statusLabel.textContent = `Sync… ${s.progress || 0}%`;
+                            setTimeout(poll, 3000);
+                        } else if (s.status === 'done') {
+                            statusLabel.textContent = 'Terminé ✓';
+                            statusLabel.style.color = '#4c4';
+                            btn.disabled = false;
+                        } else if (s.status === 'error') {
+                            statusLabel.textContent = 'Erreur';
+                            statusLabel.style.color = '#f44';
+                            btn.disabled = false;
+                        } else {
+                            setTimeout(poll, 3000);
+                        }
+                    }).catch(function () {
+                        statusLabel.textContent = 'Erreur de suivi';
+                        statusLabel.style.color = '#f44';
+                        btn.disabled = false;
+                    });
+                };
+                setTimeout(poll, 2000);
             }
         };
 

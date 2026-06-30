@@ -17,7 +17,7 @@ DELETE /catalogues/{slug}                     → supprime de la DB
 
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from services.catalogue_service import (
     rechercher,
     rechercher_sur_site,
@@ -164,14 +164,26 @@ def filter_catalogue_for_user(cat: dict, user: Optional[dict]) -> dict:
 # ------------------------------------------------------------------
 
 @router.get("/", response_model=list[CatalogueSummary], summary="Liste tous les catalogues (admin)")
-async def lister_db(_: dict = Depends(require_admin)):
+async def lister_db(
+    response: Response,
+    skip: int = Query(0, ge=0, description="Nombre d'entrées à sauter"),
+    limit: int = Query(100, ge=1, le=500, description="Nombre maximum d'entrées"),
+    _: dict = Depends(require_admin),
+):
     """Retourne tous les catalogues sans filtrage — réservé aux administrateurs."""
-    return await repo.get_all_summary()
+    total = await repo.count_all()
+    response.headers["X-Total-Count"] = str(total)
+    return await repo.get_all_summary(skip=skip, limit=limit)
 
 
 @my_router.get("/", response_model=list[CatalogueSummary],
                summary="Catalogues accessibles selon l'utilisateur")
-async def lister_accessibles(user: Optional[dict] = Depends(get_optional_user)):
+async def lister_accessibles(
+    response: Response,
+    skip: int = Query(0, ge=0, description="Nombre d'entrées à sauter"),
+    limit: int = Query(100, ge=1, le=500, description="Nombre maximum d'entrées"),
+    user: Optional[dict] = Depends(get_optional_user),
+):
     """
     Retourne uniquement les catalogues que l'utilisateur a le droit de voir.
 
@@ -179,7 +191,9 @@ async def lister_accessibles(user: Optional[dict] = Depends(get_optional_user)):
     - Utilisateur avec groupes/permissions → ses catalogues autorisés (public ou privé)
     - Admin → utiliser `GET /catalogues/` à la place
     """
-    cats = await repo.get_visible_summary()
+    total = await repo.count_visible()
+    response.headers["X-Total-Count"] = str(total)
+    cats = await repo.get_visible_summary(skip=skip, limit=limit)
     result = []
     for cat in cats:
         try:

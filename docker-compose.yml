@@ -1,44 +1,24 @@
 services:
 
-  mongodb:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - mongo_data:/data/db
-    environment:
-      MONGO_INITDB_DATABASE: anime_sama
-    ports:
-      - "27017:27017"
-
-  api:
+  anime_sama:
     build: .
-    command: python main.py
+    container_name: anime_sama
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     env_file:
       - .env
     environment:
-      MONGODB_URL: mongodb://mongodb:27017
-    depends_on:
-      - mongodb
+      MONGODB_URL: ${MONGODB_URL}
+      API_BASE: https://anime.gihamos.fr
+      ADMIN_PORT: "8001"
     volumes:
       - downloads:/tmp/anime_downloads
+    networks:
+      - proxy_net
 
-  admin:
-    build: .
-    command: python admin_main.py
-    restart: unless-stopped
-    ports:
-      - "8001:8001"
-    env_file:
-      - .env
-    environment:
-      API_BASE: http://api:8000
-      ADMIN_PORT: "8001"
-    depends_on:
-      - api
+networks:
+  proxy_net:
+    external: true
+    name: nginx-proxy-manager_default
 
 volumes:
-  mongo_data:
   downloads:
