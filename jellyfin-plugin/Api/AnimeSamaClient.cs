@@ -162,10 +162,31 @@ public class AnimeSamaClient
 
     // ── Recherche / Admin ────────────────────────────────────────────────────
 
-    public async Task<List<SiteSearchResult>> SearchSiteAsync(string query, CancellationToken ct)
+    public async Task<List<SiteSearchResult>> SearchSiteAsync(
+        string?  query    = null,
+        string?  type     = null,
+        string?  langue   = null,
+        string?  statut   = null,
+        string?  genre    = null,
+        int?     anneeMin = null,
+        int?     anneeMax = null,
+        int?     epsMin   = null,
+        int?     epsMax   = null,
+        int      page     = 1,
+        CancellationToken ct = default)
     {
-        var encoded = Uri.EscapeDataString(query);
-        var resp = await GetAsync($"/catalogues/site/rechercher?search={encoded}", ct).ConfigureAwait(false);
+        var qs = new System.Text.StringBuilder("/catalogues/site/rechercher?page=").Append(page);
+        if (!string.IsNullOrWhiteSpace(query))   qs.Append("&search=").Append(Uri.EscapeDataString(query));
+        if (!string.IsNullOrWhiteSpace(type))    qs.Append("&type=").Append(Uri.EscapeDataString(type));
+        if (!string.IsNullOrWhiteSpace(langue))  qs.Append("&langue=").Append(Uri.EscapeDataString(langue));
+        if (!string.IsNullOrWhiteSpace(statut))  qs.Append("&statut=").Append(Uri.EscapeDataString(statut));
+        if (!string.IsNullOrWhiteSpace(genre))   qs.Append("&genre=").Append(Uri.EscapeDataString(genre));
+        if (anneeMin.HasValue) qs.Append("&annee_min=").Append(anneeMin);
+        if (anneeMax.HasValue) qs.Append("&annee_max=").Append(anneeMax);
+        if (epsMin.HasValue)   qs.Append("&episodes_min=").Append(epsMin);
+        if (epsMax.HasValue)   qs.Append("&episodes_max=").Append(epsMax);
+
+        var resp = await GetAsync(qs.ToString(), ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode) return new List<SiteSearchResult>();
         return await resp.Content
             .ReadFromJsonAsync<List<SiteSearchResult>>(cancellationToken: ct)

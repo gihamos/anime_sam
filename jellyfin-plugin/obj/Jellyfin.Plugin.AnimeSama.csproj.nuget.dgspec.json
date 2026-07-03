@@ -5,7 +5,7 @@
   },
   "projects": {
     "/home/taise/mes_projets/anime_sam/jellyfin-plugin/Jellyfin.Plugin.AnimeSama.csproj": {
-      "version": "1.0.0",
+      "version": "1.0.4",
       "restore": {
         "projectUniqueName": "/home/taise/mes_projets/anime_sam/jellyfin-plugin/Jellyfin.Plugin.AnimeSama.csproj",
         "projectName": "Jellyfin.Plugin.AnimeSama",

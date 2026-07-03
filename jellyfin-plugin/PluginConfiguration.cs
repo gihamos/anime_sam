@@ -19,4 +19,8 @@ public class PluginConfiguration : BasePluginConfiguration
     // Plus lent et plus lourd sur disque, mais lecture locale fiable (pas de dépendance
     // au lecteur embed au moment du play). Idempotent — les fichiers déjà présents sont ignorés.
     public bool DownloadVideos { get; set; } = false;
+
+    // Chemin où les mangas/scans seront créés en .cbz (un fichier par chapitre).
+    // Pointez une bibliothèque Jellyfin de type "Livres" vers ce dossier.
+    public string MangaLibraryPath { get; set; } = "/config/data/anime-sama-manga";
 }

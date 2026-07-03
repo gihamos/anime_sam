@@ -51,6 +51,9 @@ public class CatalogueDetail : CatalogueSummary
 
     [JsonPropertyName("films")]
     public List<Film> Films { get; set; } = new();
+
+    [JsonPropertyName("scans")]
+    public List<Scan> Scans { get; set; } = new();
 }
 
 // Une saison = une entrée par langue (lang est un string, pas une liste)
@@ -112,6 +115,33 @@ public class Film
 
     [JsonPropertyName("videos")]
     public List<VideoSource> Videos { get; set; } = new();
+}
+
+public class Scan
+{
+    [JsonPropertyName("nom")]
+    public string Nom { get; set; } = string.Empty;
+
+    [JsonPropertyName("slug")]
+    public string Slug { get; set; } = string.Empty;
+
+    [JsonPropertyName("lang")]
+    public string? Lang { get; set; }
+
+    [JsonPropertyName("chapitres")]
+    public List<Chapitre> Chapitres { get; set; } = new();
+}
+
+public class Chapitre
+{
+    [JsonPropertyName("numero")]
+    public double Numero { get; set; }
+
+    [JsonPropertyName("titre")]
+    public string? Titre { get; set; }
+
+    [JsonPropertyName("images")]
+    public List<string> Images { get; set; } = new();
 }
 
 // ── Recherche / Admin ────────────────────────────────────────────────────────

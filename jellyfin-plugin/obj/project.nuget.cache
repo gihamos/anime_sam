@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "+Bu1tP1J9OCS3ksfgINIZAmosgaHHn2ueWRRIpBVzvvuGXYuj1XpARM+Eiintfz8qTm0ExKGx0Hq1WLLQMPbcw==",
+  "dgSpecHash": "R6VSu9JMq+qidiOvu+ZeyeLecukOeLnrk1nDg/EUhdW1PlqzWN9HMEwaoV1/i5+PUgEw31fy9jKYz2DthR0ihg==",
   "success": true,
   "projectFilePath": "/home/taise/mes_projets/anime_sam/jellyfin-plugin/Jellyfin.Plugin.AnimeSama.csproj",
   "expectedPackageFiles": [

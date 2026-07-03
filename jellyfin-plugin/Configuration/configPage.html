@@ -50,6 +50,12 @@
                 </div>
             </div>
 
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="mangaLibraryPath">Chemin de la bibliothèque manga (.cbz)</label>
+                <input id="mangaLibraryPath" type="text" is="emby-input" placeholder="/config/data/anime-sama-manga" />
+                <div class="fieldDescription">Dossier où les chapitres de scans seront créés en .cbz. Pointez une bibliothèque Jellyfin de type <strong>Livres</strong> vers ce dossier.</div>
+            </div>
+
             <div>
                 <button is="emby-button" type="submit" class="raised button-submit block emby-button" onclick="AnimeSamaConfig.save()">
                     <span>Sauvegarder</span>
@@ -77,18 +83,92 @@
             <br/>
 
             <div class="verticalSection">
-                <h3 class="sectionTitle">Rechercher un animé sur Anime Sama</h3>
+                <h3 class="sectionTitle">Rechercher un animé / manga sur Anime Sama</h3>
                 <p style="font-size:.85rem;color:#aaa;">
                     Réservé aux administrateurs. Recherche directement sur anime-sama.to et lance la
-                    récupération des épisodes (lecteurs vidéo) pour l'animé choisi.
+                    récupération des épisodes/chapitres pour le titre choisi.
                 </p>
-                <div class="inputContainer">
-                    <input id="searchQuery" type="text" is="emby-input" placeholder="Rechercher (ex: naruto)" onkeydown="if(event.key==='Enter')AnimeSamaConfig.search()" />
+
+                <!-- Recherche rapide -->
+                <div class="inputContainer" style="display:flex;gap:.5em;align-items:flex-end;">
+                    <div style="flex:1;">
+                        <label class="inputLabel inputLabelUnfocused">Titre</label>
+                        <input id="searchQuery" type="text" is="emby-input" placeholder="ex: naruto, one piece…" onkeydown="if(event.key==='Enter')AnimeSamaConfig.search()" />
+                    </div>
+                    <button is="emby-button" class="raised emby-button" style="margin-bottom:.1em;" onclick="AnimeSamaConfig.search()">
+                        &#128269; Rechercher
+                    </button>
                 </div>
-                <button is="emby-button" class="raised emby-button" onclick="AnimeSamaConfig.search()">
-                    <span>&#128269; Rechercher</span>
-                </button>
-                <div id="searchResults" style="margin-top:1em;"></div>
+
+                <!-- Filtres avancés (repliés par défaut) -->
+                <details style="margin-top:.75em;">
+                    <summary style="cursor:pointer;color:var(--theme-button-flat-focused);font-size:.85rem;">Filtres avancés ▾</summary>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5em 1.5em;margin-top:.75em;">
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Type</label>
+                            <select id="sf-type" is="emby-select" class="selectContainer">
+                                <option value="">Tous</option>
+                                <option value="Anime">Anime</option>
+                                <option value="Scans">Manga / Scan</option>
+                                <option value="Film">Film</option>
+                                <option value="Autres">Autres</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Langue</label>
+                            <select id="sf-langue" is="emby-select" class="selectContainer">
+                                <option value="">Toutes</option>
+                                <option value="VOSTFR">VOSTFR</option>
+                                <option value="VF">VF</option>
+                                <option value="VASTFR">VASTFR</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Statut</label>
+                            <select id="sf-statut" is="emby-select" class="selectContainer">
+                                <option value="">Tous</option>
+                                <option value="En cours">En cours</option>
+                                <option value="Terminé">Terminé</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Genre</label>
+                            <input id="sf-genre" type="text" is="emby-input" placeholder="ex: Action,Aventure" />
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Année min</label>
+                            <input id="sf-annee-min" type="number" is="emby-input" placeholder="ex: 2000" min="1960" max="2030" />
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Année max</label>
+                            <input id="sf-annee-max" type="number" is="emby-input" placeholder="ex: 2024" min="1960" max="2030" />
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Épisodes min</label>
+                            <input id="sf-eps-min" type="number" is="emby-input" placeholder="ex: 12" min="1" />
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Épisodes max</label>
+                            <input id="sf-eps-max" type="number" is="emby-input" placeholder="ex: 100" min="1" />
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Pagination et résultats -->
+                <div id="searchPager" style="display:none;margin-top:.75em;display:none;gap:.5em;align-items:center;">
+                    <button id="searchPrevBtn" is="emby-button" class="raised emby-button" style="width:auto;padding:.3em .9em;" onclick="AnimeSamaConfig.searchPage(-1)">&#8592; Préc.</button>
+                    <span id="searchPageLabel" style="font-size:.85rem;color:#aaa;"></span>
+                    <button id="searchNextBtn" is="emby-button" class="raised emby-button" style="width:auto;padding:.3em .9em;" onclick="AnimeSamaConfig.searchPage(1)">Suiv. &#8594;</button>
+                </div>
+                <div id="searchResults" style="margin-top:.75em;"></div>
             </div>
         </div>
     </div>
@@ -96,6 +176,7 @@
     <script type="text/javascript">
         const PLUGIN_ID = 'a4b1c2d3-e4f5-6789-abcd-ef0123456789';
         const TASK_KEY  = 'AnimeSamaSyncLibrary';
+        var _searchPage = 1;
 
         const AnimeSamaConfig = {
             load: function () {
@@ -106,6 +187,7 @@
                     document.getElementById('jellyfinPublicUrl').value = config.JellyfinPublicUrl || '';
                     document.getElementById('libraryPath').value       = config.LibraryPath || '/config/data/anime-sama';
                     document.getElementById('downloadVideos').checked  = !!config.DownloadVideos;
+                    document.getElementById('mangaLibraryPath').value  = config.MangaLibraryPath || '/config/data/anime-sama-manga';
                 });
             },
 
@@ -117,6 +199,7 @@
                     config.JellyfinPublicUrl = document.getElementById('jellyfinPublicUrl').value.trim().replace(/\/$/, '');
                     config.LibraryPath       = document.getElementById('libraryPath').value.trim();
                     config.DownloadVideos    = document.getElementById('downloadVideos').checked;
+                    config.MangaLibraryPath  = document.getElementById('mangaLibraryPath').value.trim();
 
                     ApiClient.updatePluginConfiguration(PLUGIN_ID, config).then(function () {
                         document.getElementById('saveMessage').style.display = 'block';
@@ -148,40 +231,100 @@
                 });
             },
 
+            searchPage: function(delta) {
+                _searchPage = Math.max(1, _searchPage + delta);
+                AnimeSamaConfig._doSearch();
+            },
+
             search: function () {
-                const q = document.getElementById('searchQuery').value.trim();
+                _searchPage = 1;
+                AnimeSamaConfig._doSearch();
+            },
+
+            _doSearch: function () {
+                const q         = document.getElementById('searchQuery').value.trim();
+                const sfType    = document.getElementById('sf-type').value;
+                const sfLangue  = document.getElementById('sf-langue').value;
+                const sfStatut  = document.getElementById('sf-statut').value;
+                const sfGenre   = document.getElementById('sf-genre').value.trim();
+                const sfAnnMin  = document.getElementById('sf-annee-min').value;
+                const sfAnnMax  = document.getElementById('sf-annee-max').value;
+                const sfEpsMin  = document.getElementById('sf-eps-min').value;
+                const sfEpsMax  = document.getElementById('sf-eps-max').value;
+
                 const resultsDiv = document.getElementById('searchResults');
-                if (!q) return;
+
+                // Au moins un filtre doit être renseigné
+                if (!q && !sfType && !sfLangue && !sfStatut && !sfGenre && !sfAnnMin && !sfAnnMax && !sfEpsMin && !sfEpsMax) {
+                    resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Saisissez au moins un critère.</p>';
+                    return;
+                }
 
                 resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche…</p>';
 
-                const url = ApiClient.getUrl('AnimeSama/admin/search', { q: q });
-                ApiClient.ajax({ type: 'GET', url: url, dataType: 'json' }).then(function (results) {
+                const token = ApiClient.accessToken();
+                const baseUrl = ApiClient.serverAddress();
+
+                var qs = '/AnimeSama/admin/search?page=' + _searchPage;
+                if (q)        qs += '&q='        + encodeURIComponent(q);
+                if (sfType)   qs += '&type='     + encodeURIComponent(sfType);
+                if (sfLangue) qs += '&langue='   + encodeURIComponent(sfLangue);
+                if (sfStatut) qs += '&statut='   + encodeURIComponent(sfStatut);
+                if (sfGenre)  qs += '&genre='    + encodeURIComponent(sfGenre);
+                if (sfAnnMin) qs += '&anneeMin=' + sfAnnMin;
+                if (sfAnnMax) qs += '&anneeMax=' + sfAnnMax;
+                if (sfEpsMin) qs += '&epsMin='   + sfEpsMin;
+                if (sfEpsMax) qs += '&epsMax='   + sfEpsMax;
+
+                const url = baseUrl + qs;
+
+                fetch(url, {
+                    headers: {
+                        'Authorization': 'MediaBrowser Token="' + token + '"',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(function(resp) { return resp.json(); })
+                .then(function(results) {
+                    const pager = document.getElementById('searchPager');
                     if (!results || results.length === 0) {
-                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat.</p>';
+                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat' + (_searchPage > 1 ? ' (fin des résultats)' : '') + '.</p>';
+                        if (_searchPage > 1) {
+                            pager.style.display = 'flex';
+                            document.getElementById('searchNextBtn').disabled = true;
+                            document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage;
+                        } else {
+                            pager.style.display = 'none';
+                        }
                         return;
                     }
+
+                    pager.style.display = 'flex';
+                    document.getElementById('searchPrevBtn').disabled = (_searchPage <= 1);
+                    document.getElementById('searchNextBtn').disabled = (results.length < 20);
+                    document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage + ' · ' + results.length + ' résultat(s)';
+
                     resultsDiv.innerHTML = '';
-                    results.forEach(function (r) {
+                    results.forEach(function(r) {
+                        const slug = r.slug || r.Slug || '';
+                        const nom  = r.nom  || r.Nom  || slug;
+                        const img  = r.image || r.Image || '';
+
                         const row = document.createElement('div');
-                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.5em 0;border-bottom:1px solid rgba(255,255,255,.1);';
-                        const slug = r.Slug || r.slug || '';
-                        const nom  = r.Nom  || r.nom  || slug;
-                        row.innerHTML = `
-                            <span style="flex:1;">${nom}</span>
-                            <button is="emby-button" class="raised emby-button" style="width:auto;padding:.4em 1em;" ${slug ? '' : 'disabled'}>
-                                Synchroniser le contenu
-                            </button>
-                            <span class="syncStatusLabel" style="font-size:.8rem;color:#aaa;min-width:8em;"></span>
-                        `;
+                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.6em 0;border-bottom:1px solid rgba(255,255,255,.1);';
+                        row.innerHTML =
+                            '<img src="' + img + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
+                            '<span style="flex:1;font-weight:500;">' + nom + '</span>' +
+                            '<button class="raised emby-button" style="width:auto;padding:.4em 1em;" ' + (slug ? '' : 'disabled') + '>Synchroniser le contenu</button>' +
+                            '<span class="syncStatusLabel" style="font-size:.8rem;color:#aaa;min-width:9em;text-align:right;"></span>';
+
                         const btn = row.querySelector('button');
-                        const statusLabel = row.querySelector('.syncStatusLabel');
-                        btn.onclick = function () {
-                            AnimeSamaConfig.syncContent(slug, btn, statusLabel);
-                        };
+                        const lbl = row.querySelector('.syncStatusLabel');
+                        btn.onclick = function() { AnimeSamaConfig.syncContent(slug, btn, lbl); };
                         resultsDiv.appendChild(row);
                     });
-                }).catch(function () {
+                })
+                .catch(function() {
                     resultsDiv.innerHTML = '<p style="color:#f44;font-size:.85rem;">Erreur de recherche.</p>';
                 });
             },
@@ -191,23 +334,36 @@
                 statusLabel.textContent = 'Démarrage…';
                 statusLabel.style.color = '#aaa';
 
-                const startUrl = ApiClient.getUrl('AnimeSama/admin/sync-content', { slug: slug });
-                ApiClient.ajax({ type: 'POST', url: startUrl, dataType: 'json' }).then(function () {
+                const token   = ApiClient.accessToken();
+                const baseUrl = ApiClient.serverAddress();
+                const startUrl = baseUrl + '/AnimeSama/admin/sync-content?slug=' + encodeURIComponent(slug);
+
+                fetch(startUrl, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' }
+                })
+                .then(function(resp) {
+                    if (!resp.ok) throw new Error(resp.status);
                     statusLabel.textContent = 'Synchronisation en cours…';
-                    AnimeSamaConfig._pollSyncStatus(slug, btn, statusLabel);
-                }).catch(function () {
+                    AnimeSamaConfig._pollSyncStatus(slug, btn, statusLabel, token, baseUrl);
+                })
+                .catch(function() {
                     statusLabel.textContent = 'Échec du démarrage';
                     statusLabel.style.color = '#f44';
                     btn.disabled = false;
                 });
             },
 
-            _pollSyncStatus: function (slug, btn, statusLabel) {
-                const statusUrl = ApiClient.getUrl('AnimeSama/admin/sync-content/status', { slug: slug });
-                const poll = function () {
-                    ApiClient.ajax({ type: 'GET', url: statusUrl, dataType: 'json' }).then(function (s) {
+            _pollSyncStatus: function (slug, btn, statusLabel, token, baseUrl) {
+                const statusUrl = baseUrl + '/AnimeSama/admin/sync-content/status?slug=' + encodeURIComponent(slug);
+                var poll = function() {
+                    fetch(statusUrl, {
+                        headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' }
+                    })
+                    .then(function(resp) { return resp.json(); })
+                    .then(function(s) {
                         if (s.status === 'syncing') {
-                            statusLabel.textContent = `Sync… ${s.progress || 0}%`;
+                            statusLabel.textContent = 'Sync… ' + (s.progress || 0) + '%';
                             setTimeout(poll, 3000);
                         } else if (s.status === 'done') {
                             statusLabel.textContent = 'Terminé ✓';
@@ -220,7 +376,8 @@
                         } else {
                             setTimeout(poll, 3000);
                         }
-                    }).catch(function () {
+                    })
+                    .catch(function() {
                         statusLabel.textContent = 'Erreur de suivi';
                         statusLabel.style.color = '#f44';
                         btn.disabled = false;

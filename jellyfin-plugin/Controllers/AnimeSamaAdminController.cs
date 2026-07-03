@@ -7,26 +7,32 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.AnimeSama.Controllers;
 
-/// <summary>
-/// Recherche d'animés sur anime-sama.to et déclenchement de la synchronisation
-/// du contenu (épisodes), exposés depuis la page de configuration du plugin.
-/// [Authorize(Policy = "RequiresElevation")] restreint l'accès aux administrateurs Jellyfin.
-/// </summary>
 [ApiController]
 [Authorize(Policy = Policies.RequiresElevation)]
 [Route("AnimeSama/admin")]
 public class AnimeSamaAdminController : ControllerBase
 {
     [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
+    public async Task<IActionResult> Search(
+        [FromQuery] string?  q         = null,
+        [FromQuery] string?  type      = null,
+        [FromQuery] string?  langue    = null,
+        [FromQuery] string?  statut    = null,
+        [FromQuery] string?  genre     = null,
+        [FromQuery] int?     anneeMin  = null,
+        [FromQuery] int?     anneeMax  = null,
+        [FromQuery] int?     epsMin    = null,
+        [FromQuery] int?     epsMax    = null,
+        [FromQuery] int      page      = 1,
+        CancellationToken    ct        = default)
     {
-        if (string.IsNullOrWhiteSpace(q))
-            return BadRequest("Paramètre 'q' manquant.");
-
         var client = Plugin.Instance?.ApiClient;
         if (client is null) return StatusCode(503, "Plugin non initialisé.");
 
-        var results = await client.SearchSiteAsync(q, ct).ConfigureAwait(false);
+        var results = await client.SearchSiteAsync(
+            q, type, langue, statut, genre, anneeMin, anneeMax, epsMin, epsMax, page, ct
+        ).ConfigureAwait(false);
+
         return Ok(results);
     }
 
@@ -39,7 +45,6 @@ public class AnimeSamaAdminController : ControllerBase
         var client = Plugin.Instance?.ApiClient;
         if (client is null) return StatusCode(503, "Plugin non initialisé.");
 
-        // Force le scrape de la structure si le catalogue n'est pas encore en DB
         var catalogue = await client.EnsureCatalogueAsync(slug, ct).ConfigureAwait(false);
         if (catalogue is null) return NotFound($"Catalogue '{slug}' introuvable sur anime-sama.to.");
 
