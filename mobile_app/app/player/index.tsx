@@ -68,9 +68,16 @@ function buildEmbedHtml(url: string): string {
 
 type StreamPhase = 'checking' | 'resolving' | 'native' | 'webview';
 
+type SourceContentType = 'hls' | 'progressive';
+
+function contentTypeFromExt(ext: string): SourceContentType {
+  return ext.toLowerCase() === 'm3u8' ? 'hls' : 'progressive';
+}
+
 function useResolvedStream(url: string, player: string) {
   const [phase, setPhase] = useState<StreamPhase>('checking');
-  const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
+  const [source, setSource] = useState<{ uri: string; headers?: Record<string, string>; contentType?: SourceContentType } | null>(null);
+  const apiUrl = useSettingsStore((s) => s.apiUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +86,11 @@ function useResolvedStream(url: string, player: string) {
       if (!url) return;
 
       if (player === 'local' || isDirectPlayable(url)) {
-        setSource({ uri: url });
+        // L'URL du proxy/CDN ne se termine pas toujours par une extension
+        // reconnaissable par le lecteur (query params) : on déduit le type
+        // depuis l'extension réelle plutôt que de laisser ExoPlayer deviner.
+        const clean = url.toLowerCase().split('?')[0];
+        setSource({ uri: url, contentType: clean.endsWith('.m3u8') ? 'hls' : 'progressive' });
         setPhase('native');
         return;
       }
@@ -93,7 +104,21 @@ function useResolvedStream(url: string, player: string) {
           setPhase('webview');
           return;
         }
-        setSource({ uri: result.url, headers: result.headers });
+        // proxy_url : headers déjà injectés côté serveur, aucun header requis côté
+        // lecteur → fonctionne aussi bien avec le lecteur interne qu'un lecteur
+        // externe (VLC…), et couvre les segments HLS individuels. À défaut, on
+        // retombe sur l'URL directe + headers (moins fiable pour du HLS).
+        // L'URL du proxy n'a pas d'extension .m3u8 reconnaissable par le lecteur
+        // (c'est une query string) → on force le contentType explicitement,
+        // sinon ExoPlayer tente de la lire comme un fichier progressif classique
+        // et aucun extracteur ne reconnaît le texte M3U8 ("None of the available
+        // extractors could read the stream").
+        const contentType = contentTypeFromExt(result.ext);
+        if (result.proxy_url) {
+          setSource({ uri: `${apiUrl}${result.proxy_url}`, contentType });
+        } else {
+          setSource({ uri: result.url, headers: result.headers, contentType });
+        }
         setPhase('native');
       } catch {
         if (!cancelled) setPhase('webview');
@@ -102,7 +127,7 @@ function useResolvedStream(url: string, player: string) {
 
     resolve();
     return () => { cancelled = true; };
-  }, [url, player]);
+  }, [url, player, apiUrl]);
 
   return { phase, source, fallbackToWebview: () => setPhase('webview') };
 }
@@ -114,7 +139,7 @@ function NativePlayer({
   subtitle,
   onFallback,
 }: {
-  source: { uri: string; headers?: Record<string, string> };
+  source: { uri: string; headers?: Record<string, string>; contentType?: SourceContentType };
   subtitle: string;
   onFallback: () => void;
 }) {
@@ -122,7 +147,7 @@ function NativePlayer({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const player = useVideoPlayer({ uri: source.uri, headers: source.headers }, (p) => {
+  const player = useVideoPlayer({ uri: source.uri, headers: source.headers, contentType: source.contentType }, (p) => {
     p.timeUpdateEventInterval = 0.5;
     p.play();
   });
@@ -239,7 +264,7 @@ function NativePlayer({
   };
 
   const retry = () => {
-    player.replace({ uri: source.uri, headers: source.headers });
+    player.replace({ uri: source.uri, headers: source.headers, contentType: source.contentType });
     resetControlsTimer();
   };
 

@@ -19,6 +19,10 @@ export interface Episode {
 // Réponse de GET /api/stream/resolve — URL embed résolue en flux direct
 export interface ResolvedStream {
   url:        string | null;
+  // Chemin relatif vers /api/stream/proxy — headers déjà injectés côté serveur.
+  // À préférer : fonctionne avec n'importe quel lecteur (interne ou externe),
+  // y compris pour les segments HLS individuels (le manifest est réécrit).
+  proxy_url:  string | null;
   audio_url:  string | null;
   ext:        string;
   protocol:   string;
