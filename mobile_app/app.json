@@ -6,11 +6,6 @@
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0a0a0f"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.animesama.app",
@@ -23,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0a0a0f"
+        "backgroundColor": "#0E0C0A"
       },
       "package": "com.animesama.app",
       "permissions": [
@@ -42,9 +37,12 @@
       "expo-router",
       "expo-secure-store",
       [
-        "expo-av",
+        "expo-splash-screen",
         {
-          "microphonePermission": false
+          "image": "./assets/splash.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0E0C0A"
         }
       ]
     ],
@@ -55,7 +53,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "fde226df-ae02-469a-8a39-e448a90f019a"
+        "projectId": "890bc35a-a3ee-444d-bb0c-4f84a26c729c"
       }
     },
     "owner": "gihamos"

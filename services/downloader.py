@@ -161,8 +161,10 @@ def _resolve_sync(embed_url: str) -> dict:
 
     def _pick_headers(d: dict) -> dict:
         raw = d.get("http_headers", {})
-        # On garde seulement les headers utiles pour la lecture (pas user-agent, etc.)
-        keep = {"Referer", "Origin", "Cookie"}
+        # User-Agent inclus : de nombreux CDN valident le UA en plus du Referer sur
+        # chaque requête de segment. Sans lui, le lecteur (UA par défaut ExoPlayer/
+        # AVPlayer, différent de celui utilisé par yt-dlp pour résoudre) se prend un 403.
+        keep = {"Referer", "Origin", "Cookie", "User-Agent"}
         return {k: v for k, v in raw.items() if k in keep}
 
     # ── Formats mergés (video + audio séparés) ─────────────────────────────────

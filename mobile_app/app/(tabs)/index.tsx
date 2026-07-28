@@ -216,15 +216,16 @@ export default function HomeScreen() {
       .sort((a, b) => ((b.created_at ?? '') > (a.created_at ?? '') ? 1 : -1))
       .slice(0, 15);
 
-    // Films
+    // Films — un catalogue "anime" peut aussi avoir des films attachés (contenu
+    // mixte) : on se base sur la présence réelle de films, pas le type principal.
     const films = all
-      .filter((c) => (c.type_contenu ?? c.type) === 'film')
+      .filter((c) => (c.films?.length ?? 0) > 0 || (c.type_contenu ?? c.type) === 'film')
       .sort((a, b) => ((b.updated_at ?? '') > (a.updated_at ?? '') ? 1 : -1))
       .slice(0, 15);
 
-    // Scans & manga
+    // Scans & manga — idem : présence réelle de scans, pas seulement type_contenu.
     const scans = all
-      .filter((c) => (c.type_contenu ?? c.type) === 'scan')
+      .filter((c) => (c.scans?.length ?? 0) > 0 || (c.type_contenu ?? c.type) === 'scan')
       .sort((a, b) => ((b.updated_at ?? '') > (a.updated_at ?? '') ? 1 : -1))
       .slice(0, 15);
 

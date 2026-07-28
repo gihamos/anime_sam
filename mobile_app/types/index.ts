@@ -9,6 +9,25 @@ export interface Video {
 // { "1": [Video, …], "2": [Video, …] }
 export type EpisodesResponse = Record<string, Video[]>;
 
+// Un épisode déjà synchronisé en DB (présent directement dans SaisonMeta.episodes)
+export interface Episode {
+  numero: number;
+  titre?: string;
+  videos: Video[];
+}
+
+// Réponse de GET /api/stream/resolve — URL embed résolue en flux direct
+export interface ResolvedStream {
+  url:        string | null;
+  audio_url:  string | null;
+  ext:        string;
+  protocol:   string;
+  headers:    Record<string, string>;
+  title:      string;
+  duration:   number | null;
+  merged:     boolean; // true si vidéo et audio sont sur des URLs séparées
+}
+
 // ─── Métadonnées de catalogue ─────────────────────────────────────────────────
 
 // Saison telle que renvoyée par GET /catalogues/{slug}
@@ -17,6 +36,9 @@ export interface SaisonMeta {
   nom: string;
   lang: string;
   total_episodes: number;
+  // Présent (non vide) si les épisodes ont déjà été synchronisés en DB —
+  // dans ce cas pas besoin de rescraper via /saisons/{slug}/episodes (lent).
+  episodes?: Episode[];
 }
 
 // Film tel que renvoyé par GET /catalogues/{slug}
@@ -24,6 +46,8 @@ export interface FilmMeta {
   slug: string;
   nom: string;
   lang: string;
+  // Idem SaisonMeta.episodes : présent si déjà synchronisé en DB.
+  videos?: Video[];
 }
 
 // ─── Scans / manga ───────────────────────────────────────────────────────────
@@ -83,6 +107,13 @@ export interface CatalogueSummary {
   note?: number;
   updated_at?: string;
   created_at?: string;
+  // Présents sur /mycatalogues/ et /catalogues/rechercher (métadonnées légères,
+  // sans les listes lourdes d'épisodes/vidéos/chapitres) — permet de savoir si
+  // un catalogue contient réellement des scans/films, indépendamment de son
+  // type_contenu principal (un catalogue "anime" peut avoir des scans attachés).
+  saisons?: SaisonMeta[];
+  films?:   FilmMeta[];
+  scans?:   ScanMeta[];
 }
 
 export interface SearchFilters {
@@ -269,10 +300,10 @@ export interface LocalFile {
 
 export interface SyncStatus {
   slug: string;
-  running: boolean;
-  progress?: number;
+  status: 'idle' | 'syncing' | 'done' | 'error' | 'never_synced';
+  progress: number;      // 0-100
   message?: string;
-  error?: string;
+  started_at?: string;
 }
 
 export type ContentType = 'anime' | 'film' | 'scan';

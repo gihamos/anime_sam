@@ -16,6 +16,7 @@ import {
   EpisodesResponse,
   FavorisResponse,
   RecommendationItem,
+  ResolvedStream,
 } from '@/types';
 
 const TOKEN_KEY         = 'anime_sama_token';
@@ -229,9 +230,11 @@ export const catalogueApi = {
   },
 
   getEpisodes: async (slug: string, saisonSlug: string, lang: string): Promise<EpisodesResponse> => {
+    // Scraping live côté serveur (pas de cache DB) — peut prendre 10-30s+ selon
+    // le nombre d'épisodes/lecteurs, d'où un timeout dédié plus large que le défaut.
     const { data } = await getApiClient().get<EpisodesResponse>(
       `/catalogues/${slug}/saisons/${saisonSlug}/episodes`,
-      { params: { lang } }
+      { params: { lang }, timeout: 60000 }
     );
     return data;
   },
@@ -248,6 +251,20 @@ export const catalogueApi = {
   createSyncWebSocket: (slug: string, baseUrl: string): WebSocket => {
     const wsUrl = baseUrl.replace(/^http/, 'ws');
     return new WebSocket(`${wsUrl}/catalogues/${slug}/sync-content/ws`);
+  },
+};
+
+// ─── Résolution de flux ───────────────────────────────────────────────────────
+
+export const streamApi = {
+  // Résout une URL embed (sendvid, sibnet, etc.) en URL de flux direct lisible
+  // nativement. Compter 2-8 s : la résolution passe par yt-dlp côté serveur.
+  resolve: async (embedUrl: string): Promise<ResolvedStream> => {
+    const { data } = await getApiClient().get<ResolvedStream>('/api/stream/resolve', {
+      params: { url: embedUrl },
+      timeout: 35000,
+    });
+    return data;
   },
 };
 

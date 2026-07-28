@@ -65,7 +65,14 @@ async def search_with_filters(
             {"nom":              {"$regex": q, "$options": "i"}},
             {"titre_alternatif": {"$regex": q, "$options": "i"}},
         ]
-    if type_contenu:
+    if type_contenu == "scan":
+        # Un catalogue "anime" peut aussi avoir des scans attachés (contenu mixte) —
+        # on filtre sur la présence réelle de scans plutôt que sur le type_contenu
+        # principal, sinon ces catalogues sont invisibles depuis la recherche "scan".
+        query["scans.0"] = {"$exists": True}
+    elif type_contenu == "film":
+        query["films.0"] = {"$exists": True}
+    elif type_contenu:
         query["type_contenu"] = type_contenu
     if lang:
         query["langues"] = lang
@@ -77,14 +84,15 @@ async def search_with_filters(
     skip   = (page - 1) * limit
     cursor = _col().find(
         query,
-        # Projection : retourner un résumé sans les listes d'épisodes (potentiellement volumineuses)
+        # Projection : résumé + structure saisons/films/scans, mais sans leurs
+        # listes lourdes imbriquées (épisodes/vidéos/chapitres).
         {
             "slug": 1, "nom": 1, "titre_alternatif": 1, "image": 1,
             "genres": 1, "langues": 1, "etat": 1, "type_contenu": 1,
             "synopsis": 1, "episodes_synced": 1, "updated_at": 1,
-            "saisons": {"$slice": 0},   # exclure les épisodes du résumé
-            "films":   {"$slice": 0},
-            "scans":   {"$slice": 0},
+            "saisons": 1, "saisons.episodes": 0,
+            "films":   1, "films.videos":     0,
+            "scans":   1, "scans.chapitres":  0,
         }
     ).skip(skip).limit(limit)
 

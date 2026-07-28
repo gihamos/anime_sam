@@ -1,7 +1,8 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
+import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { catalogueApi } from '@/services/api';
-import { SearchFilters, EpisodesResponse } from '@/types';
+import { catalogueApi, getApiError } from '@/services/api';
+import { SearchFilters, EpisodesResponse, SyncStatus } from '@/types';
 import {
   loadCatalogueCache,
   saveCatalogueCache,
@@ -77,14 +78,57 @@ export function useSyncCatalogue(slug: string) {
   }, [slug, queryClient]);
 }
 
+/**
+ * Démarre la synchronisation complète du contenu (saisons/films/scans) et suit
+ * sa progression par polling jusqu'à la fin, puis invalide le cache du catalogue
+ * pour que les données fraîchement synchronisées (ex: chapitres de scan) apparaissent.
+ * Nécessite la permission `can_sync`.
+ */
 export function useSyncContent(slug: string) {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => catalogueApi.syncContent(slug),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalogue', slug] });
-    },
-  });
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [error, setError]   = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = undefined;
+  }, []);
+
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const poll = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await catalogueApi.getSyncStatus(slug);
+        setStatus(s);
+        if (s.status !== 'syncing') {
+          stopPolling();
+          queryClient.invalidateQueries({ queryKey: ['catalogue', slug] });
+        }
+      } catch {
+        stopPolling();
+      }
+    }, 2500);
+  }, [slug, stopPolling, queryClient]);
+
+  const start = useCallback(async () => {
+    setError(null);
+    try {
+      await catalogueApi.syncContent(slug);
+      poll();
+    } catch (err) {
+      // 409 = déjà en cours (ailleurs) → on observe simplement la progression existante.
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        poll();
+        return;
+      }
+      setError(getApiError(err));
+    }
+  }, [slug, poll]);
+
+  return { start, status, error, isSyncing: status?.status === 'syncing' };
 }
 
 export function useRefreshCatalogue(slug: string) {
@@ -109,6 +153,9 @@ export function useEpisodes(
     queryFn: () => catalogueApi.getEpisodes(slug, saisonSlug, lang),
     enabled: enabled && !!slug && !!saisonSlug && !!lang,
     staleTime: 30 * 60 * 1000, // cache 30 min — le scraping est lent
-    retry: 1,
+    // Pas de retry auto : un scraping live qui vient d'échouer/timeout ne sera pas
+    // plus rapide en le relançant à l'identique, et ça double la charge serveur.
+    // L'utilisateur a un bouton "Réessayer" manuel en cas d'échec.
+    retry: false,
   });
 }

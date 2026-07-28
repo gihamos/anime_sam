@@ -9,7 +9,7 @@
  * TTL : 1 heure. Le bouton "Synchroniser" invalide le cache à la demande.
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Catalogue } from '@/types';
 
 const CACHE_DIR = FileSystem.documentDirectory + 'catalogue_cache/';

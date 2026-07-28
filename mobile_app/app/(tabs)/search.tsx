@@ -143,7 +143,7 @@ export default function SearchScreen() {
             <View style={styles.empty}>
               <Ionicons name="search-outline" size={48} color={Colors.textMuted} />
               <Text style={styles.emptyText}>
-                {debouncedQuery
+                {debouncedQuery || activeFilterCount > 0
                   ? 'Aucun résultat trouvé'
                   : 'Recherchez un anime, film ou scan'}
               </Text>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
-import { useCatalogue, useRefreshCatalogue, useSyncCatalogue, useEpisodes } from '@/hooks/useAnime';
+import { useCatalogue, useRefreshCatalogue, useSyncCatalogue, useSyncContent, useEpisodes } from '@/hooks/useAnime';
 import { formatCacheAge } from '@/services/catalogueCache';
 import { useIsFavori, useToggleFavori } from '@/hooks/useFavorites';
 import { useStartEpisodeDownload, useStartFilmDownload, useStartScanDownload } from '@/hooks/useDownloads';
@@ -47,9 +47,15 @@ function EpisodePanel({
   canDownload: boolean;
   onPlay: (video: Video, epNum: string) => void;
 }) {
-  const { data, isLoading, isError, refetch } = useEpisodes(
-    slug, saison.slug, saison.lang, true
+  // Si les épisodes sont déjà synchronisés en DB (renvoyés avec le catalogue),
+  // pas besoin de rescraper en live (lent, 10-30s+) : on les utilise directement.
+  const synced = saison.episodes && saison.episodes.length > 0;
+  const { data: liveData, isLoading, isError, refetch } = useEpisodes(
+    slug, saison.slug, saison.lang, !synced
   );
+  const data = synced
+    ? Object.fromEntries(saison.episodes!.map((e) => [String(e.numero), e.videos]))
+    : liveData;
   const [selectedNums, setSelectedNums] = useState<Set<number>>(new Set());
   const [showDlModal, setShowDlModal] = useState(false);
   const startEpisodeDownload = useStartEpisodeDownload();
@@ -81,7 +87,7 @@ function EpisodePanel({
     }
   };
 
-  if (isLoading) {
+  if (!synced && isLoading) {
     return (
       <View style={ep.loading}>
         <ActivityIndicator color={Colors.primary} />
@@ -90,7 +96,7 @@ function EpisodePanel({
     );
   }
 
-  if (isError || !data) {
+  if (!synced && (isError || !data)) {
     return (
       <View style={ep.error}>
         <Text style={ep.errorText}>Impossible de charger les épisodes.</Text>
@@ -101,7 +107,7 @@ function EpisodePanel({
     );
   }
 
-  const epNums = Object.keys(data).sort((a, b) => Number(a) - Number(b));
+  const epNums = Object.keys(data!).sort((a, b) => Number(a) - Number(b));
 
   if (epNums.length === 0) {
     return (
@@ -127,7 +133,7 @@ function EpisodePanel({
       )}
 
       {epNums.map((num) => {
-        const videos = data[num];
+        const videos = data![num];
         return (
           <View key={num} style={ep.row}>
             <Text style={ep.epNum}>Ép. {num}</Text>
@@ -202,8 +208,10 @@ function FilmPanel({
   canDownload: boolean;
   onPlay: (video: Video) => void;
 }) {
+  // Idem EpisodePanel : si déjà synchronisé en DB, pas de rescraping live.
+  const synced = film.videos && film.videos.length > 0;
   const { data, isLoading, isError, refetch } = useEpisodes(
-    slug, film.slug, film.lang, true
+    slug, film.slug, film.lang, !synced
   );
   const startFilmDownload = useStartFilmDownload();
 
@@ -216,7 +224,7 @@ function FilmPanel({
     }
   };
 
-  if (isLoading) {
+  if (!synced && isLoading) {
     return (
       <View style={ep.loading}>
         <ActivityIndicator color={Colors.primary} />
@@ -225,7 +233,7 @@ function FilmPanel({
     );
   }
 
-  if (isError || !data) {
+  if (!synced && (isError || !data)) {
     return (
       <View style={ep.error}>
         <Text style={ep.errorText}>Impossible de charger ce film.</Text>
@@ -236,7 +244,7 @@ function FilmPanel({
     );
   }
 
-  const videos = data['1'] ?? Object.values(data)[0] ?? [];
+  const videos = synced ? film.videos! : (data!['1'] ?? Object.values(data!)[0] ?? []);
 
   if (videos.length === 0) {
     return (
@@ -382,7 +390,7 @@ function ScanPanel({
 
           return (
             <Pressable
-              key={`${ch.numero}`}
+              key={`${ch.numero}-${idx}`}
               style={[scan.row, !hasContent && scan.rowDisabled]}
               onPress={() => hasContent && onOpenChapitre(activeScan, ch, idx)}
               disabled={!hasContent}
@@ -457,6 +465,7 @@ export default function AnimeDetailScreen() {
   const { data: catalogue, isLoading, isFetching, dataUpdatedAt, error } = useCatalogue(slug);
   const refreshMutation = useRefreshCatalogue(slug);
   const syncCatalogue   = useSyncCatalogue(slug);
+  const contentSync     = useSyncContent(slug);
   const { user, isAuthenticated } = useAuthStore();
   const setVideo = usePlayerStore((s) => s.setVideo);
   const isFavori = useIsFavori(slug);
@@ -472,6 +481,10 @@ export default function AnimeDetailScreen() {
   const [selectedSaison, setSelectedSaison] = useState<SaisonMeta | null>(null);
   const [selectedFilm, setSelectedFilm] = useState<FilmMeta | null>(null);
   const [activeTab, setActiveTab] = useState<'saisons' | 'films' | 'scans'>('saisons');
+
+  useEffect(() => {
+    if (contentSync.error) Alert.alert('Synchronisation impossible', contentSync.error);
+  }, [contentSync.error]);
 
   const handlePlay = (video: Video, extra?: { ep?: string; saison?: string }) => {
     if (!video.player_url) {
@@ -517,6 +530,15 @@ export default function AnimeDetailScreen() {
   const hasFilms   = catalogue.films?.length > 0;
   const hasScans   = catalogue.scans?.length > 0;
   const hasTabs    = [hasSaisons, hasFilms, hasScans].filter(Boolean).length > 1;
+
+  // `activeTab` par défaut vaut 'saisons', mais un catalogue peut n'avoir que
+  // des films ou que des scans (ex : manga pur) — dans ce cas il n'y a pas de
+  // barre d'onglets pour en sortir. On retombe sur le premier type réellement
+  // disponible plutôt que de rester bloqué sur un onglet vide.
+  const availableTabs = (['saisons', 'films', 'scans'] as const).filter(
+    (t) => (t === 'saisons' && hasSaisons) || (t === 'films' && hasFilms) || (t === 'scans' && hasScans)
+  );
+  const displayTab = availableTabs.includes(activeTab) ? activeTab : availableTabs[0];
 
   return (
     <View style={styles.container}>
@@ -572,6 +594,19 @@ export default function AnimeDetailScreen() {
                   }
                 </Pressable>
               )}
+              {/* Sync contenu — scrape complet des épisodes/films/scans, peut prendre plusieurs minutes */}
+              {isAuthenticated && user?.permissions?.can_sync && (
+                <Pressable
+                  style={styles.iconBtn}
+                  onPress={() => contentSync.start()}
+                  disabled={contentSync.isSyncing}
+                >
+                  {contentSync.isSyncing
+                    ? <ActivityIndicator size="small" color={Colors.vostfr} />
+                    : <Ionicons name="download-outline" size={20} color={Colors.text} />
+                  }
+                </Pressable>
+              )}
             </View>
           </SafeAreaView>
         </View>
@@ -601,7 +636,8 @@ export default function AnimeDetailScreen() {
           </View>
           {catalogue.genres?.length > 0 && (
             <View style={styles.genreRow}>
-              {catalogue.genres.map((g) => (
+              {/* dédoublonnage défensif : le scraping peut renvoyer un genre plusieurs fois */}
+              {[...new Set(catalogue.genres)].map((g) => (
                 <View key={g} style={styles.genreTag}>
                   <Text style={styles.genreTagText}>{g}</Text>
                 </View>
@@ -613,35 +649,49 @@ export default function AnimeDetailScreen() {
           )}
         </View>
 
+        {contentSync.isSyncing && (
+          <View style={styles.syncBanner}>
+            <ActivityIndicator size="small" color={Colors.vostfr} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.syncBannerText}>
+                Synchronisation du contenu… {contentSync.status?.progress ?? 0}%
+              </Text>
+              {contentSync.status?.message && (
+                <Text style={styles.syncBannerSub} numberOfLines={1}>{contentSync.status.message}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Tabs */}
         {hasTabs && (
           <View style={styles.tabBar}>
             {hasSaisons && (
               <Pressable
-                style={[styles.tab, activeTab === 'saisons' && styles.tabActive]}
+                style={[styles.tab, displayTab === 'saisons' && styles.tabActive]}
                 onPress={() => { setActiveTab('saisons'); setSelectedSaison(null); }}
               >
-                <Text style={[styles.tabText, activeTab === 'saisons' && styles.tabTextActive]}>
+                <Text style={[styles.tabText, displayTab === 'saisons' && styles.tabTextActive]}>
                   Saisons ({catalogue.saisons.length})
                 </Text>
               </Pressable>
             )}
             {hasFilms && (
               <Pressable
-                style={[styles.tab, activeTab === 'films' && styles.tabActive]}
+                style={[styles.tab, displayTab === 'films' && styles.tabActive]}
                 onPress={() => { setActiveTab('films'); setSelectedFilm(null); }}
               >
-                <Text style={[styles.tabText, activeTab === 'films' && styles.tabTextActive]}>
+                <Text style={[styles.tabText, displayTab === 'films' && styles.tabTextActive]}>
                   Films ({catalogue.films.length})
                 </Text>
               </Pressable>
             )}
             {hasScans && (
               <Pressable
-                style={[styles.tab, activeTab === 'scans' && styles.tabActive]}
+                style={[styles.tab, displayTab === 'scans' && styles.tabActive]}
                 onPress={() => setActiveTab('scans')}
               >
-                <Text style={[styles.tabText, activeTab === 'scans' && styles.tabTextActive]}>
+                <Text style={[styles.tabText, displayTab === 'scans' && styles.tabTextActive]}>
                   Scans
                 </Text>
               </Pressable>
@@ -653,7 +703,7 @@ export default function AnimeDetailScreen() {
         <View style={styles.contentBlock}>
 
           {/* ── Saisons ── */}
-          {activeTab === 'saisons' && (
+          {displayTab === 'saisons' && (
             <>
               {!hasSaisons && (
                 <Text style={styles.emptyText}>Aucune saison disponible.</Text>
@@ -720,7 +770,7 @@ export default function AnimeDetailScreen() {
           )}
 
           {/* ── Films ── */}
-          {activeTab === 'films' && (
+          {displayTab === 'films' && (
             <>
               {!selectedFilm && (
                 catalogue.films.map((f, idx) => (
@@ -780,7 +830,7 @@ export default function AnimeDetailScreen() {
           )}
 
           {/* ── Scans ── */}
-          {activeTab === 'scans' && (
+          {displayTab === 'scans' && (
             <ScanPanel
               slug={slug}
               scans={catalogue.scans}
@@ -832,6 +882,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   infoBlock: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, gap: Spacing.md },
+  syncBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    marginHorizontal: Spacing.lg, marginTop: Spacing.md,
+    padding: Spacing.sm, borderRadius: Radius.md,
+    backgroundColor: Colors.vostfr + '1a',
+  },
+  syncBannerText: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
+  syncBannerSub:  { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
   animeTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800', lineHeight: 30 },
   altTitle:   { color: Colors.textMuted, fontSize: FontSize.sm },
   cacheAge:   { color: Colors.textMuted, fontSize: FontSize.xs, fontStyle: 'italic' },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { downloadApi, scanDownloadApi, getToken } from '@/services/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useDownloadStore } from '@/stores/downloadStore';
@@ -203,7 +203,7 @@ async function saveScanChapters(
       let sizeBytes = 0;
       for (const uri of downloaded) {
         try {
-          const info = await FileSystem.getInfoAsync(uri, { size: true });
+          const info = await FileSystem.getInfoAsync(uri);
           sizeBytes += (info as any).size ?? 0;
         } catch {}
       }
@@ -258,7 +258,7 @@ export function useJobPoller() {
       });
 
       if (dlRes.status === 200) {
-        const info = await FileSystem.getInfoAsync(dlRes.uri, { size: true });
+        const info = await FileSystem.getInfoAsync(dlRes.uri);
         const localFile: LocalFile = {
           id:            `${job.job_id}-${Date.now()}`,
           slug:          job.slug,

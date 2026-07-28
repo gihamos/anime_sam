@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +24,7 @@ type TestStatus = 'idle' | 'testing' | 'ok' | 'error';
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isAuthenticated, login, logout, isLoading } = useAuthStore();
-  const { apiUrl, setApiUrl } = useSettingsStore();
+  const { apiUrl, setApiUrl, externalPlayer, setExternalPlayer } = useSettingsStore();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -181,6 +182,24 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
         )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lecture vidéo</Text>
+          <View style={styles.permRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.permLabel}>Lecteur externe</Text>
+              <Text style={styles.sectionDesc}>
+                Propose de choisir une app vidéo installée (VLC, MX Player…) au lieu du lecteur intégré.
+              </Text>
+            </View>
+            <Switch
+              value={externalPlayer}
+              onValueChange={setExternalPlayer}
+              trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+              thumbColor={externalPlayer ? Colors.primary : Colors.textMuted}
+            />
+          </View>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Configuration API</Text>

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { ActiveJob, LocalFile, LocalScanChapter } from '@/types';
 
 const JOBS_KEY  = 'anime_active_jobs';

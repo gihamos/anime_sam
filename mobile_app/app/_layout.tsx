@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as ExpoSplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -8,6 +10,11 @@ import { useDownloadStore } from '@/stores/downloadStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useJobPoller } from '@/hooks/useDownloads';
 import { Colors } from '@/constants/colors';
+import AnimatedSplash from '@/components/SplashScreen';
+
+// Garde le splash natif visible tant que l'animation JS n'a pas pris le relais
+// (évite le flash de fond blanc/vide entre le splash natif et le premier rendu JS).
+ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,9 +54,23 @@ function AppInit() {
 }
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  // Le premier layout du root view = le JS a quelque chose à afficher →
+  // on masque le splash natif, l'animation JS (même fond) prend le relais sans flash.
+  const onRootLayout = useCallback(() => {
+    ExpoSplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  // Filet de sécurité : si l'animation (Reanimated) ne se termine jamais pour une
+  // raison quelconque, on ne doit jamais bloquer l'app indéfiniment sur le splash.
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onRootLayout}>
       <QueryClientProvider client={queryClient}>
         <AppInit />
         <StatusBar style="light" backgroundColor={Colors.background} />
@@ -73,7 +94,7 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
-            name="scan-reader"
+            name="scan-reader/index"
             options={{
               headerShown: false,
               animation: 'fade',
@@ -81,6 +102,12 @@ export default function RootLayout() {
             }}
           />
         </Stack>
+
+        {showSplash && (
+          <View style={StyleSheet.absoluteFill}>
+            <AnimatedSplash onFinish={() => setShowSplash(false)} />
+          </View>
+        )}
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
