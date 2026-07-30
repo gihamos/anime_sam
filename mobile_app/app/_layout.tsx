@@ -8,8 +8,11 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useDownloadStore } from '@/stores/downloadStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useJobPoller } from '@/hooks/useDownloads';
+import { useReleaseWatcher } from '@/hooks/useReleaseWatcher';
 import { Colors } from '@/constants/colors';
 import AnimatedSplash from '@/components/SplashScreen';
+// Import pour effet de bord : enregistre le handler de notifications premier plan.
+import '@/services/notifications';
 
 // Pas de contrôle manuel du splash natif (preventAutoHideAsync/hideAsync) : Expo
 // le masque déjà automatiquement dès le premier rendu JS. On affiche simplement
@@ -31,6 +34,7 @@ function AppInit() {
   const loadFromStorage = useDownloadStore((s) => s.loadFromStorage);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   useJobPoller();
+  useReleaseWatcher();
 
   useEffect(() => {
     async function init() {

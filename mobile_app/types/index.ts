@@ -14,6 +14,7 @@ export interface Episode {
   numero: number;
   titre?: string;
   videos: Video[];
+  enrichment?: EpisodeEnrichment;
 }
 
 // Réponse de GET /api/stream/resolve — URL embed résolue en flux direct
@@ -30,6 +31,42 @@ export interface ResolvedStream {
   title:      string;
   duration:   number | null;
   merged:     boolean; // true si vidéo et audio sont sur des URLs séparées
+}
+
+// ─── Enrichissement AniList ────────────────────────────────────────────────────
+
+// Sous-document `enrichment` (catalogue ou film — même forme). Tous les champs sont
+// optionnels : un catalogue pas encore enrichi renvoie `enrichment: {}`.
+export interface AniListTag {
+  name: string;
+  rank: number; // 0-100, pertinence du tag
+}
+
+export interface Enrichment {
+  anilist_id?: number;
+  type?: string;             // "ANIME" | "MANGA"
+  genres?: string[];         // genres AniList (EN)
+  genres_fr?: string[];
+  tags?: AniListTag[];
+  score?: number;            // note AniList /100
+  popularity?: number;
+  studios_ou_staff?: string[];
+  cover_url?: string;
+  banner_url?: string;
+  dominant_color?: string;
+  synopsis?: string;
+  synopsis_fr?: string;
+  annee?: number;
+  format?: string;
+  match_confidence?: number;
+  needs_review?: boolean;
+  enriched_at?: string;
+}
+
+// Sous-document `enrichment` d'un épisode (via AniList streamingEpisodes) — forme distincte.
+export interface EpisodeEnrichment {
+  title?: string;
+  thumbnail?: string;
 }
 
 // ─── Métadonnées de catalogue ─────────────────────────────────────────────────
@@ -52,6 +89,7 @@ export interface FilmMeta {
   lang: string;
   // Idem SaisonMeta.episodes : présent si déjà synchronisé en DB.
   videos?: Video[];
+  enrichment?: Enrichment;
 }
 
 // ─── Scans / manga ───────────────────────────────────────────────────────────
@@ -94,6 +132,7 @@ export interface Catalogue {
   titre_alternatif?: string;
   created_at?: string;
   updated_at?: string;
+  enrichment?: Enrichment;
 }
 
 export interface CatalogueSummary {
@@ -118,6 +157,11 @@ export interface CatalogueSummary {
   saisons?: SaisonMeta[];
   films?:   FilmMeta[];
   scans?:   ScanMeta[];
+  enrichment?: Enrichment;
+  // False si ce résultat vient uniquement du scraping en direct d'anime-sama.to
+  // (pas encore en base) — voir GET /catalogues/rechercher. Absent = considéré True
+  // (tous les autres endpoints ne renvoient que des catalogues déjà en DB).
+  in_db?: boolean;
 }
 
 export interface SearchFilters {
@@ -129,13 +173,6 @@ export interface SearchFilters {
   annee?: number;
   page?: number;
   limit?: number;
-}
-
-export interface SearchResult {
-  results: CatalogueSummary[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 export interface User {
@@ -166,6 +203,7 @@ export interface FavorisItem {
   langues: string[];
   annee?:  number;
   note?:   number;
+  enrichment?: Enrichment;
 }
 
 // Réponse GET /auth/me/favoris
@@ -188,6 +226,8 @@ export interface RecommendationItem {
   annee?: number;
   note?:  number;
   score:  number;  // 0.0 = cold start ; plus élevé = plus pertinent
+  enrichment?: Enrichment;
+  reason?: string; // ex. "Parce que vous aimez Naruto" — absent si non applicable
 }
 
 // Alias utilisé dans les composants (rétrocompatibilité)
@@ -244,6 +284,12 @@ export interface ActiveJob {
   // Contexte scan (présent si job_type === 'scan')
   scan_slug?: string;
   chapitre_nums?: number[];
+  // Contexte vidéo (présent si job_type === 'video') — permet de savoir si un
+  // téléchargement est déjà en cours pour cette saison/cet épisode/ce film avant
+  // d'en lancer un nouveau (voir isQueued dans anime/[slug].tsx).
+  saison_idx?: number;
+  ep_nums?: number[];
+  film_idx?: number;
 }
 
 // ─── Scan téléchargement ──────────────────────────────────────────────────────

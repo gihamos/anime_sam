@@ -22,6 +22,10 @@ POST   /admin/api/schedules/{sid}/run          → déclencher manuellement (adm
 
 GET    /admin/api/history                      → historique des syncs (admin)
 GET    /admin/api/history/{slug}               → historique d'un catalogue (admin)
+
+POST   /admin/api/enrichissement/{type_contenu}      → déclencher l'enrichissement AniList (admin)
+GET    /admin/api/enrichissement/a-verifier          → catalogues à confiance de match faible (admin)
+PUT    /admin/api/enrichissement/{slug}/corriger     → forcer un anilist_id précis (admin)
 """
 
 import asyncio
@@ -36,6 +40,7 @@ from models.schedule import ScheduleCreate, ScheduleUpdate
 from models.responses import (
     CatalogueAdminSummary, ClientResponse, ClientCreated, SecretRegenerated,
     ScheduleResponse, SecurityState, IpBan, OkResponse, StatusStarted, BulkResult,
+    EnrichmentResult, NeedsReviewItem, EnrichmentCorrection,
 )
 import db.repository as repo
 import db.clients_repository as clients_repo
@@ -136,6 +141,69 @@ async def bulk_refresh_catalogues(body: BulkSlugs, _: dict = Depends(require_adm
         else:
             ok.append(slug)
     return BulkResult(ok=ok, errors=errors)
+
+
+# ── Enrichissement AniList ──────────────────────────────────────────────────
+
+@router.post("/api/enrichissement/{type_contenu}",
+             response_model=EnrichmentResult,
+             summary="Déclencher l'enrichissement AniList pour un type de contenu (admin)")
+async def trigger_enrichment(
+    type_contenu: str,
+    batch_size: int = 50,
+    _: dict = Depends(require_admin),
+):
+    """type_contenu : "anime" ou "scan" (scan = manga). Traite jusqu'à batch_size entrées."""
+    from services.enrichment_service import enrichir_catalogue
+    result = await enrichir_catalogue(type_contenu, batch_size=batch_size)
+    return EnrichmentResult(**result)
+
+
+@router.get("/api/enrichissement/a-verifier",
+            response_model=list[NeedsReviewItem],
+            summary="Lister les catalogues à faible confiance d'appariement AniList (admin)")
+async def list_needs_review(skip: int = 0, limit: int = 100, _: dict = Depends(require_admin)):
+    items = await repo.get_needs_review(skip=skip, limit=limit)
+    return [
+        NeedsReviewItem(
+            slug=d["slug"],
+            nom=d.get("nom", ""),
+            type_contenu=d.get("type_contenu", ""),
+            anilist_id=(d.get("enrichment") or {}).get("anilist_id"),
+            match_confidence=(d.get("enrichment") or {}).get("match_confidence"),
+        )
+        for d in items
+    ]
+
+
+@router.put("/api/enrichissement/{slug}/corriger",
+            response_model=OkResponse,
+            summary="Forcer manuellement un anilist_id pour un catalogue (admin)")
+async def correct_enrichment(slug: str, body: EnrichmentCorrection, _: dict = Depends(require_admin)):
+    """Re-fetch direct par l'ID fourni et écrase l'enrichissement de ce catalogue (confiance 1.0)."""
+    from services.anilist_client import get_by_id
+    from services.enrichment_service import build_enrichment, TYPE_MAP
+
+    existing = await repo.find_by_slug(slug)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Catalogue introuvable")
+
+    media_type = TYPE_MAP.get(existing.get("type_contenu"))
+    if not media_type:
+        raise HTTPException(status_code=400, detail="Type de contenu non enrichissable")
+
+    media = await get_by_id(body.anilist_id, media_type)
+    if not media:
+        raise HTTPException(status_code=502, detail="ID AniList introuvable ou AniList indisponible")
+
+    enrichment = await build_enrichment(
+        media, media_type, confidence=1.0, needs_review=False,
+        existing_synopsis_fr=existing.get("synopsis"),
+    )
+    ok = await repo.set_enrichment(slug, enrichment)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Catalogue introuvable")
+    return OkResponse()
 
 
 @router.put("/api/catalogues/bulk-visibility",

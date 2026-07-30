@@ -4,7 +4,6 @@ import {
   Catalogue,
   CatalogueSummary,
   SearchFilters,
-  SearchResult,
   AuthTokens,
   User,
   JobCreated,
@@ -174,6 +173,13 @@ export const authApi = {
     const { data } = await getApiClient().get<User>('/auth/me');
     return data;
   },
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    await getApiClient().put('/auth/me/password', {
+      current_password: currentPassword,
+      new_password:      newPassword,
+    });
+  },
 };
 
 // ─── Favoris ──────────────────────────────────────────────────────────────────
@@ -206,22 +212,24 @@ export const catalogueApi = {
     return data;
   },
 
-  search: async (filters: SearchFilters): Promise<SearchResult> => {
-    const { data } = await getApiClient().get<SearchResult>('/catalogues/rechercher', {
+  // GET /catalogues/rechercher renvoie un tableau brut (response_model=list[CatalogueSummary]),
+  // pas un objet paginé — la recherche combine DB + site (voir in_db sur chaque résultat).
+  search: async (filters: SearchFilters): Promise<CatalogueSummary[]> => {
+    const { data } = await getApiClient().get<CatalogueSummary[]>('/catalogues/rechercher', {
       params: filters,
-    });
-    return data;
-  },
-
-  searchSite: async (q: string): Promise<CatalogueSummary[]> => {
-    const { data } = await getApiClient().get<CatalogueSummary[]>('/catalogues/site/rechercher', {
-      params: { q },
     });
     return data;
   },
 
   get: async (slug: string): Promise<Catalogue> => {
     const { data } = await getApiClient().get<Catalogue>(`/catalogues/${slug}`);
+    return data;
+  },
+
+  getSimilar: async (slug: string, limit = 10): Promise<RecommendationItem[]> => {
+    const { data } = await getApiClient().get<RecommendationItem[]>(`/catalogues/${slug}/similaires`, {
+      params: { limit },
+    });
     return data;
   },
 

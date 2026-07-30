@@ -40,6 +40,10 @@ class FavorisItem(BaseModel):
     langues: list[str]     = Field(default_factory=list)
     annee:   Optional[int] = Field(default=None)
     note:    Optional[float] = Field(default=None, description="Note sur 10")
+    enrichment: dict       = Field(
+        default_factory=dict,
+        description="Métadonnées AniList (score, tags, studios, banner_url…) — vide si non enrichi",
+    )
 
 
 class FavorisResponse(BaseModel):
@@ -79,6 +83,14 @@ class RecommendationItem(BaseModel):
             "Score de pertinence calculé par le moteur de recommandations. "
             "0.0 = cold start (aucun favori). Plus élevé = plus pertinent."
         ),
+    )
+    enrichment: dict       = Field(
+        default_factory=dict,
+        description="Métadonnées AniList (score, tags, studios, banner_url…) — vide si non enrichi",
+    )
+    reason: Optional[str]  = Field(
+        default=None,
+        description="Explication lisible de la recommandation (ex. « Parce que vous aimez Naruto »)",
     )
 
 
@@ -151,8 +163,8 @@ class CatalogueSummary(BaseModel):
     titre_alternatif: Optional[str]     = Field(default=None, description="Titre alternatif (japonais, anglais…)")
     synopsis:         Optional[str]     = Field(default=None, description="Résumé (tronqué à 200 caractères dans la liste)")
     image:            Optional[str]     = Field(default=None, description="URL de l'illustration")
-    type_contenu:     str               = Field(description="anime | scan | film | autre")
-    etat:             str               = Field(description="en_cours | termine | abandonne")
+    type_contenu:     Optional[str]     = Field(default=None, description="anime | scan | film | autre — absent si trouvé uniquement via le scraping du site (in_db=False)")
+    etat:             Optional[str]     = Field(default=None, description="en_cours | termine | abandonne — absent si in_db=False")
     genres:           list[str]         = Field(default_factory=list)
     langues:          list[str]         = Field(default_factory=list, description="Langues disponibles")
     episodes_synced:  bool              = Field(default=False, description="True si les épisodes ont été synchronisés")
@@ -163,6 +175,14 @@ class CatalogueSummary(BaseModel):
     saisons:          list[SaisonSummary] = Field(default_factory=list)
     films:            list[FilmSummary]   = Field(default_factory=list)
     scans:            list[ScanSummary]   = Field(default_factory=list)
+    enrichment:       dict               = Field(
+        default_factory=dict,
+        description="Métadonnées AniList (score, tags, studios, banner_url…) — vide si non enrichi",
+    )
+    in_db:            bool               = Field(
+        default=True,
+        description="False si ce résultat vient uniquement du scraping en direct d'anime-sama.to (pas encore en base) — voir GET /catalogues/rechercher",
+    )
 
 
 class SiteSearchResult(BaseModel):
@@ -585,3 +605,33 @@ class BulkResult(BaseModel):
     }})
     ok:     list[str]     = Field(default_factory=list, description="Slugs traités avec succès")
     errors: dict[str, str] = Field(default_factory=dict, description="slug → message d'erreur")
+
+
+class EnrichmentResult(BaseModel):
+    """Résultat d'un déclenchement d'enrichissement AniList (admin)."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "ok":     ["naruto", "one-piece"],
+        "errors": {"obscure-manga": "Aucun résultat AniList"},
+    }})
+    ok:     list[str]      = Field(default_factory=list, description="Slugs enrichis avec succès")
+    errors: dict[str, str] = Field(default_factory=dict, description="slug → raison de l'échec")
+
+
+class NeedsReviewItem(BaseModel):
+    """Catalogue dont l'appariement AniList est incertain (confiance < 0.7)."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "slug": "some-obscure-title", "nom": "Some Obscure Title",
+        "type_contenu": "anime",
+        "anilist_id": 12345, "match_confidence": 0.42,
+    }})
+    slug:             str
+    nom:              str
+    type_contenu:     str
+    anilist_id:       Optional[int]   = None
+    match_confidence: Optional[float] = None
+
+
+class EnrichmentCorrection(BaseModel):
+    """Corps de requête pour forcer manuellement un anilist_id sur un catalogue."""
+    model_config = ConfigDict(json_schema_extra={"example": {"anilist_id": 21}})
+    anilist_id: int = Field(description="ID AniList correct à appliquer")

@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Colors, FontSize, Spacing, Radius } from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -482,6 +483,16 @@ function ExternalPlayerLauncher({
     setErrorDetail(null);
     try {
       if (Platform.OS === 'android') {
+        // Un fichier local (téléchargement hors-ligne) est une URI file://, que
+        // Android interdit d'exposer telle quelle à une autre app depuis Android 7+
+        // (FileUriExposedException / intent silencieusement rejeté). Il faut la
+        // convertir en URI content:// via le FileProvider de l'app avant de la
+        // partager — c'est ce que fait getContentUriAsync.
+        let data = source.uri;
+        if (data.startsWith('file://')) {
+          data = await FileSystem.getContentUriAsync(data);
+        }
+
         // Déclenche le sélecteur système Android ("Ouvrir avec…") : toute app qui
         // gère video/* (VLC, MX Player, lecteur par défaut…) apparaît au choix.
         // IMPORTANT : ne PAS ajouter FLAG_ACTIVITY_NEW_TASK ici — startActivityAsync
@@ -489,7 +500,7 @@ function ExternalPlayerLauncher({
         // router, ce qui bloque définitivement le module ("activity already started")
         // dès le premier appel.
         const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: source.uri,
+          data,
           type: 'video/*',
           flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
         });

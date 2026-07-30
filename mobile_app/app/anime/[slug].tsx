@@ -16,13 +16,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
-import { useCatalogue, useRefreshCatalogue, useSyncCatalogue, useSyncContent, useEpisodes } from '@/hooks/useAnime';
+import { useCatalogue, useRefreshCatalogue, useSyncCatalogue, useSyncContent, useEpisodes, useSimilarCatalogues } from '@/hooks/useAnime';
 import { formatCacheAge } from '@/services/catalogueCache';
 import { useIsFavori, useToggleFavori } from '@/hooks/useFavorites';
 import { useStartEpisodeDownload, useStartFilmDownload, useStartScanDownload } from '@/hooks/useDownloads';
 import { getApiError } from '@/services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Badge from '@/components/ui/Badge';
+import ScoreBadge from '@/components/ui/ScoreBadge';
+import TagChip from '@/components/ui/TagChip';
+import AnimeCard from '@/components/ui/AnimeCard';
 import { useAuthStore } from '@/stores/authStore';
 import { usePlayerStore } from '@/stores/playerStore';
 import { useScanReaderStore } from '@/stores/scanReaderStore';
@@ -59,6 +62,15 @@ function EpisodePanel({
   const [selectedNums, setSelectedNums] = useState<Set<number>>(new Set());
   const [showDlModal, setShowDlModal] = useState(false);
   const startEpisodeDownload = useStartEpisodeDownload();
+  const { jobs } = useDownloadStore();
+  // Empêche de déclencher 2 fois le même téléchargement (double-tap, appui pendant
+  // que la requête précédente est encore en vol) — sans ça, un épisode à 2 lecteurs
+  // se retrouvait avec 2 jobs distincts créés côté serveur pour le même épisode.
+  const isQueued = jobs.some((j) =>
+    j.job_type === 'video' && j.slug === slug && j.saison_idx === saisonIdx
+    && (j.status === 'pending' || j.status === 'downloading')
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const toggleNum = (n: number) => {
     setSelectedNums((prev) => {
@@ -69,6 +81,8 @@ function EpisodePanel({
   };
 
   const handleDownload = async (nums?: number[]) => {
+    if (isSubmitting || isQueued) return;
+    setIsSubmitting(true);
     try {
       await startEpisodeDownload({
         slug,
@@ -84,6 +98,8 @@ function EpisodePanel({
       );
     } catch (err) {
       Alert.alert('Erreur', getApiError(err));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -108,6 +124,11 @@ function EpisodePanel({
   }
 
   const epNums = Object.keys(data!).sort((a, b) => Number(a) - Number(b));
+  // Titres/vignettes réels (via AniList streamingEpisodes) — présents seulement si le
+  // catalogue a été synchronisé en DB avec enrichissement par épisode.
+  const epEnrichment = synced
+    ? Object.fromEntries(saison.episodes!.map((e) => [String(e.numero), e.enrichment]))
+    : {};
 
   if (epNums.length === 0) {
     return (
@@ -121,11 +142,23 @@ function EpisodePanel({
     <View>
       {canDownload && (
         <View style={ep.actionBar}>
-          <Pressable style={ep.dlAllBtn} onPress={() => handleDownload()}>
-            <Ionicons name="download" size={15} color={Colors.text} />
-            <Text style={ep.dlAllText}>Toute la saison</Text>
+          <Pressable
+            style={[ep.dlAllBtn, (isSubmitting || isQueued) && ep.btnDisabled]}
+            onPress={() => handleDownload(epNums.map(Number))}
+            disabled={isSubmitting || isQueued}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color={Colors.text} />
+            ) : (
+              <Ionicons name="download" size={15} color={Colors.text} />
+            )}
+            <Text style={ep.dlAllText}>{isQueued ? 'Déjà en cours' : 'Toute la saison'}</Text>
           </Pressable>
-          <Pressable style={ep.dlSelBtn} onPress={() => setShowDlModal(true)}>
+          <Pressable
+            style={[ep.dlSelBtn, (isSubmitting || isQueued) && ep.btnDisabled]}
+            onPress={() => setShowDlModal(true)}
+            disabled={isSubmitting || isQueued}
+          >
             <Ionicons name="checkmark-done" size={15} color={Colors.primary} />
             <Text style={ep.dlSelText}>Sélection</Text>
           </Pressable>
@@ -134,20 +167,30 @@ function EpisodePanel({
 
       {epNums.map((num) => {
         const videos = data![num];
+        const meta = epEnrichment[num];
         return (
           <View key={num} style={ep.row}>
-            <Text style={ep.epNum}>Ép. {num}</Text>
-            <View style={ep.lecteurs}>
-              {videos.map((v, i) => (
-                <Pressable
-                  key={i}
-                  style={ep.lecteurBtn}
-                  onPress={() => onPlay(v, num)}
-                >
-                  <Ionicons name="play-circle" size={16} color={Colors.primary} />
-                  <Text style={ep.lecteurName}>{v.lecteur || `Lecteur ${i + 1}`}</Text>
-                </Pressable>
-              ))}
+            {meta?.thumbnail ? (
+              <Image source={{ uri: meta.thumbnail }} style={ep.thumb} contentFit="cover" />
+            ) : (
+              <Text style={ep.epNum}>Ép. {num}</Text>
+            )}
+            <View style={{ flex: 1, gap: 4 }}>
+              {meta?.title && (
+                <Text style={ep.epTitle} numberOfLines={1}>{num}. {meta.title}</Text>
+              )}
+              <View style={ep.lecteurs}>
+                {videos.map((v, i) => (
+                  <Pressable
+                    key={i}
+                    style={ep.lecteurBtn}
+                    onPress={() => onPlay(v, num)}
+                  >
+                    <Ionicons name="play-circle" size={16} color={Colors.primary} />
+                    <Text style={ep.lecteurName}>{v.lecteur || `Lecteur ${i + 1}`}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
         );
@@ -178,11 +221,13 @@ function EpisodePanel({
                 <Text style={mstyle.cancelText}>Annuler</Text>
               </Pressable>
               <Pressable
-                style={[mstyle.confirmBtn, selectedNums.size === 0 && { opacity: 0.4 }]}
-                disabled={selectedNums.size === 0}
+                style={[mstyle.confirmBtn, (selectedNums.size === 0 || isSubmitting) && { opacity: 0.4 }]}
+                disabled={selectedNums.size === 0 || isSubmitting}
                 onPress={() => handleDownload(Array.from(selectedNums).sort((a, b) => a - b))}
               >
-                <Ionicons name="download" size={16} color={Colors.text} />
+                {isSubmitting
+                  ? <ActivityIndicator size="small" color={Colors.text} />
+                  : <Ionicons name="download" size={16} color={Colors.text} />}
                 <Text style={mstyle.confirmText}>Télécharger ({selectedNums.size})</Text>
               </Pressable>
             </View>
@@ -214,13 +259,23 @@ function FilmPanel({
     slug, film.slug, film.lang, !synced
   );
   const startFilmDownload = useStartFilmDownload();
+  const { jobs } = useDownloadStore();
+  const isQueued = jobs.some((j) =>
+    j.job_type === 'video' && j.slug === slug && j.film_idx === filmIdx
+    && (j.status === 'pending' || j.status === 'downloading')
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleDownload = async () => {
+    if (isSubmitting || isQueued) return;
+    setIsSubmitting(true);
     try {
       await startFilmDownload({ slug, catalogueNom: slug, filmIdx, filmNom: film.nom });
       Alert.alert('Téléchargement lancé', `${film.nom} ajouté à la file.`);
     } catch (err) {
       Alert.alert('Erreur', getApiError(err));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -258,9 +313,17 @@ function FilmPanel({
     <View>
       {canDownload && (
         <View style={ep.actionBar}>
-          <Pressable style={ep.dlAllBtn} onPress={handleDownload}>
-            <Ionicons name="download" size={15} color={Colors.text} />
-            <Text style={ep.dlAllText}>Télécharger ce film</Text>
+          <Pressable
+            style={[ep.dlAllBtn, (isSubmitting || isQueued) && ep.btnDisabled]}
+            onPress={handleDownload}
+            disabled={isSubmitting || isQueued}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color={Colors.text} />
+            ) : (
+              <Ionicons name="download" size={15} color={Colors.text} />
+            )}
+            <Text style={ep.dlAllText}>{isQueued ? 'Déjà en cours' : 'Télécharger ce film'}</Text>
           </Pressable>
         </View>
       )}
@@ -473,6 +536,20 @@ export default function AnimeDetailScreen() {
   const startEpisodeDownload = useStartEpisodeDownload();
   const startFilmDownload = useStartFilmDownload();
   const setScanChapitre = useScanReaderStore((s) => s.setChapitre);
+  const { data: similar } = useSimilarCatalogues(slug);
+  const { jobs } = useDownloadStore();
+  // Boutons de téléchargement rapide (icône sur la carte saison/film, hors panneau) :
+  // garde locale contre le double-tap, pendant la fenêtre où le job n'est pas encore
+  // dans le store (le round-trip réseau de création du job).
+  const [dlBusy, setDlBusy] = useState<Set<string>>(new Set());
+  const isSaisonQueued = (idx: number) => jobs.some((j) =>
+    j.job_type === 'video' && j.slug === slug && j.saison_idx === idx
+    && (j.status === 'pending' || j.status === 'downloading')
+  );
+  const isFilmQueued = (idx: number) => jobs.some((j) =>
+    j.job_type === 'video' && j.slug === slug && j.film_idx === idx
+    && (j.status === 'pending' || j.status === 'downloading')
+  );
 
   // Le bouton est visible pour tout utilisateur authentifié.
   // Le serveur retourne 403 si le droit de téléchargement n'est pas accordé.
@@ -546,7 +623,7 @@ export default function AnimeDetailScreen() {
         {/* Hero */}
         <View style={{ height: HEADER_HEIGHT, position: 'relative' }}>
           <Image
-            source={{ uri: catalogue.image }}
+            source={{ uri: catalogue.enrichment?.banner_url || catalogue.image }}
             style={{ width: '100%', height: '100%' }}
             contentFit="cover"
           />
@@ -554,6 +631,15 @@ export default function AnimeDetailScreen() {
             colors={['rgba(0,0,0,0.4)', 'transparent', Colors.background]}
             style={StyleSheet.absoluteFill}
           />
+          {/* Vignette poster — accent façon fiche Netflix, seulement quand on a une vraie
+              bannière large (sinon poster == fond, ça ferait doublon) */}
+          {catalogue.enrichment?.banner_url && catalogue.image && (
+            <Image
+              source={{ uri: catalogue.image }}
+              style={styles.posterThumb}
+              contentFit="cover"
+            />
+          )}
           <SafeAreaView style={styles.topBar} edges={['top']}>
             <Pressable style={styles.backBtn} onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
@@ -633,19 +719,38 @@ export default function AnimeDetailScreen() {
             {catalogue.langues?.map((l) => (
               <Badge key={l} label={l.toUpperCase()} color={langColors[l] || Colors.textSecondary} />
             ))}
+            <ScoreBadge enrichment={catalogue.enrichment} size="md" />
           </View>
-          {catalogue.genres?.length > 0 && (
-            <View style={styles.genreRow}>
-              {/* dédoublonnage défensif : le scraping peut renvoyer un genre plusieurs fois */}
-              {[...new Set(catalogue.genres)].map((g) => (
-                <View key={g} style={styles.genreTag}>
-                  <Text style={styles.genreTagText}>{g}</Text>
-                </View>
-              ))}
-            </View>
+          {(() => {
+            // dédoublonnage défensif : le scraping peut renvoyer un genre plusieurs fois.
+            // genres_fr (AniList) préférés s'ils existent, sinon repli sur les genres bruts.
+            const genresDisplay = catalogue.enrichment?.genres_fr?.length
+              ? catalogue.enrichment.genres_fr
+              : catalogue.genres ?? [];
+            return genresDisplay.length > 0 ? (
+              <View style={styles.genreRow}>
+                {[...new Set(genresDisplay)].map((g) => <TagChip key={g} label={g} />)}
+              </View>
+            ) : null;
+          })()}
+          {catalogue.enrichment?.studios_ou_staff && catalogue.enrichment.studios_ou_staff.length > 0 && (
+            <Text style={styles.studioLine}>
+              {catalogue.enrichment.type === 'MANGA' ? 'Auteur : ' : 'Studio : '}
+              {catalogue.enrichment.studios_ou_staff.join(', ')}
+            </Text>
           )}
-          {catalogue.synopsis && (
-            <Text style={styles.synopsis} numberOfLines={4}>{catalogue.synopsis}</Text>
+          {(catalogue.enrichment?.synopsis_fr || catalogue.synopsis) && (
+            <Text style={styles.synopsis} numberOfLines={4}>
+              {catalogue.enrichment?.synopsis_fr || catalogue.synopsis}
+            </Text>
+          )}
+          {catalogue.enrichment?.tags && catalogue.enrichment.tags.length > 0 && (
+            <View style={styles.genreRow}>
+              {[...catalogue.enrichment.tags]
+                .sort((a, b) => b.rank - a.rank)
+                .slice(0, 6)
+                .map((t) => <TagChip key={t.name} label={t.name} variant="outline" />)}
+            </View>
           )}
         </View>
 
@@ -722,27 +827,38 @@ export default function AnimeDetailScreen() {
                         {s.total_episodes} épisodes · {s.lang.toUpperCase()}
                       </Text>
                     </View>
-                    {canDownload && (
-                      <Pressable
-                        style={styles.dlIconBtn}
-                        hitSlop={12}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          startEpisodeDownload({
-                            slug,
-                            catalogueNom: catalogue.nom,
-                            saisonIdx: idx,
-                            saisonNom: s.nom,
-                          }).then(() =>
-                            Alert.alert('Téléchargement lancé', `${s.nom} ajoutée à la file.`)
-                          ).catch((err) =>
-                            Alert.alert('Erreur', getApiError(err))
-                          );
-                        }}
-                      >
-                        <Ionicons name="download-outline" size={18} color={Colors.primary} />
-                      </Pressable>
-                    )}
+                    {canDownload && (() => {
+                      const key = `saison-${idx}`;
+                      const busy = dlBusy.has(key) || isSaisonQueued(idx);
+                      return (
+                        <Pressable
+                          style={styles.dlIconBtn}
+                          hitSlop={12}
+                          disabled={busy}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            if (busy) return;
+                            setDlBusy((prev) => new Set(prev).add(key));
+                            startEpisodeDownload({
+                              slug,
+                              catalogueNom: catalogue.nom,
+                              saisonIdx: idx,
+                              saisonNom: s.nom,
+                            }).then(() =>
+                              Alert.alert('Téléchargement lancé', `${s.nom} ajoutée à la file.`)
+                            ).catch((err) =>
+                              Alert.alert('Erreur', getApiError(err))
+                            ).finally(() =>
+                              setDlBusy((prev) => { const next = new Set(prev); next.delete(key); return next; })
+                            );
+                          }}
+                        >
+                          {busy
+                            ? <ActivityIndicator size="small" color={Colors.primary} />
+                            : <Ionicons name="download-outline" size={18} color={Colors.primary} />}
+                        </Pressable>
+                      );
+                    })()}
                     <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
                   </Pressable>
                 ))
@@ -784,27 +900,38 @@ export default function AnimeDetailScreen() {
                       <Text style={styles.saisonNom}>{f.nom}</Text>
                       <Text style={styles.saisonMeta}>{f.lang.toUpperCase()}</Text>
                     </View>
-                    {canDownload && (
-                      <Pressable
-                        style={styles.dlIconBtn}
-                        hitSlop={12}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          startFilmDownload({
-                            slug,
-                            catalogueNom: catalogue.nom,
-                            filmIdx: idx,
-                            filmNom: f.nom,
-                          }).then(() =>
-                            Alert.alert('Téléchargement lancé', `${f.nom} ajouté à la file.`)
-                          ).catch((err) =>
-                            Alert.alert('Erreur', getApiError(err))
-                          );
-                        }}
-                      >
-                        <Ionicons name="download-outline" size={18} color={Colors.accent} />
-                      </Pressable>
-                    )}
+                    {canDownload && (() => {
+                      const key = `film-${idx}`;
+                      const busy = dlBusy.has(key) || isFilmQueued(idx);
+                      return (
+                        <Pressable
+                          style={styles.dlIconBtn}
+                          hitSlop={12}
+                          disabled={busy}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            if (busy) return;
+                            setDlBusy((prev) => new Set(prev).add(key));
+                            startFilmDownload({
+                              slug,
+                              catalogueNom: catalogue.nom,
+                              filmIdx: idx,
+                              filmNom: f.nom,
+                            }).then(() =>
+                              Alert.alert('Téléchargement lancé', `${f.nom} ajouté à la file.`)
+                            ).catch((err) =>
+                              Alert.alert('Erreur', getApiError(err))
+                            ).finally(() =>
+                              setDlBusy((prev) => { const next = new Set(prev); next.delete(key); return next; })
+                            );
+                          }}
+                        >
+                          {busy
+                            ? <ActivityIndicator size="small" color={Colors.accent} />
+                            : <Ionicons name="download-outline" size={18} color={Colors.accent} />}
+                        </Pressable>
+                      );
+                    })()}
                     <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
                   </Pressable>
                 ))
@@ -851,6 +978,21 @@ export default function AnimeDetailScreen() {
             />
           )}
         </View>
+
+        {/* ── Titres similaires ── */}
+        {similar && similar.length > 0 && (
+          <View style={styles.similarSection}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="albums-outline" size={16} color={Colors.primary} />
+              <Text style={styles.sectionTitle}>Titres similaires</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarList}>
+              {similar.map((item) => (
+                <AnimeCard key={item.slug} item={item} width={120} reason={item.reason} showFavori={false} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -893,11 +1035,15 @@ const styles = StyleSheet.create({
   animeTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800', lineHeight: 30 },
   altTitle:   { color: Colors.textMuted, fontSize: FontSize.sm },
   cacheAge:   { color: Colors.textMuted, fontSize: FontSize.xs, fontStyle: 'italic' },
-  metaRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  metaRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, alignItems: 'center' },
   genreRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
-  genreTag:   { paddingHorizontal: Spacing.sm, paddingVertical: 3, backgroundColor: Colors.surfaceAlt, borderRadius: Radius.sm },
-  genreTagText: { color: Colors.textSecondary, fontSize: FontSize.xs },
+  studioLine: { color: Colors.textMuted, fontSize: FontSize.sm },
   synopsis:   { color: Colors.textSecondary, fontSize: FontSize.md, lineHeight: 22 },
+  posterThumb: {
+    position: 'absolute', bottom: Spacing.lg, left: Spacing.lg,
+    width: 76, height: 108, borderRadius: Radius.md,
+    borderWidth: 2, borderColor: Colors.background,
+  },
   tabBar: {
     flexDirection: 'row', marginHorizontal: Spacing.lg, marginTop: Spacing.xl,
     backgroundColor: Colors.surfaceAlt, borderRadius: Radius.md, padding: 3,
@@ -925,6 +1071,10 @@ const styles = StyleSheet.create({
   errorScreen:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
   errorTitle:   { color: Colors.text, fontSize: FontSize.xl, fontWeight: '700' },
   backLink:     { color: Colors.primary, fontSize: FontSize.md },
+  similarSection: { marginTop: Spacing.lg, marginBottom: Spacing.xxl, gap: Spacing.md },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.lg },
+  sectionTitle: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700' },
+  similarList:  { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
 });
 
 const ep = StyleSheet.create({
@@ -954,12 +1104,15 @@ const ep = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.primary,
   },
   dlSelText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '600' },
+  btnDisabled: { opacity: 0.5 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   epNum:    { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600', width: 48 },
+  thumb:    { width: 72, height: 44, borderRadius: Radius.sm, backgroundColor: Colors.surfaceAlt },
+  epTitle:  { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
   lecteurs: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   lecteurBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,

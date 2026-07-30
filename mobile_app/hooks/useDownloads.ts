@@ -3,7 +3,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { downloadApi, scanDownloadApi, getToken } from '@/services/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useDownloadStore } from '@/stores/downloadStore';
+import { notifyLocal } from '@/services/notifications';
 import { ActiveJob, LocalFile, LocalScanChapter } from '@/types';
+
+function notifyDownloadEvent(title: string, body: string): void {
+  if (!useSettingsStore.getState().notifyDownloads) return;
+  notifyLocal(title, body);
+}
 
 const POLL_INTERVAL = 2000; // ms
 
@@ -38,6 +44,42 @@ export function useStartEpisodeDownload() {
     saisonNom?: string;
     nums?: number[];
   }) => {
+    // Plusieurs épisodes : un job PAR épisode (mp4 individuel) plutôt qu'un
+    // seul job zippé — chaque épisode reste lisible seul (interne ou externe)
+    // dès qu'il termine, sans avoir à extraire une archive. Ils tournent en
+    // parallèle côté serveur (limité par un sémaphore côté API).
+    if (params.nums && params.nums.length > 1) {
+      const jobs: ActiveJob[] = [];
+      for (const num of params.nums) {
+        const created = await downloadApi.createEpisodeJob({
+          slug:       params.slug,
+          saison_idx: params.saisonIdx,
+          nums:       [num],
+        });
+        const job: ActiveJob = {
+          job_id:        created.job_id,
+          slug:          params.slug,
+          catalogue_nom: params.catalogueNom,
+          label:         `${params.saisonNom ?? 'Saison'} · Ép. ${num}`,
+          status:        'pending',
+          progress:      0,
+          dl_speed:      0,
+          dl_eta:        0,
+          output_name:   created.output_name,
+          is_single:     created.is_single,
+          nb_items:      created.nb_items,
+          error:         '',
+          created_at:    Date.now(),
+          job_type:      'video',
+          saison_idx:    params.saisonIdx,
+          ep_nums:       [num],
+        };
+        addJob(job);
+        jobs.push(job);
+      }
+      return jobs;
+    }
+
     const created = await downloadApi.createEpisodeJob({
       slug:       params.slug,
       saison_idx: params.saisonIdx,
@@ -46,7 +88,7 @@ export function useStartEpisodeDownload() {
 
     const label = params.nums
       ? `${params.saisonNom ?? 'Saison'} · Ép. ${params.nums.join(', ')}`
-      : (params.saisonNom ?? 'Saison entière');
+      : (params.saisonNom ?? 'Épisode');
 
     const job: ActiveJob = {
       job_id:        created.job_id,
@@ -63,6 +105,8 @@ export function useStartEpisodeDownload() {
       error:         '',
       created_at:    Date.now(),
       job_type:      'video',
+      saison_idx:    params.saisonIdx,
+      ep_nums:       params.nums,
     };
 
     addJob(job);
@@ -99,6 +143,7 @@ export function useStartFilmDownload() {
       error:         '',
       created_at:    Date.now(),
       job_type:      'video',
+      film_idx:      params.filmIdx,
     };
 
     addJob(job);
@@ -226,8 +271,10 @@ async function saveScanChapters(
 
     removeJob(job.job_id);
     scanDownloadApi.cancel(job.job_id).catch(() => {});
+    notifyDownloadEvent('Téléchargement terminé', job.label);
   } catch (err: any) {
     updateJob(job.job_id, { status: 'error', error: err?.message ?? 'Erreur inconnue' });
+    notifyDownloadEvent('Échec du téléchargement', job.label);
   }
 }
 
@@ -273,11 +320,14 @@ export function useJobPoller() {
         addLocalFile(localFile);
         removeJob(job.job_id);
         downloadApi.cancel(job.job_id).catch(() => {});
+        notifyDownloadEvent('Téléchargement terminé', job.label);
       } else {
         updateJob(job.job_id, { status: 'error', error: `HTTP ${dlRes.status}` });
+        notifyDownloadEvent('Échec du téléchargement', job.label);
       }
     } catch (err: any) {
       updateJob(job.job_id, { status: 'error', error: err.message ?? 'Erreur inconnue' });
+      notifyDownloadEvent('Échec du téléchargement', job.label);
     } finally {
       processingRef.current.delete(job.job_id);
     }
@@ -312,6 +362,8 @@ export function useJobPoller() {
             });
             if (s.ready) {
               await saveScanJob(job);
+            } else if (s.status === 'error') {
+              notifyDownloadEvent('Échec du téléchargement', job.label);
             }
           } else {
             const s = await downloadApi.getStatus(job.job_id);
@@ -325,6 +377,8 @@ export function useJobPoller() {
             });
             if (s.ready) {
               await saveLocalFile({ ...job, output_name: s.output_name || job.output_name });
+            } else if (s.status === 'error') {
+              notifyDownloadEvent('Échec du téléchargement', job.label);
             }
           }
         } catch {

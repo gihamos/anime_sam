@@ -34,6 +34,8 @@ async def setup_indexes():
         await col.create_index("type_contenu")
         await col.create_index("genres")
         await col.create_index("langues")
+        await col.create_index("enrichment.enriched_at")
+        await col.create_index("enrichment.needs_review")
 
         # L'index texte peut entrer en conflit avec un ancien index (ex: "name_text").
         # On supprime l'ancien avant de recréer.

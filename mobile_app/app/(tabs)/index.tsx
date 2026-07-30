@@ -16,10 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
 import { useCatalogueList } from '@/hooks/useAnime';
+import { useRecommendations } from '@/hooks/useFavorites';
 import AnimeCard from '@/components/ui/AnimeCard';
+import ScoreBadge from '@/components/ui/ScoreBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useAuthStore } from '@/stores/authStore';
-import { CatalogueSummary } from '@/types';
+import { CatalogueSummary, RecommendationItem } from '@/types';
 
 const { width } = Dimensions.get('window');
 const HERO_HEIGHT = 440;
@@ -60,11 +62,14 @@ function HeroSection({ items }: { items: CatalogueSummary[] }) {
 
   const tc = hero.type_contenu ?? hero.type ?? '';
   const tc2 = typeColor(tc);
+  // Bannière large AniList (format Netflix) si disponible, sinon repli sur le poster.
+  const bgUri = hero.enrichment?.banner_url || hero.image || '';
+  const genresDisplay = hero.enrichment?.genres_fr?.length ? hero.enrichment.genres_fr : hero.genres;
 
   return (
     <View style={styles.hero}>
       <Image
-        source={{ uri: hero.image || '' }}
+        source={{ uri: bgUri }}
         style={styles.heroImage}
         contentFit="cover"
         transition={400}
@@ -87,21 +92,14 @@ function HeroSection({ items }: { items: CatalogueSummary[] }) {
             <Text style={styles.heroBadgeText}>EN COURS</Text>
           </View>
         )}
-        {hero.note != null && hero.note > 0 && (
-          <View style={[styles.heroBadge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
-            <Ionicons name="star" size={11} color={Colors.warning} />
-            <Text style={[styles.heroBadgeText, { color: Colors.warning }]}>
-              {' '}{hero.note.toFixed(1)}
-            </Text>
-          </View>
-        )}
+        <ScoreBadge enrichment={hero.enrichment} note={hero.note} size="md" />
       </View>
 
       {/* Contenu bas */}
       <View style={styles.heroContent}>
         <Text style={styles.heroTitle} numberOfLines={2}>{hero.nom}</Text>
-        {hero.genres.length > 0 && (
-          <Text style={styles.heroGenres}>{hero.genres.slice(0, 3).join(' · ')}</Text>
+        {genresDisplay.length > 0 && (
+          <Text style={styles.heroGenres}>{genresDisplay.slice(0, 3).join(' · ')}</Text>
         )}
         <View style={styles.heroActions}>
           <Pressable
@@ -141,12 +139,16 @@ function HRow({
   items,
   cardWidth = 120,
   seeAllParams,
+  showReason = false,
 }: {
   title: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   items: CatalogueSummary[];
   cardWidth?: number;
   seeAllParams?: Record<string, string>;
+  // Affiche la légende "Parce que vous aimez X" — items doit alors être un
+  // RecommendationItem[] (structurellement compatible avec CatalogueSummary).
+  showReason?: boolean;
 }) {
   const router = useRouter();
   if (items.length === 0) return null;
@@ -172,7 +174,13 @@ function HRow({
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.slug}
         contentContainerStyle={styles.hList}
-        renderItem={({ item }) => <AnimeCard item={item} width={cardWidth} />}
+        renderItem={({ item }) => (
+          <AnimeCard
+            item={item}
+            width={cardWidth}
+            reason={showReason ? (item as RecommendationItem).reason : undefined}
+          />
+        )}
       />
     </View>
   );
@@ -180,10 +188,17 @@ function HRow({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+// Note effective d'un catalogue : score AniList (/100 → /10) préféré à la note scrapée.
+function effectiveNote(c: CatalogueSummary): number {
+  if (c.enrichment?.score != null) return c.enrichment.score / 10;
+  return c.note ?? 0;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { data: catalogues, isLoading, refetch, isRefetching } = useCatalogueList();
+  const { data: recommendations } = useRecommendations();
 
   useEffect(() => { refetch(); }, [isAuthenticated]);
 
@@ -193,7 +208,7 @@ export default function HomeScreen() {
     // Hero : mieux notés (note desc), sinon les plus récemment mis à jour
     const heroItems = [...all]
       .sort((a, b) => {
-        const nd = (b.note ?? 0) - (a.note ?? 0);
+        const nd = effectiveNote(b) - effectiveNote(a);
         if (nd !== 0) return nd;
         return (b.updated_at ?? '') > (a.updated_at ?? '') ? 1 : -1;
       })
@@ -205,10 +220,16 @@ export default function HomeScreen() {
       .sort((a, b) => ((b.updated_at ?? '') > (a.updated_at ?? '') ? 1 : -1))
       .slice(0, 15);
 
-    // Mieux notés : note > 0, trié note desc
+    // Mieux notés : note > 0 (AniList ou scrapée), trié note desc
     const topRated = all
-      .filter((c) => (c.note ?? 0) > 0)
-      .sort((a, b) => (b.note ?? 0) - (a.note ?? 0))
+      .filter((c) => effectiveNote(c) > 0)
+      .sort((a, b) => effectiveNote(b) - effectiveNote(a))
+      .slice(0, 15);
+
+    // Tendances : popularité AniList desc — pur affichage, pas de nouvel appel réseau.
+    const trending = all
+      .filter((c) => (c.enrichment?.popularity ?? 0) > 0)
+      .sort((a, b) => (b.enrichment!.popularity! - a.enrichment!.popularity!))
       .slice(0, 15);
 
     // Nouveautés : créés récemment (created_at desc)
@@ -229,12 +250,13 @@ export default function HomeScreen() {
       .sort((a, b) => ((b.updated_at ?? '') > (a.updated_at ?? '') ? 1 : -1))
       .slice(0, 15);
 
-    return { heroItems, ongoing, topRated, newArrivals, films, scans };
+    return { heroItems, ongoing, topRated, trending, newArrivals, films, scans };
   }, [catalogues]);
 
   if (isLoading) return <LoadingSpinner fullScreen message="Chargement du catalogue..." />;
 
   const all = catalogues ?? [];
+  const hasRecommendations = isAuthenticated && (recommendations?.length ?? 0) > 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -268,11 +290,28 @@ export default function HomeScreen() {
           seeAllParams={{ etat: 'en_cours' }}
         />
 
+        {/* ── Recommandé pour vous ── */}
+        {hasRecommendations && (
+          <HRow
+            title="Recommandé pour vous"
+            icon="sparkles-outline"
+            items={recommendations!}
+            showReason
+          />
+        )}
+
         {/* ── Mieux notés ── */}
         <HRow
           title="Les mieux notés"
           icon="star"
           items={sorted.topRated}
+        />
+
+        {/* ── Tendances ── */}
+        <HRow
+          title="Tendances"
+          icon="trending-up"
+          items={sorted.trending}
         />
 
         {/* ── Nouveautés ── */}

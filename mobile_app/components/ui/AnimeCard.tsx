@@ -8,6 +8,7 @@ import { Colors, Radius, FontSize, Spacing } from '@/constants/colors';
 import { CatalogueSummary } from '@/types';
 import { useIsFavori, useToggleFavori } from '@/hooks/useFavorites';
 import { useAuthStore } from '@/stores/authStore';
+import ScoreBadge from './ScoreBadge';
 
 const CARD_WIDTH = (Dimensions.get('window').width - Spacing.md * 3) / 2;
 
@@ -15,6 +16,9 @@ interface Props {
   item: CatalogueSummary;
   width?: number;
   showFavori?: boolean;
+  // Légende affichée sous le titre — utilisée par les lignes "Recommandé pour vous" /
+  // "Titres similaires" pour expliquer pourquoi ce titre est proposé.
+  reason?: string;
 }
 
 function FavoriButton({ slug }: { slug: string }) {
@@ -36,7 +40,7 @@ function FavoriButton({ slug }: { slug: string }) {
   );
 }
 
-export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true }: Props) {
+export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true, reason }: Props) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
 
@@ -47,6 +51,8 @@ export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true 
       ? Colors.warning
       : Colors.textMuted;
 
+  const imageUri = item.enrichment?.cover_url || item.image || 'https://via.placeholder.com/200x280';
+
   return (
     <Pressable
       style={[styles.card, { width }]}
@@ -54,7 +60,7 @@ export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true 
     >
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: item.image || 'https://via.placeholder.com/200x280' }}
+          source={{ uri: imageUri }}
           style={styles.image}
           contentFit="cover"
           transition={300}
@@ -73,13 +79,26 @@ export default function AnimeCard({ item, width = CARD_WIDTH, showFavori = true 
             <Text style={styles.langText}>{item.langue.toUpperCase()}</Text>
           </View>
         )}
+        <View style={styles.scoreBadgeWrap}>
+          <ScoreBadge enrichment={item.enrichment} note={item.note} />
+        </View>
+        {item.in_db === false && (
+          <View style={styles.notInDbBadge}>
+            <Ionicons name="cloud-offline-outline" size={11} color={Colors.text} />
+            <Text style={styles.notInDbText}>Pas en base</Text>
+          </View>
+        )}
         {isAuthenticated && showFavori && (
           <FavoriButton slug={item.slug} />
         )}
       </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={2}>{item.nom}</Text>
-        {item.annee && <Text style={styles.year}>{item.annee}</Text>}
+        {reason ? (
+          <Text style={styles.reason} numberOfLines={1}>{reason}</Text>
+        ) : (
+          item.annee && <Text style={styles.year}>{item.annee}</Text>
+        )}
       </View>
     </Pressable>
   );
@@ -151,6 +170,28 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: '700',
   },
+  scoreBadgeWrap: {
+    position: 'absolute',
+    bottom: Spacing.xs,
+    right: Spacing.xs,
+  },
+  notInDbBadge: {
+    position: 'absolute',
+    top: Spacing.xs,
+    right: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.overlay,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  notInDbText: {
+    color: Colors.text,
+    fontSize: 9,
+    fontWeight: '700',
+  },
   info: {
     padding: Spacing.sm,
   },
@@ -164,5 +205,11 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: FontSize.xs,
     marginTop: 2,
+  },
+  reason: {
+    color: Colors.primaryLight,
+    fontSize: FontSize.xs,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
 });

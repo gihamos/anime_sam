@@ -17,21 +17,21 @@ export function useCatalogueList() {
   });
 }
 
+export function useSimilarCatalogues(slug: string) {
+  return useQuery({
+    queryKey: ['similar', slug],
+    queryFn: () => catalogueApi.getSimilar(slug),
+    enabled: !!slug,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 export function useCatalogueSearch(filters: SearchFilters, enabled = true) {
   return useQuery({
     queryKey: ['catalogues', 'search', filters],
     queryFn: () => catalogueApi.search(filters),
     enabled,
     staleTime: 2 * 60 * 1000,
-  });
-}
-
-export function useSiteSearch(q: string, enabled = false) {
-  return useQuery({
-    queryKey: ['site-search', q],
-    queryFn: () => catalogueApi.searchSite(q),
-    enabled: enabled && q.length >= 2,
-    staleTime: 60 * 1000,
   });
 }
 

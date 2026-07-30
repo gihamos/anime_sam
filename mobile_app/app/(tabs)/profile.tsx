@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
   Switch,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,14 +18,21 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { getApiError, testApiConnection } from '@/services/api';
+import { getApiError, testApiConnection, authApi } from '@/services/api';
 
 type TestStatus = 'idle' | 'testing' | 'ok' | 'error';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isAuthenticated, login, logout, isLoading } = useAuthStore();
-  const { apiUrl, setApiUrl, externalPlayer, setExternalPlayer } = useSettingsStore();
+  const {
+    apiUrl, setApiUrl, externalPlayer, setExternalPlayer,
+    notificationsEnabled, setNotificationsEnabled,
+    notifyDownloads, setNotifyDownloads,
+    notifyFavEpisodes, setNotifyFavEpisodes,
+    notifyNewCatalogues, setNotifyNewCatalogues,
+    notifyAnyUpdate, setNotifyAnyUpdate,
+  } = useSettingsStore();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +40,34 @@ export default function ProfileScreen() {
   const [testStatus,  setTestStatus]   = useState<TestStatus>('idle');
   const [testMsg,     setTestMsg]      = useState('');
   const [error, setError] = useState('');
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwSubmitting, setPwSubmitting] = useState(false);
+  const [pwError, setPwError] = useState('');
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError('');
+  };
+
+  const handleChangePassword = async () => {
+    if (newPw.length < 8) { setPwError('Le nouveau mot de passe doit contenir au moins 8 caractères.'); return; }
+    if (newPw !== confirmPw) { setPwError('Les deux mots de passe ne correspondent pas.'); return; }
+    setPwError('');
+    setPwSubmitting(true);
+    try {
+      await authApi.changePassword(currentPw, newPw);
+      closePasswordModal();
+      Alert.alert('Mot de passe modifié', 'Votre mot de passe a été mis à jour.');
+    } catch (e) {
+      setPwError(getApiError(e));
+    } finally {
+      setPwSubmitting(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!username || !password) return;
@@ -114,6 +150,22 @@ export default function ProfileScreen() {
                   />
                 </View>
               ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sécurité</Text>
+              <Pressable
+                style={styles.adminLink}
+                onPress={() => setShowPasswordModal(true)}
+              >
+                <View style={styles.adminLinkLeft}>
+                  <View style={[styles.adminLinkIcon, { backgroundColor: Colors.primary + '22' }]}>
+                    <Ionicons name="key-outline" size={18} color={Colors.primary} />
+                  </View>
+                  <Text style={styles.adminLinkLabel}>Changer le mot de passe</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+              </Pressable>
             </View>
 
             <Pressable style={styles.logoutBtn} onPress={handleLogout}>
@@ -202,6 +254,69 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={styles.permRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.permLabel}>Activer les notifications</Text>
+              <Text style={styles.sectionDesc}>
+                Notifications locales uniquement (l'app doit être ouverte ou récemment
+                utilisée — pas de vraies notifications push dans Expo Go).
+              </Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={(v) => { void setNotificationsEnabled(v); }}
+              trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+              thumbColor={notificationsEnabled ? Colors.primary : Colors.textMuted}
+            />
+          </View>
+
+          {notificationsEnabled && (
+            <>
+              <View style={styles.permRow}>
+                <Text style={styles.permLabel}>Téléchargements terminés</Text>
+                <Switch
+                  value={notifyDownloads}
+                  onValueChange={setNotifyDownloads}
+                  trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+                  thumbColor={notifyDownloads ? Colors.primary : Colors.textMuted}
+                />
+              </View>
+              <View style={styles.permRow}>
+                <Text style={styles.permLabel}>Nouvel épisode sur mes favoris</Text>
+                <Switch
+                  value={notifyFavEpisodes}
+                  onValueChange={setNotifyFavEpisodes}
+                  trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+                  thumbColor={notifyFavEpisodes ? Colors.primary : Colors.textMuted}
+                />
+              </View>
+              <View style={styles.permRow}>
+                <Text style={styles.permLabel}>Nouveaux catalogues</Text>
+                <Switch
+                  value={notifyNewCatalogues}
+                  onValueChange={setNotifyNewCatalogues}
+                  trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+                  thumbColor={notifyNewCatalogues ? Colors.primary : Colors.textMuted}
+                />
+              </View>
+              <View style={styles.permRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.permLabel}>Toute mise à jour de catalogue</Text>
+                  <Text style={styles.sectionDesc}>Bruyant — désactivé par défaut.</Text>
+                </View>
+                <Switch
+                  value={notifyAnyUpdate}
+                  onValueChange={setNotifyAnyUpdate}
+                  trackColor={{ false: Colors.border, true: Colors.primary + '88' }}
+                  thumbColor={notifyAnyUpdate ? Colors.primary : Colors.textMuted}
+                />
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Configuration API</Text>
           <Text style={styles.sectionDesc}>
             Connectée à : <Text style={{ color: Colors.primary }}>{apiUrl || '—'}</Text>
@@ -285,6 +400,60 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <Modal visible={showPasswordModal} transparent animationType="slide" onRequestClose={closePasswordModal}>
+        <View style={pwStyles.backdrop}>
+          <View style={pwStyles.sheet}>
+            <Text style={pwStyles.title}>Changer le mot de passe</Text>
+
+            {pwError ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{pwError}</Text>
+              </View>
+            ) : null}
+
+            <TextInput
+              style={styles.input}
+              value={currentPw}
+              onChangeText={setCurrentPw}
+              placeholder="Mot de passe actuel"
+              placeholderTextColor={Colors.textMuted}
+              secureTextEntry
+            />
+            <TextInput
+              style={styles.input}
+              value={newPw}
+              onChangeText={setNewPw}
+              placeholder="Nouveau mot de passe (8 caractères min.)"
+              placeholderTextColor={Colors.textMuted}
+              secureTextEntry
+            />
+            <TextInput
+              style={styles.input}
+              value={confirmPw}
+              onChangeText={setConfirmPw}
+              placeholder="Confirmer le nouveau mot de passe"
+              placeholderTextColor={Colors.textMuted}
+              secureTextEntry
+            />
+
+            <View style={pwStyles.actions}>
+              <Pressable style={pwStyles.cancelBtn} onPress={closePasswordModal}>
+                <Text style={pwStyles.cancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[pwStyles.confirmBtn, (pwSubmitting || !currentPw || !newPw || !confirmPw) && { opacity: 0.5 }]}
+                disabled={pwSubmitting || !currentPw || !newPw || !confirmPw}
+                onPress={handleChangePassword}
+              >
+                {pwSubmitting
+                  ? <ActivityIndicator size="small" color={Colors.text} />
+                  : <Text style={pwStyles.confirmText}>Confirmer</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -542,4 +711,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.6,
   },
+});
+
+const pwStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.card, borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl, padding: Spacing.lg, gap: Spacing.md,
+  },
+  title: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
+  cancelBtn: {
+    flex: 1, paddingVertical: Spacing.md, alignItems: 'center',
+    backgroundColor: Colors.surfaceAlt, borderRadius: Radius.md,
+  },
+  cancelText: { color: Colors.textMuted, fontWeight: '600' },
+  confirmBtn: {
+    flex: 2, paddingVertical: Spacing.md, alignItems: 'center',
+    backgroundColor: Colors.primary, borderRadius: Radius.md,
+  },
+  confirmText: { color: Colors.text, fontWeight: '700', fontSize: FontSize.md },
 });

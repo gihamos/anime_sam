@@ -52,6 +52,9 @@ class Episode(BaseModel):
     numero: int
     titre:  Optional[str]     = None
     videos: list[Video]       = Field(default_factory=list)
+    # Métadonnées AniList par épisode (titre/vignette via streamingEpisodes) — best-effort,
+    # dispo seulement pour les séries avec partenariat streaming listé sur AniList.
+    enrichment: dict          = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +86,9 @@ class Film(BaseModel):
     url:    str
     image:  Optional[str]  = None
     videos: list[Video]    = Field(default_factory=list)
+    # Enrichissement AniList individuel — un catalogue "film" peut contenir plusieurs
+    # films distincts (franchise), chacun apparié séparément (pas au niveau catalogue).
+    enrichment: dict        = Field(default_factory=dict)
 
 
 class LecteurScan(BaseModel):
@@ -153,6 +159,11 @@ class Catalogue(BaseModel):
 
     visibility:        CatalogueVisibility = Field(default_factory=CatalogueVisibility)
     metadata:          dict             = Field(default_factory=dict)
+    # Métadonnées AniList (score, genres_fr, synopsis_fr, cover art…) — volontairement
+    # séparé de `metadata` (qui reste les paires brutes scrapées depuis anime-sama.to).
+    # Jamais réécrit par le scraping (voir save_catalogue), seulement par le pipeline
+    # d'enrichissement.
+    enrichment:        dict             = Field(default_factory=dict)
     episodes_synced:   bool             = False
 
     created_at:        Optional[str]    = None

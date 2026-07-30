@@ -6,6 +6,7 @@ GET   /catalogues/rechercher                  → recherche DB avec filtres, fal
 GET   /catalogues/site/rechercher             → scrape /catalogue/ avec filtres URL
 GET   /catalogues/sync/status                 → état de toutes les syncs actives
 GET   /catalogues/{slug}                      → catalogue complet (DB ou scrape+sauvegarde)
+GET   /catalogues/{slug}/similaires           → titres similaires (content-based, indépendant des favoris)
 POST  /catalogues/{slug}/rafraichir           → force re-scrape de la structure
 POST  /catalogues/{slug}/sync-content        → démarre la sync (HTTP, sans streaming)
 GET   /catalogues/{slug}/sync-content/status → état de la sync pour ce slug
@@ -40,7 +41,7 @@ from fastapi import Depends
 from models.catalogue import Catalogue
 from models.responses import (
     CatalogueSummary, SiteSearchResult, SyncGlobalStatus, SyncStarted,
-    SyncStatusResponse, SlugStatus, MessageResponse,
+    SyncStatusResponse, SlugStatus, MessageResponse, RecommendationItem,
 )
 
 router = APIRouter(prefix="/catalogues", tags=["Catalogues"])
@@ -299,6 +300,21 @@ async def obtenir_catalogue(
         raise HTTPException(status_code=404, detail="Not found")
 
     return filter_catalogue_for_user(catalogue, user)
+
+
+@router.get("/{slug}/similaires", response_model=list[RecommendationItem],
+            summary="Titres similaires (content-based, indépendant des favoris)")
+async def similaires(
+    slug: str,
+    limit: int = Query(10, ge=1, le=20),
+    user: Optional[dict] = Depends(get_optional_user),
+):
+    """
+    Titres similaires par similarité de contenu (genres/tags AniList/studios) — n'utilise
+    pas les favoris de l'utilisateur, contrairement à `/auth/me/recommendations`.
+    """
+    from services.recommendation_engine import get_similar_catalogues
+    return await get_similar_catalogues(slug, user, limit=limit)
 
 
 @router.post("/{slug}/rafraichir", response_model=Catalogue, summary="Re-scrape la structure")

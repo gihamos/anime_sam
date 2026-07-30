@@ -14,6 +14,7 @@ Flux sync-episodes (tâche de fond) :
   Marque episodes_synced=True à la fin.
 """
 
+import asyncio
 from typing import Optional
 from models.catalogue import Episode
 from services import scraper
@@ -57,22 +58,40 @@ async def rechercher(
     page:         int                 = 1,
 ) -> list[dict]:
     """
-    Cherche en DB avec les filtres fournis.
-    Si aucun résultat et q est fourni, scrape la barre de recherche du site.
+    Recherche unique combinant DB et site : les deux s'exécutent en parallèle quand `q`
+    est fourni (le scraping texte n'a pas de sens sans texte, et ne supporte pas les
+    filtres type/lang/etat/genres — ceux-ci ne s'appliquent qu'à la DB). Fusionnés par
+    slug : un résultat déjà en DB garde ses données (plus riches) et `in_db=True` ; un
+    résultat trouvé uniquement sur le site est ajouté avec `in_db=False` (l'app peut
+    alors proposer de l'ajouter/synchroniser).
     """
-    db_results = await repo.search_with_filters(
-        q=q, type_contenu=type_contenu, lang=lang,
-        etat=etat, genres=genres, page=page,
-    )
-    if db_results:
-        return db_results
-
-    # Fallback : recherche sur le site via la barre de recherche
     if q:
-        site_results = await scraper.search_anime(q)
-        return site_results
+        db_results, site_results = await asyncio.gather(
+            repo.search_with_filters(q=q, type_contenu=type_contenu, lang=lang, etat=etat, genres=genres, page=page),
+            scraper.search_anime(q),
+        )
+    else:
+        db_results   = await repo.search_with_filters(type_contenu=type_contenu, lang=lang, etat=etat, genres=genres, page=page)
+        site_results = []
 
-    return []
+    for r in db_results:
+        r["in_db"] = True
+
+    db_slugs = {r.get("slug") for r in db_results}
+    for s in site_results:
+        slug = s.get("slug")
+        if not slug or slug in db_slugs:
+            continue
+        db_results.append({
+            "slug":   slug,
+            "nom":    s.get("title") or s.get("nom") or slug,
+            "image":  s.get("image"),
+            "genres": [],
+            "in_db":  False,
+        })
+        db_slugs.add(slug)
+
+    return db_results
 
 
 async def rechercher_sur_site(

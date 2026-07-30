@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
+  ScrollView,
   Pressable,
   Alert,
   ActivityIndicator,
@@ -257,6 +258,77 @@ function ScanChapterCard({ chapter }: { chapter: LocalScanChapter }) {
   );
 }
 
+// ─── Groupement par catalogue → saison/scan ───────────────────────────────────
+
+interface VideoGroup {
+  catalogueNom: string;
+  subGroups: { title: string; files: LocalFile[] }[];
+}
+
+function groupLocalFiles(files: LocalFile[]): VideoGroup[] {
+  const byCatalogue = new Map<string, LocalFile[]>();
+  for (const f of files) {
+    byCatalogue.set(f.catalogue_nom, [...(byCatalogue.get(f.catalogue_nom) ?? []), f]);
+  }
+  return Array.from(byCatalogue.entries()).map(([catalogueNom, catFiles]) => {
+    // label = "Saison X · Ép. N" pour les épisodes, ou juste le nom du film (pas de ' · ')
+    const bySub = new Map<string, LocalFile[]>();
+    for (const f of catFiles) {
+      const title = f.label.includes(' · ') ? f.label.split(' · ')[0] : 'Films';
+      bySub.set(title, [...(bySub.get(title) ?? []), f]);
+    }
+    return { catalogueNom, subGroups: Array.from(bySub.entries()).map(([title, files]) => ({ title, files })) };
+  });
+}
+
+interface ScanGroup {
+  catalogueNom: string;
+  subGroups: { title: string; chapters: LocalScanChapter[] }[];
+}
+
+function groupScanChapters(chapters: LocalScanChapter[]): ScanGroup[] {
+  const byCatalogue = new Map<string, LocalScanChapter[]>();
+  for (const c of chapters) {
+    byCatalogue.set(c.catalogue_nom, [...(byCatalogue.get(c.catalogue_nom) ?? []), c]);
+  }
+  return Array.from(byCatalogue.entries()).map(([catalogueNom, catChapters]) => {
+    const bySub = new Map<string, LocalScanChapter[]>();
+    for (const c of catChapters) {
+      bySub.set(c.scan_nom, [...(bySub.get(c.scan_nom) ?? []), c]);
+    }
+    return { catalogueNom, subGroups: Array.from(bySub.entries()).map(([title, chapters]) => ({ title, chapters })) };
+  });
+}
+
+function CatalogueSection({
+  catalogueNom, count, expanded, onToggle, children,
+}: {
+  catalogueNom: string; count: number; expanded: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <View style={grp.container}>
+      <Pressable style={grp.header} onPress={onToggle}>
+        <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={16} color={Colors.textMuted} />
+        <Text style={grp.title} numberOfLines={1}>{catalogueNom}</Text>
+        <View style={grp.countChip}>
+          <Text style={grp.countText}>{count}</Text>
+        </View>
+      </Pressable>
+      {expanded && <View style={grp.body}>{children}</View>}
+    </View>
+  );
+}
+
+function useToggleSet() {
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const toggle = (key: string) => setExpanded((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+  return { expanded, toggle };
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function DownloadsScreen() {
@@ -264,6 +336,10 @@ export default function DownloadsScreen() {
   const { isAuthenticated } = useAuthStore();
   const { jobs, localFiles, scanChapters, loadFromStorage } = useDownloadStore();
   const [section, setSection] = React.useState<'active' | 'local' | 'scans'>('active');
+  const videoGroups = useMemo(() => groupLocalFiles(localFiles), [localFiles]);
+  const scanGroups   = useMemo(() => groupScanChapters(scanChapters), [scanChapters]);
+  const videoToggle  = useToggleSet();
+  const scanToggle   = useToggleSet();
 
   useEffect(() => { loadFromStorage(); }, []);
 
@@ -346,43 +422,69 @@ export default function DownloadsScreen() {
       )}
 
       {section === 'local' && (
-        <FlatList
-          data={localFiles}
-          keyExtractor={(f) => f.id}
-          renderItem={({ item }) => <LocalFileCard file={item} />}
-          contentContainerStyle={localFiles.length === 0 ? { flex: 1 } : styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="film-outline" size={56} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>Aucune vidéo hors ligne</Text>
-              <Text style={styles.emptySubtitle}>
-                Les épisodes et films téléchargés apparaîtront ici.
-              </Text>
-            </View>
-          }
-        />
+        localFiles.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="film-outline" size={56} color={Colors.textMuted} />
+            <Text style={styles.emptyTitle}>Aucune vidéo hors ligne</Text>
+            <Text style={styles.emptySubtitle}>
+              Les épisodes et films téléchargés apparaîtront ici.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+            {videoGroups.map((group) => (
+              <CatalogueSection
+                key={group.catalogueNom}
+                catalogueNom={group.catalogueNom}
+                count={group.subGroups.reduce((sum, g) => sum + g.files.length, 0)}
+                expanded={videoToggle.expanded.has(group.catalogueNom)}
+                onToggle={() => videoToggle.toggle(group.catalogueNom)}
+              >
+                {group.subGroups.map((sub) => (
+                  <View key={sub.title} style={grp.subGroup}>
+                    <Text style={grp.subTitle}>{sub.title}</Text>
+                    {sub.files.map((f) => <LocalFileCard key={f.id} file={f} />)}
+                  </View>
+                ))}
+              </CatalogueSection>
+            ))}
+          </ScrollView>
+        )
       )}
 
       {section === 'scans' && (
-        <FlatList
-          data={scanChapters}
-          keyExtractor={(c) => c.id}
-          renderItem={({ item }) => <ScanChapterCard chapter={item} />}
-          contentContainerStyle={scanChapters.length === 0 ? { flex: 1 } : styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="book-outline" size={56} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>Aucun scan hors ligne</Text>
-              <Text style={styles.emptySubtitle}>
-                Ouvrez un manga et appuyez sur{' '}
-                <Ionicons name="download-outline" size={13} color={Colors.textMuted} />
-                {' '}sur un chapitre pour le télécharger.
-              </Text>
-            </View>
-          }
-        />
+        scanChapters.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="book-outline" size={56} color={Colors.textMuted} />
+            <Text style={styles.emptyTitle}>Aucun scan hors ligne</Text>
+            <Text style={styles.emptySubtitle}>
+              Ouvrez un manga et appuyez sur{' '}
+              <Ionicons name="download-outline" size={13} color={Colors.textMuted} />
+              {' '}sur un chapitre pour le télécharger.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+            {scanGroups.map((group) => (
+              <CatalogueSection
+                key={group.catalogueNom}
+                catalogueNom={group.catalogueNom}
+                count={group.subGroups.reduce((sum, g) => sum + g.chapters.length, 0)}
+                expanded={scanToggle.expanded.has(group.catalogueNom)}
+                onToggle={() => scanToggle.toggle(group.catalogueNom)}
+              >
+                {group.subGroups.map((sub) => (
+                  <View key={sub.title} style={grp.subGroup}>
+                    <Text style={grp.subTitle}>{sub.title}</Text>
+                    {sub.chapters
+                      .sort((a, b) => a.chapitre_num - b.chapitre_num)
+                      .map((c) => <ScanChapterCard key={c.id} chapter={c} />)}
+                  </View>
+                ))}
+              </CatalogueSection>
+            ))}
+          </ScrollView>
+        )
       )}
     </SafeAreaView>
   );
@@ -456,4 +558,25 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md, paddingHorizontal: Spacing.xl, marginTop: Spacing.sm,
   },
   loginBtnText: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+});
+
+const grp = StyleSheet.create({
+  container: {
+    marginBottom: Spacing.md, backgroundColor: Colors.surfaceAlt, borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    padding: Spacing.md,
+  },
+  title: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  countChip: {
+    backgroundColor: Colors.primary + '33', borderRadius: Radius.full,
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderWidth: 1, borderColor: Colors.primary + '55',
+  },
+  countText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '700' },
+  body: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, gap: Spacing.md },
+  subGroup: { gap: Spacing.sm },
+  subTitle: { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '600' },
 });

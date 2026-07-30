@@ -27,6 +27,7 @@ Admin :
   DELETE /admin/api/dl-quotas/{username}→ supprimer
 """
 
+import asyncio
 import shutil
 import tempfile
 import threading
@@ -110,6 +111,11 @@ class _Job:
 _jobs: dict[str, _Job] = {}
 _JOB_TTL = 3600   # fichiers gardés 1 h après completion
 
+# Limite le nombre de téléchargements yt-dlp/ffmpeg simultanés (CPU/bande passante
+# du VPS) — utile depuis qu'un téléchargement de saison crée un job par épisode
+# au lieu d'un seul job zippé. Les jobs en excès restent "pending" jusqu'à leur tour.
+_download_semaphore = asyncio.Semaphore(3)
+
 
 def _purge_jobs() -> None:
     """Nettoie les jobs et fichiers expirés."""
@@ -133,89 +139,94 @@ def _get_job(job_id: str, username: str) -> _Job:
 
 
 async def _run_job(job: _Job) -> None:
-    """Tâche de fond : télécharge les vidéos et prépare le fichier final."""
-    try:
-        job.status = "downloading"
-        job._tmp_dir = tempfile.mkdtemp(prefix="anime_dl_")
-        tmp_path = Path(job._tmp_dir)
-        total = len(job.items)
+    """Tâche de fond : télécharge les vidéos et prépare le fichier final.
 
-        def _byte_progress(dl: int, tot: int, spd: float, eta: int) -> None:
-            job.dl_bytes = dl
-            job.dl_total = tot
-            job.dl_speed = spd
-            job.dl_eta   = eta
-            if tot > 0:
-                job.progress = min(99, int(dl / tot * 100))
+    Reste "pending" (sans consommer de slot yt-dlp/ffmpeg) tant que
+    `_download_semaphore` est saturé par d'autres jobs en cours.
+    """
+    async with _download_semaphore:
+        try:
+            job.status = "downloading"
+            job._tmp_dir = tempfile.mkdtemp(prefix="anime_dl_")
+            tmp_path = Path(job._tmp_dir)
+            total = len(job.items)
 
-        if job.is_single:
-            # ── Fichier unique ────────────────────────────────────────────
-            item = job.items[0]
-            job.current = item["filename"]
-            path = await downloader.download_to_file(
-                item["player_urls"], tmp_path, item["filename"],
-                cancel=job._cancel, on_progress=_byte_progress,
-            )
-            if job._cancel.is_set():
-                job.status = "error"
-                job.error  = "Téléchargement annulé"
-                return
-            if not path or not path.exists():
-                job.status = "error"
-                job.error  = (
-                    "Impossible de télécharger la vidéo. "
-                    "Le lecteur n'est peut-être pas supporté par yt-dlp, "
-                    "ou le contenu nécessite une authentification sur le site."
+            def _byte_progress(dl: int, tot: int, spd: float, eta: int) -> None:
+                job.dl_bytes = dl
+                job.dl_total = tot
+                job.dl_speed = spd
+                job.dl_eta   = eta
+                if tot > 0:
+                    job.progress = min(99, int(dl / tot * 100))
+
+            if job.is_single:
+                # ── Fichier unique ────────────────────────────────────────────
+                item = job.items[0]
+                job.current = item["filename"]
+                path = await downloader.download_to_file(
+                    item["player_urls"], tmp_path, item["filename"],
+                    cancel=job._cancel, on_progress=_byte_progress,
                 )
-                return
-            job.output_path = path
-            job.progress = 100
+                if job._cancel.is_set():
+                    job.status = "error"
+                    job.error  = "Téléchargement annulé"
+                    return
+                if not path or not path.exists():
+                    job.status = "error"
+                    job.error  = (
+                        "Impossible de télécharger la vidéo. "
+                        "Le lecteur n'est peut-être pas supporté par yt-dlp, "
+                        "ou le contenu nécessite une authentification sur le site."
+                    )
+                    return
+                job.output_path = path
+                job.progress = 100
 
-            await dl_repo.record(
-                job.username, job.slug, "episode" if "Episode" in job.output_name else "film",
-                nb_files=1, size_bytes=path.stat().st_size, details=job.output_name,
-            )
+                await dl_repo.record(
+                    job.username, job.slug, "episode" if "Episode" in job.output_name else "film",
+                    nb_files=1, size_bytes=path.stat().st_size, details=job.output_name,
+                )
 
-        else:
-            # ── Multi-fichiers → ZIP ──────────────────────────────────────
-            zip_path = tmp_path / job.output_name
+            else:
+                # ── Multi-fichiers → ZIP ──────────────────────────────────────
+                zip_path = tmp_path / job.output_name
 
-            async def _progress(done: int, total_: int) -> None:
-                job.progress = int(done / total_ * 90)
-                if done > 0:
-                    job.current = job.items[done - 1]["filename"]
+                async def _progress(done: int, total_: int) -> None:
+                    job.progress = int(done / total_ * 90)
+                    if done > 0:
+                        job.current = job.items[done - 1]["filename"]
 
-            nb = await downloader.build_zip(
-                job.items, zip_path, on_progress=_progress,
-                cancel=job._cancel, on_file_progress=_byte_progress,
-            )
+                nb = await downloader.build_zip(
+                    job.items, zip_path, on_progress=_progress,
+                    cancel=job._cancel, on_file_progress=_byte_progress,
+                )
 
-            if job._cancel.is_set():
-                job.status = "error"
-                job.error  = "Téléchargement annulé"
-                return
-            if nb == 0:
-                job.status = "error"
-                job.error  = "Aucune vidéo n'a pu être téléchargée"
-                return
+                if job._cancel.is_set():
+                    job.status = "error"
+                    job.error  = "Téléchargement annulé"
+                    return
+                if nb == 0:
+                    job.status = "error"
+                    job.error  = "Aucune vidéo n'a pu être téléchargée"
+                    return
 
-            job.output_path = zip_path
-            job.progress = 100
+                job.output_path = zip_path
+                job.progress = 100
 
-            await dl_repo.record(
-                job.username, job.slug, "season",
-                nb_files=nb, size_bytes=zip_path.stat().st_size,
-                details=job.output_name,
-            )
+                await dl_repo.record(
+                    job.username, job.slug, "season",
+                    nb_files=nb, size_bytes=zip_path.stat().st_size,
+                    details=job.output_name,
+                )
 
-        job.status     = "ready"
-        job.expires_at = time.time() + _JOB_TTL
-        logger.info(f"Job {job.id} terminé → {job.output_path.name} ({job.output_path.stat().st_size // 1024} Ko)")
+            job.status     = "ready"
+            job.expires_at = time.time() + _JOB_TTL
+            logger.info(f"Job {job.id} terminé → {job.output_path.name} ({job.output_path.stat().st_size // 1024} Ko)")
 
-    except Exception as exc:
-        job.status = "error"
-        job.error  = str(exc)
-        logger.exception(f"Job {job.id} erreur")
+        except Exception as exc:
+            job.status = "error"
+            job.error  = str(exc)
+            logger.exception(f"Job {job.id} erreur")
 
 
 # ══ Routes jobs ════════════════════════════════════════════════════════════════

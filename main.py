@@ -17,8 +17,9 @@ from api.routes.download import router as download_router, admin_router as dl_ad
 from api.routes.scan_download import router as scan_dl_router, admin_router as scan_dl_admin_router
 from api.routes.stream import router as stream_router
 from services.catalogue_service import mettre_a_jour_tous
+from services.enrichment_service import enrichir_tous
 from services.scheduler_service import scheduler, load_schedules_from_db
-from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT
+from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT, ANILIST_ENRICHMENT_ENABLED
 
 
 async def _create_default_admin() -> None:
@@ -68,6 +69,18 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=3600,
     )
+
+    # Enrichissement AniList — job indépendant, désactivable sans toucher au code
+    # (ANILIST_ENRICHMENT_ENABLED=false dans .env).
+    if ANILIST_ENRICHMENT_ENABLED:
+        scheduler.add_job(
+            enrichir_tous,
+            "interval",
+            hours=6,
+            id="anilist_enrichment",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
 
     scheduler.start()
 

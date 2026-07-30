@@ -35,7 +35,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from models.user import UserCreate, UserUpdate, UserPublic, UserInDB, Role
-from models.responses import TokenResponse, FavorisResponse, RecommendationItem
+from models.responses import TokenResponse, FavorisResponse, RecommendationItem, MessageResponse
 from api.dependencies import (
     get_current_user, require_admin,
     hash_password, verify_password,
@@ -57,6 +57,11 @@ router = APIRouter(prefix="/auth", tags=["Authentification"])
 class ClientTokenRequest(BaseModel):
     client_id:     str
     client_secret: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:      str
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +212,29 @@ async def get_recommendations(
     Compatible avec n'importe quelle plateforme via `Authorization: Bearer <token>`.
     """
     return await compute_recommendations(user, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Mot de passe (self-service)
+# ---------------------------------------------------------------------------
+
+@router.put(
+    "/me/password",
+    response_model=MessageResponse,
+    summary="Changer mon mot de passe",
+)
+async def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    """
+    Change le mot de passe de l'utilisateur connecté (nécessite l'ancien mot de passe).
+    Distinct de `PUT /auth/users/{username}` (admin) — ici l'utilisateur agit sur son propre compte.
+    """
+    if not verify_password(body.current_password, user.get("hashed_password", "")):
+        raise HTTPException(400, "Mot de passe actuel incorrect")
+    if len(body.new_password) < 8:
+        raise HTTPException(400, "Le nouveau mot de passe doit contenir au moins 8 caractères")
+
+    await user_repo.update_user(user["username"], {"hashed_password": hash_password(body.new_password)})
+    return {"message": "Mot de passe mis à jour"}
 
 
 # ---------------------------------------------------------------------------

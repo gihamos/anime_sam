@@ -15,13 +15,10 @@ import SearchBar from '@/components/ui/SearchBar';
 import AnimeCard from '@/components/ui/AnimeCard';
 import FilterSheet from '@/components/ui/FilterSheet';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { useCatalogueSearch, useSiteSearch } from '@/hooks/useAnime';
-import { useAuthStore } from '@/stores/authStore';
+import { useCatalogueSearch } from '@/hooks/useAnime';
 import { SearchFilters } from '@/types';
 
 export default function SearchScreen() {
-  const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
   const params = useLocalSearchParams<{ type?: string; etat?: string }>();
 
   const [query, setQuery] = useState('');
@@ -31,7 +28,6 @@ export default function SearchScreen() {
     etat: params.etat,
   }));
   const [showFilters, setShowFilters] = useState(false);
-  const [searchOnSite, setSearchOnSite] = useState(false);
 
   // Ré-appliquer les filtres quand on arrive depuis la page d'accueil
   useEffect(() => {
@@ -41,29 +37,19 @@ export default function SearchScreen() {
     }
   }, [params.type, params.etat]);
 
-  // Réinitialise la recherche sur le site si l'user perd le droit admin
-  useEffect(() => {
-    if (!isAdmin && searchOnSite) setSearchOnSite(false);
-  }, [isAdmin, searchOnSite]);
-
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 500);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const localSearch = useCatalogueSearch(
-    { ...filters, q: debouncedQuery, limit: 50 },
-    !searchOnSite
-  );
+  // Recherche unique : la DB et le site anime-sama.to sont combinés côté serveur
+  // (voir GET /catalogues/rechercher) — chaque résultat porte `in_db` pour indiquer
+  // s'il est déjà synchronisé en base ou trouvé seulement en direct sur le site.
+  const search = useCatalogueSearch({ ...filters, q: debouncedQuery, limit: 50 }, true);
 
-  const siteSearch = useSiteSearch(debouncedQuery, searchOnSite);
-
-  const results = searchOnSite
-    ? siteSearch.data ?? []
-    : localSearch.data?.results ?? [];
-
-  const isLoading = searchOnSite ? siteSearch.isLoading : localSearch.isLoading;
-  const total = localSearch.data?.total;
+  const results = search.data ?? [];
+  const isLoading = search.isLoading;
+  const total = search.data?.length;
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
@@ -97,28 +83,6 @@ export default function SearchScreen() {
             )}
           </Pressable>
         </View>
-
-        {isAdmin && (
-          <View style={styles.toggleRow}>
-            <Pressable
-              style={[styles.toggle, !searchOnSite && styles.toggleActive]}
-              onPress={() => setSearchOnSite(false)}
-            >
-              <Text style={[styles.toggleText, !searchOnSite && styles.toggleTextActive]}>
-                Catalogue local
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.toggle, searchOnSite && styles.toggleActive]}
-              onPress={() => setSearchOnSite(true)}
-            >
-              <Ionicons name="globe-outline" size={13} color={searchOnSite ? Colors.text : Colors.textMuted} />
-              <Text style={[styles.toggleText, searchOnSite && styles.toggleTextActive]}>
-                Anime-sama.to
-              </Text>
-            </Pressable>
-          </View>
-        )}
       </View>
 
       {isLoading ? (
@@ -213,32 +177,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 9,
     fontWeight: '700',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: Radius.md,
-    padding: 3,
-  },
-  toggle: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: Radius.sm,
-  },
-  toggleActive: {
-    backgroundColor: Colors.primary,
-  },
-  toggleText: {
-    color: Colors.textMuted,
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
-  toggleTextActive: {
-    color: Colors.text,
   },
   list: {
     paddingHorizontal: Spacing.md,

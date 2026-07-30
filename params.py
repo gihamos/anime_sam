@@ -59,3 +59,10 @@ _raw_providers: dict[str, dict] = {
 OIDC_PROVIDERS: dict[str, dict] = {
     k: v for k, v in _raw_providers.items() if v.get("client_id")
 }
+
+# ── AniList / DeepL (enrichissement métadonnées) ────────────────────────────
+ANILIST_API_URL             = os.getenv("ANILIST_API_URL", "https://graphql.anilist.co")
+ANILIST_RATE_LIMIT_PER_MIN  = int(os.getenv("ANILIST_RATE_LIMIT_PER_MIN", "90"))
+ANILIST_ENRICHMENT_ENABLED  = os.getenv("ANILIST_ENRICHMENT_ENABLED", "true").lower() == "true"
+DEEPL_API_KEY                = os.getenv("DEEPL_API_KEY", "")
+DEEPL_API_URL                = os.getenv("DEEPL_API_URL", "https://api-free.deepl.com/v2/translate")
