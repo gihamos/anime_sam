@@ -1,14 +1,24 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontSize } from '@/constants/colors';
-import { Platform } from 'react-native';
 import { useDownloadStore } from '@/stores/downloadStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Base de la barre hors zone système — la hauteur/marge basse réelle est complétée par
+// insets.bottom (voir plus bas) au lieu d'une valeur fixe.
+const TAB_BAR_BASE_HEIGHT = 56;
 
 export default function TabsLayout() {
   const jobs = useDownloadStore((s) => s.jobs);
   const activeDownloads = jobs.filter(
     (j) => j.status === 'pending' || j.status === 'downloading'
   ).length;
+  // insets.bottom = hauteur réelle de la barre de navigation système Android (3 boutons,
+  // geste, ou barre custom OEM) / de l'encoche iOS — variable selon l'appareil. Une valeur
+  // fixe (ancien code) laisse la barre système recouvrir les icônes sur les appareils dont
+  // la barre est plus haute que prévu. react-native-safe-area-context lit ça nativement via
+  // WindowInsets (Android) / safeAreaInsets (iOS), déjà fourni par expo-router à la racine.
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -18,8 +28,8 @@ export default function TabsLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          height: TAB_BAR_BASE_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
           paddingTop: 8,
         },
         tabBarActiveTintColor: Colors.primary,
