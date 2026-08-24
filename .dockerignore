@@ -10,3 +10,5 @@ logs
 .gitignore
 README.md
 mobile_app
+admin_app/node_modules
+admin_app/dist

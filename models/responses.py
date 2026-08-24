@@ -164,6 +164,7 @@ class CatalogueSummary(BaseModel):
     synopsis:         Optional[str]     = Field(default=None, description="Résumé (tronqué à 200 caractères dans la liste)")
     image:            Optional[str]     = Field(default=None, description="URL de l'illustration")
     type_contenu:     Optional[str]     = Field(default=None, description="anime | scan | film | autre — absent si trouvé uniquement via le scraping du site (in_db=False)")
+    source:           str               = Field(default="anime-sama", description="anime-sama | tmdb-vidzy — origine du catalogue")
     etat:             Optional[str]     = Field(default=None, description="en_cours | termine | abandonne — absent si in_db=False")
     genres:           list[str]         = Field(default_factory=list)
     langues:          list[str]         = Field(default_factory=list, description="Langues disponibles")

@@ -95,7 +95,7 @@ class BulkVisibilityBody(BaseModel):
 
 @router.get("/api/catalogues", response_model=list[CatalogueAdminSummary], summary="Catalogues avec visibilité et statut (admin)")
 async def list_catalogues_admin(_: dict = Depends(require_admin)):
-    items = await repo.get_all_summary()
+    items = await repo.get_all_summary(limit=0)
     result = []
     for item in items:
         doc = await repo.find_by_slug(item["slug"])
@@ -432,6 +432,7 @@ def _catalogue_summary(doc: dict) -> dict:
         "titre_alternatif": doc.get("titre_alternatif"),
         "synopsis":         (doc.get("synopsis") or "")[:200],
         "type_contenu":     doc.get("type_contenu", "anime"),
+        "source":           doc.get("source", "anime-sama"),
         "etat":             doc.get("etat", "en_cours"),
         "genres":           doc.get("genres", []),
         "langues":          doc.get("langues", []),

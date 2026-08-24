@@ -56,6 +56,18 @@
                 <div class="fieldDescription">Dossier où les chapitres de scans seront créés en .cbz. Pointez une bibliothèque Jellyfin de type <strong>Livres</strong> vers ce dossier.</div>
             </div>
 
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="filmLibraryPath">Chemin de la bibliothèque Films (TMDB)</label>
+                <input id="filmLibraryPath" type="text" is="emby-input" placeholder="/config/data/films" />
+                <div class="fieldDescription">Films ajoutés depuis TMDB (indépendant d'anime-sama.to). Pointez une bibliothèque Jellyfin de type <strong>Films</strong> vers ce dossier.</div>
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="serieLibraryPath">Chemin de la bibliothèque Séries (TMDB)</label>
+                <input id="serieLibraryPath" type="text" is="emby-input" placeholder="/config/data/series" />
+                <div class="fieldDescription">Séries ajoutées depuis TMDB. Pointez une bibliothèque Jellyfin de type <strong>Séries</strong> vers ce dossier.</div>
+            </div>
+
             <div>
                 <button is="emby-button" type="submit" class="raised button-submit block emby-button" onclick="AnimeSamaConfig.save()">
                     <span>Sauvegarder</span>
@@ -69,10 +81,66 @@
             <br/>
 
             <div class="verticalSection">
+                <h3 class="sectionTitle">Synchronisation automatique</h3>
+                <p style="font-size:.85rem;color:#aaa;">
+                    Planifie la synchronisation de la bibliothèque (identique au bouton
+                    ci-dessous) pour qu'elle se lance toute seule, sans intervention.
+                </p>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input id="autoSyncEnabled" type="checkbox" is="emby-checkbox" onchange="AnimeSamaConfig.toggleAutoSyncFields()" />
+                        <span>Activer la synchronisation automatique</span>
+                    </label>
+                </div>
+
+                <div id="autoSyncFields" style="display:none;">
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="autoSyncFrequency">Fréquence</label>
+                        <select id="autoSyncFrequency" is="emby-select" class="selectContainer" onchange="AnimeSamaConfig.toggleAutoSyncFields()">
+                            <option value="Daily">Journalière</option>
+                            <option value="Weekly">Hebdomadaire</option>
+                            <option value="Monthly">Mensuelle</option>
+                        </select>
+                    </div>
+
+                    <div id="autoSyncDayOfWeekContainer" class="inputContainer" style="display:none;">
+                        <label class="inputLabel inputLabelUnfocused" for="autoSyncDayOfWeek">Jour de la semaine</label>
+                        <select id="autoSyncDayOfWeek" is="emby-select" class="selectContainer">
+                            <option value="1">Lundi</option>
+                            <option value="2">Mardi</option>
+                            <option value="3">Mercredi</option>
+                            <option value="4">Jeudi</option>
+                            <option value="5">Vendredi</option>
+                            <option value="6">Samedi</option>
+                            <option value="0">Dimanche</option>
+                        </select>
+                    </div>
+
+                    <div id="autoSyncDayOfMonthContainer" class="inputContainer" style="display:none;">
+                        <label class="inputLabel inputLabelUnfocused" for="autoSyncDayOfMonth">Jour du mois</label>
+                        <input id="autoSyncDayOfMonth" type="number" is="emby-input" min="1" max="28" />
+                        <div class="fieldDescription">1 à 28 (pour rester valide tous les mois, y compris février).</div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="autoSyncTime">Heure</label>
+                        <input id="autoSyncTime" type="time" is="emby-input" />
+                        <div class="fieldDescription">Heure du serveur Jellyfin.</div>
+                    </div>
+                </div>
+            </div>
+
+            <br/>
+
+            <div class="verticalSection">
                 <h3 class="sectionTitle">Synchronisation de la bibliothèque</h3>
                 <p style="font-size:.85rem;color:#aaa;">
-                    Génère les fichiers (.strm ou vidéos) pour les catalogues <strong>déjà synchronisés</strong>
-                    (épisodes récupérés). Pour ajouter un nouvel animé, utilisez la recherche ci-dessous d'abord.
+                    Récupère <strong>tous les catalogues présents en base</strong> pour ce profil et génère
+                    leurs fichiers (.strm ou vidéos) — y compris ceux jamais synchronisés au préalable (la
+                    récupération des épisodes/scans se fait automatiquement, ce qui peut prendre du temps
+                    pour beaucoup de nouveaux titres). Utilisez la recherche ci-dessous seulement pour ajouter
+                    un titre qui n'est pas encore du tout dans la base Anime Sama.
                 </p>
                 <button is="emby-button" class="raised emby-button" onclick="AnimeSamaConfig.sync()">
                     <span>&#9654; Synchroniser la bibliothèque</span>
@@ -170,6 +238,51 @@
                 </div>
                 <div id="searchResults" style="margin-top:.75em;"></div>
             </div>
+
+            <br/>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Films &amp; séries (TMDB + Vidzy)</h3>
+                <p style="font-size:.85rem;color:#aaa;">
+                    Source indépendante d'anime-sama.to : métadonnées TMDB, lecteur Vidzy.
+                    Ajoutés comme catalogues séparés (type film/série), pas de scraping.
+                </p>
+
+                <div class="inputContainer" style="display:flex;gap:.5em;align-items:flex-end;">
+                    <div style="flex:1;">
+                        <label class="inputLabel inputLabelUnfocused">Titre</label>
+                        <input id="fsQuery" type="text" is="emby-input" placeholder="ex: Inception, The Office…" onkeydown="if(event.key==='Enter')AnimeSamaConfig.fsSearch()" />
+                    </div>
+                    <div>
+                        <label class="inputLabel inputLabelUnfocused">Type</label>
+                        <select id="fsType" is="emby-select" class="selectContainer">
+                            <option value="">Films &amp; séries</option>
+                            <option value="movie">Films</option>
+                            <option value="tv">Séries</option>
+                        </select>
+                    </div>
+                    <button is="emby-button" class="raised emby-button" style="margin-bottom:.1em;" onclick="AnimeSamaConfig.fsSearch()">
+                        &#128269; Rechercher
+                    </button>
+                </div>
+
+                <div id="fsResults" style="margin-top:.75em;"></div>
+            </div>
+
+            <br/>
+
+            <div class="verticalSection" style="text-align:center;">
+                <p style="font-size:.8rem;color:#888;margin-bottom:.2em;">Anime Sama — Plugin Jellyfin</p>
+                <p style="font-size:.8rem;color:#888;margin-bottom:.2em;">Développé par Taïse De Thèse Yabie</p>
+                <p style="font-size:.8rem;margin-bottom:.2em;">
+                    <a href="https://github.com/gihamos/" target="_blank" rel="noopener" style="color:var(--theme-button-flat-focused);text-decoration:underline;">
+                        github : https://github.com/gihamos/
+                    </a>
+                </p>
+                <p style="font-size:.7rem;color:#666;margin-top:.5em;">
+                    Ce plugin n'est pas affilié à anime-sama.to et n'a aucun lien officiel avec ce site.
+                </p>
+            </div>
         </div>
     </div>
 
@@ -188,7 +301,29 @@
                     document.getElementById('libraryPath').value       = config.LibraryPath || '/config/data/anime-sama';
                     document.getElementById('downloadVideos').checked  = !!config.DownloadVideos;
                     document.getElementById('mangaLibraryPath').value  = config.MangaLibraryPath || '/config/data/anime-sama-manga';
+                    document.getElementById('filmLibraryPath').value    = config.FilmLibraryPath || '/config/data/films';
+                    document.getElementById('serieLibraryPath').value   = config.SerieLibraryPath || '/config/data/series';
+
+                    document.getElementById('autoSyncEnabled').checked = !!config.AutoSyncEnabled;
+                    document.getElementById('autoSyncFrequency').value = config.AutoSyncFrequency || 'Daily';
+                    document.getElementById('autoSyncDayOfWeek').value = String(config.AutoSyncDayOfWeek ?? 1);
+                    document.getElementById('autoSyncDayOfMonth').value = config.AutoSyncDayOfMonth || 1;
+                    const hh = String(config.AutoSyncHour ?? 3).padStart(2, '0');
+                    const mm = String(config.AutoSyncMinute ?? 0).padStart(2, '0');
+                    document.getElementById('autoSyncTime').value = hh + ':' + mm;
+
+                    AnimeSamaConfig.toggleAutoSyncFields();
                 });
+            },
+
+            // Affiche/masque le sélecteur jour-de-semaine ou jour-du-mois selon la fréquence,
+            // et le bloc entier selon l'activation de la synchro automatique.
+            toggleAutoSyncFields: function () {
+                const enabled   = document.getElementById('autoSyncEnabled').checked;
+                const frequency = document.getElementById('autoSyncFrequency').value;
+                document.getElementById('autoSyncFields').style.display = enabled ? 'block' : 'none';
+                document.getElementById('autoSyncDayOfWeekContainer').style.display  = (enabled && frequency === 'Weekly')  ? 'block' : 'none';
+                document.getElementById('autoSyncDayOfMonthContainer').style.display = (enabled && frequency === 'Monthly') ? 'block' : 'none';
             },
 
             save: function () {
@@ -200,6 +335,16 @@
                     config.LibraryPath       = document.getElementById('libraryPath').value.trim();
                     config.DownloadVideos    = document.getElementById('downloadVideos').checked;
                     config.MangaLibraryPath  = document.getElementById('mangaLibraryPath').value.trim();
+                    config.FilmLibraryPath   = document.getElementById('filmLibraryPath').value.trim();
+                    config.SerieLibraryPath  = document.getElementById('serieLibraryPath').value.trim();
+
+                    config.AutoSyncEnabled   = document.getElementById('autoSyncEnabled').checked;
+                    config.AutoSyncFrequency = document.getElementById('autoSyncFrequency').value;
+                    config.AutoSyncDayOfWeek = parseInt(document.getElementById('autoSyncDayOfWeek').value, 10);
+                    config.AutoSyncDayOfMonth = Math.min(28, Math.max(1, parseInt(document.getElementById('autoSyncDayOfMonth').value, 10) || 1));
+                    const timeVal = (document.getElementById('autoSyncTime').value || '03:00').split(':');
+                    config.AutoSyncHour   = parseInt(timeVal[0], 10) || 0;
+                    config.AutoSyncMinute = parseInt(timeVal[1], 10) || 0;
 
                     ApiClient.updatePluginConfiguration(PLUGIN_ID, config).then(function () {
                         document.getElementById('saveMessage').style.display = 'block';
@@ -355,26 +500,28 @@
             },
 
             _pollSyncStatus: function (slug, btn, statusLabel, token, baseUrl) {
+                // L'API ne renvoie jamais littéralement "done" ni "error" sur cette route de
+                // statut (seulement via WebSocket) — une fois la sync active terminée, le
+                // statut redevient "idle". On considère donc "plus syncing/paused" = terminé.
                 const statusUrl = baseUrl + '/AnimeSama/admin/sync-content/status?slug=' + encodeURIComponent(slug);
+                var wasSyncing = false;
                 var poll = function() {
                     fetch(statusUrl, {
                         headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' }
                     })
                     .then(function(resp) { return resp.json(); })
                     .then(function(s) {
-                        if (s.status === 'syncing') {
+                        if (s.status === 'syncing' || s.status === 'paused') {
+                            wasSyncing = true;
                             statusLabel.textContent = 'Sync… ' + (s.progress || 0) + '%';
                             setTimeout(poll, 3000);
-                        } else if (s.status === 'done') {
+                        } else if (wasSyncing) {
                             statusLabel.textContent = 'Terminé ✓';
                             statusLabel.style.color = '#4c4';
                             btn.disabled = false;
-                        } else if (s.status === 'error') {
-                            statusLabel.textContent = 'Erreur';
-                            statusLabel.style.color = '#f44';
-                            btn.disabled = false;
                         } else {
-                            setTimeout(poll, 3000);
+                            // Pas encore démarré côté serveur — on retente un peu.
+                            setTimeout(poll, 1000);
                         }
                     })
                     .catch(function() {
@@ -384,6 +531,75 @@
                     });
                 };
                 setTimeout(poll, 2000);
+            },
+
+            // ── Films & séries (TMDB + Vidzy) ──────────────────────────────────
+            fsSearch: function () {
+                const q = document.getElementById('fsQuery').value.trim();
+                const type = document.getElementById('fsType').value;
+                const resultsDiv = document.getElementById('fsResults');
+
+                if (!q) {
+                    resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Saisissez un titre.</p>';
+                    return;
+                }
+                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche TMDB…</p>';
+
+                const token = ApiClient.accessToken();
+                const baseUrl = ApiClient.serverAddress();
+                var qs = '/AnimeSama/admin/tmdb-search?q=' + encodeURIComponent(q);
+                if (type) qs += '&type=' + encodeURIComponent(type);
+
+                fetch(baseUrl + qs, {
+                    headers: { 'Authorization': 'MediaBrowser Token="' + token + '"', 'Accept': 'application/json' }
+                })
+                .then(function(resp) { return resp.json(); })
+                .then(function(results) {
+                    if (!results || results.length === 0) {
+                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat.</p>';
+                        return;
+                    }
+                    resultsDiv.innerHTML = '';
+                    results.forEach(function(r) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.6em 0;border-bottom:1px solid rgba(255,255,255,.1);';
+                        const typeLabel = r.media_type === 'tv' ? 'Série' : 'Film';
+                        const meta = [typeLabel, r.annee, r.note ? ('★ ' + r.note) : null].filter(Boolean).join(' · ');
+                        row.innerHTML =
+                            '<img src="' + (r.image || '') + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
+                            '<div style="flex:1;">' +
+                                '<div style="font-weight:500;">' + (r.nom || r.slug) + '</div>' +
+                                '<div style="font-size:.75rem;color:#aaa;">' + meta + '</div>' +
+                            '</div>' +
+                            (r.in_db
+                                ? '<span style="font-size:.75rem;color:#4c4;">✓ En base</span>'
+                                : '<button class="raised emby-button" style="width:auto;padding:.4em 1em;">Ajouter</button>');
+                        const btn = row.querySelector('button');
+                        if (btn) btn.onclick = function() { AnimeSamaConfig.fsAdd(r.media_type, r.tmdb_id, btn); };
+                        resultsDiv.appendChild(row);
+                    });
+                })
+                .catch(function() {
+                    resultsDiv.innerHTML = '<p style="color:#f44;font-size:.85rem;">Erreur de recherche.</p>';
+                });
+            },
+
+            fsAdd: function (mediaType, tmdbId, btn) {
+                btn.disabled = true;
+                btn.textContent = 'Ajout…';
+                const token = ApiClient.accessToken();
+                const baseUrl = ApiClient.serverAddress();
+                const url = baseUrl + '/AnimeSama/admin/tmdb-add?mediaType=' + encodeURIComponent(mediaType) + '&tmdbId=' + tmdbId;
+
+                fetch(url, { method: 'POST', headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' } })
+                .then(function(resp) {
+                    if (!resp.ok) throw new Error(resp.status);
+                    btn.outerHTML = '<span style="font-size:.75rem;color:#4c4;">✓ Ajouté</span>';
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Ajouter';
+                });
             }
         };
 

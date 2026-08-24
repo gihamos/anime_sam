@@ -1,7 +1,10 @@
 services:
 
   anime_sama:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_API_URL: https://anime.gihamos.fr
     container_name: anime_sama
     restart: unless-stopped
     env_file:

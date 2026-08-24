@@ -197,6 +197,31 @@ public class AnimeSamaClient
     public async Task<CatalogueDetail?> EnsureCatalogueAsync(string slug, CancellationToken ct)
         => await GetCatalogueAsync(slug, ct).ConfigureAwait(false);
 
+    // ── Films & séries (TMDB + Vidzy) ────────────────────────────────────────
+
+    /// <summary>Recherche TMDB — `mediaType` : "movie" | "tv" | null (recherche les deux).</summary>
+    public async Task<List<TmdbSearchResult>> SearchTmdbAsync(string query, string? mediaType, CancellationToken ct)
+    {
+        var qs = $"/catalogues/tmdb/rechercher?q={System.Uri.EscapeDataString(query)}";
+        if (!string.IsNullOrWhiteSpace(mediaType)) qs += $"&type={mediaType}";
+
+        var resp = await GetAsync(qs, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return new List<TmdbSearchResult>();
+        return await resp.Content
+            .ReadFromJsonAsync<List<TmdbSearchResult>>(cancellationToken: ct)
+            .ConfigureAwait(false) ?? new List<TmdbSearchResult>();
+    }
+
+    /// <summary>Ajoute un film/série au catalogue depuis TMDB (structure + lecteur Vidzy).</summary>
+    public async Task<CatalogueDetail?> AddFromTmdbAsync(string mediaType, int tmdbId, CancellationToken ct)
+    {
+        var resp = await PostAsync($"/catalogues/tmdb/{mediaType}/{tmdbId}", null, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return null;
+        return await resp.Content
+            .ReadFromJsonAsync<CatalogueDetail>(cancellationToken: ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<SyncStarted?> TriggerSyncContentAsync(string slug, CancellationToken ct)
     {
         var resp = await PostAsync($"/catalogues/{slug}/sync-content", null, ct).ConfigureAwait(false);

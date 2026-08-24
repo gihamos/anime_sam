@@ -64,4 +64,39 @@ public class AnimeSamaAdminController : ControllerBase
         if (status is null) return NotFound();
         return Ok(status);
     }
+
+    // ── Films & séries (TMDB + Vidzy — source indépendante d'anime-sama.to) ────
+
+    [HttpGet("tmdb-search")]
+    public async Task<IActionResult> TmdbSearch(
+        [FromQuery] string  q,
+        [FromQuery] string? type = null,
+        CancellationToken   ct   = default)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return BadRequest("Paramètre 'q' manquant.");
+
+        var client = Plugin.Instance?.ApiClient;
+        if (client is null) return StatusCode(503, "Plugin non initialisé.");
+
+        var results = await client.SearchTmdbAsync(q, type, ct).ConfigureAwait(false);
+        return Ok(results);
+    }
+
+    [HttpPost("tmdb-add")]
+    public async Task<IActionResult> TmdbAdd(
+        [FromQuery] string mediaType,
+        [FromQuery] int    tmdbId,
+        CancellationToken  ct = default)
+    {
+        if (mediaType != "movie" && mediaType != "tv")
+            return BadRequest("Paramètre 'mediaType' doit être 'movie' ou 'tv'.");
+
+        var client = Plugin.Instance?.ApiClient;
+        if (client is null) return StatusCode(503, "Plugin non initialisé.");
+
+        var catalogue = await client.AddFromTmdbAsync(mediaType, tmdbId, ct).ConfigureAwait(false);
+        if (catalogue is null) return StatusCode(502, $"Échec de l'ajout de {mediaType}/{tmdbId} depuis TMDB.");
+
+        return Ok(catalogue);
+    }
 }

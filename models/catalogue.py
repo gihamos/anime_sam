@@ -34,6 +34,7 @@ class TypeContenu(str, Enum):
     ANIME = "anime"
     SCAN  = "scan"
     FILM  = "film"
+    SERIE = "serie"
     AUTRE = "autre"
 
 
@@ -142,6 +143,12 @@ class Catalogue(BaseModel):
     """
     slug:              str
     url:               str
+
+    # Origine du catalogue — "anime-sama" (scraping historique, défaut pour les documents
+    # existants) ou "tmdb-vidzy" (métadonnées TMDB + lecteur Vidzy). Point d'extension pour
+    # une future 3e source : chaque route/service qui a besoin de traiter les sources
+    # différemment peut brancher dessus sans dupliquer routes/téléchargement/sync Jellyfin.
+    source:            str             = "anime-sama"
 
     nom:               str
     titre_alternatif:  Optional[str]    = None

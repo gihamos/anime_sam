@@ -66,3 +66,9 @@ ANILIST_RATE_LIMIT_PER_MIN  = int(os.getenv("ANILIST_RATE_LIMIT_PER_MIN", "90"))
 ANILIST_ENRICHMENT_ENABLED  = os.getenv("ANILIST_ENRICHMENT_ENABLED", "true").lower() == "true"
 DEEPL_API_KEY                = os.getenv("DEEPL_API_KEY", "")
 DEEPL_API_URL                = os.getenv("DEEPL_API_URL", "https://api-free.deepl.com/v2/translate")
+
+# ── TMDB / Vidzy (films & séries — 2e source de contenu, indépendante d'anime-sama.to) ──────
+TMDB_API_URL     = os.getenv("TMDB_API_URL", "https://api.themoviedb.org/3")
+TMDB_API_KEY     = os.getenv("TMDB_API_KEY", "")
+TMDB_IMAGE_BASE  = os.getenv("TMDB_IMAGE_BASE", "https://image.tmdb.org/t/p")
+VIDZY_BASE_URL   = os.getenv("VIDZY_BASE_URL", "https://vidzy.org")

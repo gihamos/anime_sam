@@ -164,6 +164,35 @@ public class SiteSearchResult
     public List<string> Genres { get; set; } = new();
 }
 
+// ── Films & séries (source TMDB + Vidzy, indépendante d'anime-sama.to) ─────────
+
+public class TmdbSearchResult
+{
+    [JsonPropertyName("tmdb_id")]
+    public int TmdbId { get; set; }
+
+    [JsonPropertyName("media_type")]
+    public string MediaType { get; set; } = string.Empty; // "movie" | "tv"
+
+    [JsonPropertyName("slug")]
+    public string Slug { get; set; } = string.Empty;
+
+    [JsonPropertyName("nom")]
+    public string Nom { get; set; } = string.Empty;
+
+    [JsonPropertyName("image")]
+    public string? Image { get; set; }
+
+    [JsonPropertyName("annee")]
+    public int? Annee { get; set; }
+
+    [JsonPropertyName("note")]
+    public double? Note { get; set; }
+
+    [JsonPropertyName("in_db")]
+    public bool InDb { get; set; }
+}
+
 public class SyncStarted
 {
     [JsonPropertyName("status")]

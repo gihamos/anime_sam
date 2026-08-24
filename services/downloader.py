@@ -27,6 +27,7 @@ from typing import Callable, Optional
 
 import yt_dlp
 
+from services import vidzy_client
 from utils.logger import logger
 
 # ── Constantes ────────────────────────────────────────────────────────────────
@@ -44,6 +45,11 @@ _YDL_BASE = {
 
 _FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
+# Source Vidzy : manifest HLS unique avec plusieurs pistes audio (vu en conditions réelles :
+# anglais + français) — on préfère le français, cohérent avec le système de langues du projet
+# (vf/vostfr/vo), avec repli sur n'importe quelle piste si aucune n'est taguée "fr"/"fre".
+_FORMAT_VIDZY = "bestvideo+bestaudio[language=fr]/bestvideo+bestaudio[language=fre]/bestvideo+bestaudio/best"
+
 
 # ── Helper synchrone (tourne dans un ThreadPoolExecutor) ─────────────────────
 
@@ -57,11 +63,17 @@ def _download_to_dir_sync(
     stem:        str,
     cancel:      Optional[threading.Event] = None,
     on_progress: Optional[Callable]        = None,
+    headers:     Optional[dict]            = None,
+    format_str:  str                       = _FORMAT,
 ) -> Optional[Path]:
     """
     Télécharge la vidéo via yt-dlp dans `dest/stem.ext`.
     `cancel`      : threading.Event — coupe le téléchargement via le progress hook.
     `on_progress` : callable sync (downloaded, total, speed, eta) — appelé à chaque chunk.
+    `headers`     : headers HTTP à injecter (ex: Referer/Origin exigés par certains CDN —
+                    voir la résolution Vidzy dans download_to_file).
+    `format_str`  : sélecteur de format yt-dlp — surchargé pour les sources multi-pistes
+                    audio (Vidzy) afin de préférer le français.
     """
     safe     = _safe_stem(stem)
     out_tmpl = str(dest / f"{safe}.%(ext)s")
@@ -78,7 +90,7 @@ def _download_to_dir_sync(
 
     opts = {
         **_YDL_BASE,
-        "format":              _FORMAT,
+        "format":              format_str,
         "outtmpl":             out_tmpl,
         "merge_output_format": "mp4",
         "cookiefile":          None,
@@ -89,6 +101,8 @@ def _download_to_dir_sync(
             "preferedformat":  "mp4",
         }],
     }
+    if headers:
+        opts["http_headers"] = headers
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
@@ -131,8 +145,23 @@ async def download_to_file(
     for i, url in enumerate(urls):
         if cancel and cancel.is_set():
             return None
+
+        # Source Vidzy : yt-dlp ne sait pas résoudre vidzy.org directement (pas d'extracteur
+        # dédié) — on pré-résout nous-mêmes vers le manifest HLS réel avant de passer à yt-dlp,
+        # qui sait ensuite très bien le lire (HLS standard, une fois qu'on lui donne la bonne
+        # URL + les headers Referer/Origin attendus par le CDN).
+        real_url, headers, format_str = url, None, _FORMAT
+        if vidzy_client.is_vidzy_url(url):
+            resolved = await vidzy_client.resolve_embed(url)
+            if not resolved or not resolved.get("url"):
+                logger.warning(f"download_to_file: résolution Vidzy échouée pour {url!r}")
+                if i < len(urls) - 1:
+                    continue
+                return None
+            real_url, headers, format_str = resolved["url"], resolved.get("headers"), _FORMAT_VIDZY
+
         result = await loop.run_in_executor(
-            None, _download_to_dir_sync, url, dest, stem, cancel, on_progress
+            None, _download_to_dir_sync, real_url, dest, stem, cancel, on_progress, headers, format_str
         )
         if result is not None:
             return result
@@ -209,6 +238,12 @@ def _resolve_sync(embed_url: str) -> dict:
 
 async def resolve_stream_url(embed_url: str) -> dict:
     """Résout une URL embed en URL de stream directe (async wrapper, thread pool)."""
+    if vidzy_client.is_vidzy_url(embed_url):
+        resolved = await vidzy_client.resolve_embed(embed_url)
+        if not resolved or not resolved.get("url"):
+            raise ValueError("Impossible de résoudre le flux Vidzy")
+        return resolved
+
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _resolve_sync, embed_url)
 

@@ -257,6 +257,42 @@ async def rechercher_sur_site_route(
     return results
 
 
+@router.get("/tmdb/rechercher", summary="Recherche TMDB (films & séries — 2e source de contenu)")
+async def rechercher_tmdb_route(
+    q:    str           = Query(..., description="Titre recherché"),
+    type: Optional[str] = Query(None, description="movie | tv — omis = recherche les deux"),
+):
+    """Recherche TMDB par titre, indépendante d'anime-sama.to. Chaque résultat porte `in_db`
+    (déjà ajouté au catalogue ou non) pour permettre de proposer l'ajout depuis l'interface."""
+    from services.film_serie_service import rechercher_tmdb
+    if type is not None and type not in ("movie", "tv"):
+        raise HTTPException(422, "type doit être 'movie' ou 'tv'")
+    results = await rechercher_tmdb(q, type)
+    if not results:
+        raise HTTPException(status_code=404, detail="Aucun résultat TMDB")
+    return results
+
+
+@router.post("/tmdb/{media_type}/{tmdb_id}", response_model=Catalogue,
+             summary="Ajoute un film/série au catalogue depuis TMDB (lecteur Vidzy)")
+async def ajouter_tmdb_route(
+    media_type: str,
+    tmdb_id:    int,
+    user:       dict = Depends(get_current_user),
+):
+    """
+    Construit et sauvegarde un catalogue à partir de TMDB (structure + métadonnées) avec un
+    lecteur Vidzy — pas de scraping, `episodes_synced=True` immédiatement. Idempotent.
+    """
+    from services.film_serie_service import ajouter_depuis_tmdb
+    if media_type not in ("movie", "tv"):
+        raise HTTPException(422, "media_type doit être 'movie' ou 'tv'")
+    catalogue = await ajouter_depuis_tmdb(media_type, tmdb_id)
+    if not catalogue:
+        raise HTTPException(status_code=404, detail=f"'{media_type}/{tmdb_id}' introuvable sur TMDB")
+    return catalogue
+
+
 @router.get("/sync/status", response_model=SyncGlobalStatus, summary="État de toutes les syncs actives")
 async def sync_global_status():
     return {

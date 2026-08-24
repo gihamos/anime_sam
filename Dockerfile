@@ -1,3 +1,17 @@
+FROM node:20-slim AS admin-build
+
+WORKDIR /admin_app
+
+COPY admin_app/package.json admin_app/package-lock.json ./
+RUN npm ci
+
+COPY admin_app/ ./
+
+ARG VITE_API_URL=https://anime.gihamos.fr
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,7 +28,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && playwright install chromium
 
 COPY . .
-
+COPY --from=admin-build /admin_app/dist ./admin_app/dist
 
 EXPOSE 8000 8001
 

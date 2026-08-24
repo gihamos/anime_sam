@@ -21,14 +21,12 @@ public class SyncLibraryTask : IScheduledTask
     public string Description => "Crée ou met à jour les fichiers vidéo (.strm/.mp4) et mangas (.cbz) dans la bibliothèque Anime Sama.";
     public string Category    => "Anime Sama";
 
-    public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
-    {
-        yield return new TaskTriggerInfo
-        {
-            Type = TaskTriggerInfo.TriggerDaily,
-            TimeOfDayTicks = TimeSpan.FromHours(3).Ticks,
-        };
-    }
+    // Aucun déclencheur natif : la planification automatique (jour/heure, journalier,
+    // hebdomadaire ou mensuel) est gérée par AutoSyncScheduler à partir de la configuration
+    // du plugin — voir Tasks/AutoSyncScheduler.cs pour le pourquoi. La tâche reste
+    // déclenchable manuellement à tout moment (bouton "Synchroniser maintenant" ou
+    // "Exécuter" depuis Tableau de bord → Tâches planifiées).
+    public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => Array.Empty<TaskTriggerInfo>();
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken ct)
     {
@@ -39,6 +37,10 @@ public class SyncLibraryTask : IScheduledTask
         var client       = plugin.ApiClient;
         var libPath      = config.LibraryPath?.TrimEnd('/') ?? string.Empty;
         var mangaLibPath = config.MangaLibraryPath?.TrimEnd('/') ?? string.Empty;
+        // Films & séries (TMDB + Vidzy) : chemins séparés de libPath (animés anime-sama.to),
+        // voir PluginConfiguration.cs pour le pourquoi.
+        var filmLibPath  = config.FilmLibraryPath?.TrimEnd('/') ?? string.Empty;
+        var serieLibPath = config.SerieLibraryPath?.TrimEnd('/') ?? string.Empty;
         var jellyfinBase = config.JellyfinPublicUrl?.TrimEnd('/') ?? string.Empty;
         var downloadMode = config.DownloadVideos;
 
@@ -48,33 +50,56 @@ public class SyncLibraryTask : IScheduledTask
             throw new InvalidOperationException("JellyfinPublicUrl non configuré dans les paramètres du plugin.");
 
         Directory.CreateDirectory(libPath);
-        if (!string.IsNullOrWhiteSpace(mangaLibPath)) Directory.CreateDirectory(mangaLibPath);
+        if (!string.IsNullOrWhiteSpace(mangaLibPath))  Directory.CreateDirectory(mangaLibPath);
+        if (!string.IsNullOrWhiteSpace(filmLibPath))   Directory.CreateDirectory(filmLibPath);
+        if (!string.IsNullOrWhiteSpace(serieLibPath))  Directory.CreateDirectory(serieLibPath);
         progress.Report(1);
 
-        // ── 1. Récupérer tous les catalogues déjà synchronisés ───────────────────
+        // ── 1. Récupérer tous les catalogues présents en base pour ce profil ─────
+        // (/mycatalogues/ — respecte la visibilité/les droits du compte configuré)
         var all = await client.GetAllCataloguesAsync(ct).ConfigureAwait(false);
-        var catalogues = all.Where(c => c.EpisodesSynced).ToList();
-        if (catalogues.Count == 0) { progress.Report(100); return; }
+        if (all.Count == 0) { progress.Report(100); return; }
 
-        double step = 95.0 / catalogues.Count;
+        double step = 95.0 / all.Count;
         int idx = 0;
 
-        foreach (var summary in catalogues)
+        foreach (var summary in all)
         {
             ct.ThrowIfCancellationRequested();
             progress.Report(2 + idx * step);
             idx++;
 
-            bool isScan = string.Equals(summary.Type, "scan", StringComparison.OrdinalIgnoreCase);
-            if (isScan && string.IsNullOrWhiteSpace(mangaLibPath)) continue;
+            // Type + source déterminent le chemin de bibliothèque à utiliser — c'est ce qui
+            // garde animés / films / séries dans des bibliothèques Jellyfin séparées.
+            bool isScan  = string.Equals(summary.Type, "scan",  StringComparison.OrdinalIgnoreCase);
+            bool isFilm  = string.Equals(summary.Type, "film",  StringComparison.OrdinalIgnoreCase);
+            bool isSerie = string.Equals(summary.Type, "serie", StringComparison.OrdinalIgnoreCase);
+            if (isScan  && string.IsNullOrWhiteSpace(mangaLibPath)) continue;
+            if (isFilm  && string.IsNullOrWhiteSpace(filmLibPath))  continue;
+            if (isSerie && string.IsNullOrWhiteSpace(serieLibPath)) continue;
 
             try
             {
+                // Le catalogue est présent en base mais ses épisodes/scans n'ont encore
+                // jamais été récupérés (structure seule) — on déclenche et on attend la
+                // synchronisation avant de générer les fichiers, au lieu de l'ignorer
+                // silencieusement comme avant (c'était le bug : seuls les catalogues déjà
+                // synchronisés manuellement au préalable étaient ajoutés à Jellyfin).
+                // Les catalogues TMDB (films/séries) ont toujours episodes_synced=true dès
+                // leur création (pas de scraping), donc jamais concernés par cette étape.
+                if (!summary.EpisodesSynced)
+                    await EnsureContentSyncedAsync(client, summary.Slug, ct).ConfigureAwait(false);
+
                 var detail = await client.GetCatalogueAsync(summary.Slug, ct).ConfigureAwait(false);
                 if (detail is null) continue;
 
                 if (isScan)
                     await SyncMangaAsync(detail, mangaLibPath, ct).ConfigureAwait(false);
+                else if (isFilm)
+                    await SyncFilmStandaloneAsync(client, detail, filmLibPath, jellyfinBase, downloadMode, ct).ConfigureAwait(false);
+                else if (isSerie)
+                    // Même structure Season N/ que les animés, juste une bibliothèque séparée.
+                    await SyncVideosAsync(client, detail, serieLibPath, jellyfinBase, downloadMode, ct).ConfigureAwait(false);
                 else
                     await SyncVideosAsync(client, detail, libPath, jellyfinBase, downloadMode, ct).ConfigureAwait(false);
             }
@@ -83,6 +108,29 @@ public class SyncLibraryTask : IScheduledTask
         }
 
         progress.Report(100);
+    }
+
+    /// <summary>
+    /// Déclenche la récupération des épisodes/films/scans côté API si besoin, puis attend
+    /// la fin (statut différent de "syncing"/"paused"). Best-effort : l'API expose un statut
+    /// polling minimal (pas de distinction succès/échec via REST, seulement via WebSocket) —
+    /// si le déclenchement échoue (sync déjà en cours ailleurs, cooldown…) on attend quand
+    /// même ; le catalogue résultant (éventuellement toujours vide en cas d'échec réel) sera
+    /// traité normalement à la suite, sans jamais faire échouer toute la tâche.
+    /// </summary>
+    private static async Task EnsureContentSyncedAsync(AnimeSamaClient client, string slug, CancellationToken ct)
+    {
+        await client.TriggerSyncContentAsync(slug, ct).ConfigureAwait(false);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            var status = await client.GetSyncStatusAsync(slug, ct).ConfigureAwait(false);
+            if (status is null) return;
+            if (status.Status != "syncing" && status.Status != "paused") return;
+            await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+        }
     }
 
     // ── Vidéos (animes/films) ────────────────────────────────────────────────
@@ -144,6 +192,48 @@ public class SyncLibraryTask : IScheduledTask
             else
                 WriteStrm(seriesDir, baseName, jellyfinBase, urls!);
         }
+    }
+
+    // ── Films standalone (TMDB + Vidzy) ──────────────────────────────────────
+    // Contrairement aux films rattachés à un animé (ci-dessus, restent dans le dossier de
+    // la série), un catalogue TMDB de type "film" REPRÉSENTE un film à lui seul — structure
+    // de bibliothèque "Films" Jellyfin classique : un dossier plat par titre, pas de Season N/.
+
+    private static async Task SyncFilmStandaloneAsync(
+        AnimeSamaClient client, CatalogueDetail detail, string filmLibPath,
+        string jellyfinBase, bool downloadMode, CancellationToken ct)
+    {
+        if (detail.Films.Count == 0) return;
+        var film = detail.Films[0]; // un catalogue TMDB film = un seul film
+        var urls = film.Videos.Select(v => v.PlayerUrl).Where(u => !string.IsNullOrEmpty(u)).ToList();
+        if (urls.Count == 0) return;
+
+        var dirName = SanitizeName(detail.Annee.HasValue ? $"{detail.Titre} ({detail.Annee})" : detail.Titre);
+        if (string.IsNullOrWhiteSpace(dirName)) dirName = detail.Slug;
+        var filmDir = Path.Combine(filmLibPath, dirName);
+        Directory.CreateDirectory(filmDir);
+
+        WriteMovieNfo(filmDir, detail);
+
+        if (!string.IsNullOrEmpty(detail.Image))
+        {
+            var posterPath = Path.Combine(filmDir, "poster.jpg");
+            if (!File.Exists(posterPath))
+            {
+                try
+                {
+                    var bytes = await ImageHttp.GetByteArrayAsync(detail.Image, ct).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(posterPath, bytes, ct).ConfigureAwait(false);
+                }
+                catch { /* image indisponible — on continue sans poster */ }
+            }
+        }
+
+        var baseName = SanitizeName(detail.Titre);
+        if (downloadMode)
+            await DownloadFilmAsync(client, filmDir, baseName, detail.Slug, 0, ct).ConfigureAwait(false);
+        else
+            WriteStrm(filmDir, baseName, jellyfinBase, urls!);
     }
 
     private static void WriteStrm(string dir, string baseName, string jellyfinBase, List<string> urls)
@@ -302,6 +392,25 @@ public class SyncLibraryTask : IScheduledTask
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static void WriteMovieNfo(string dir, CatalogueDetail detail)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>");
+        sb.AppendLine("<movie>");
+        sb.AppendLine($"  <title>{Xe(detail.Titre)}</title>");
+        if (!string.IsNullOrEmpty(detail.Synopsis))
+            sb.AppendLine($"  <plot>{Xe(detail.Synopsis)}</plot>");
+        if (!string.IsNullOrEmpty(detail.Image))
+            sb.AppendLine($"  <thumb aspect=\"poster\">{Xe(detail.Image)}</thumb>");
+        if (detail.Annee.HasValue)
+            sb.AppendLine($"  <year>{detail.Annee}</year>");
+        foreach (var genre in detail.Genres)
+            sb.AppendLine($"  <genre>{Xe(genre)}</genre>");
+        sb.AppendLine("</movie>");
+
+        File.WriteAllText(Path.Combine(dir, "movie.nfo"), sb.ToString(), Encoding.UTF8);
+    }
 
     private static void WriteTvShowNfo(string dir, CatalogueDetail detail)
     {

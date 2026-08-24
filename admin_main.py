@@ -5,11 +5,14 @@ Serveur d'administration autonome (port 8001 par défaut).
   API_BASE=http://localhost:8000 ADMIN_PORT=8001 python admin_main.py
 """
 import os, uvicorn
+from pathlib import Path
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 API_BASE   = os.getenv("API_BASE",   "http://localhost:8000")
 ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8001"))
+ADMIN_DIST = Path(__file__).parent / "admin_app" / "dist"
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -367,6 +370,7 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div class="ni"        data-tab="catalogues" onclick="switchTab(this)"><span>📚</span> Catalogues</div>
       <div class="ni"        data-tab="groups"     onclick="switchTab(this)"><span>🏷️</span> Groupes</div>
       <div class="ni"        data-tab="search"     onclick="switchTab(this)"><span>🔍</span> Recherche</div>
+      <div class="ni"        data-tab="filmseries" onclick="switchTab(this)"><span>🎬</span> Films &amp; Séries</div>
       <div class="ni"        data-tab="apps"       onclick="switchTab(this)"><span>🔌</span> Applications</div>
       <div class="ni"        data-tab="planning"   onclick="switchTab(this)"><span>📅</span> Planification</div>
       <div class="ni"        data-tab="downloads"  onclick="switchTab(this)"><span>⬇</span> Téléchargements</div>
@@ -405,6 +409,8 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
       <div id="tab-catalogues" style="display:none">
         <div class="fbar">
           <input id="cq" placeholder="🔍 Rechercher nom ou slug…" oninput="filterCats()">
+          <select id="cf-type" onchange="filterCats()"><option value="">Tous types</option><option value="anime">🎬 Anime</option><option value="scan">📖 Scan</option><option value="film">🎞 Film</option><option value="serie">📺 Série</option><option value="autre">📦 Autre</option></select>
+          <select id="cf-source" onchange="filterCats()"><option value="">Toute source</option><option value="anime-sama">Anime-sama.to</option><option value="tmdb-vidzy">TMDB</option></select>
           <select id="cf-vis" onchange="filterCats()"><option value="">Toute visibilité</option><option value="public">Public</option><option value="prive">Privé</option><option value="partiel">Partiel</option></select>
           <select id="cf-etat" onchange="filterCats()"><option value="">Tout état</option><option value="en_cours">En cours</option><option value="termine">Terminé</option><option value="abandonne">Abandonné</option></select>
           <select id="cf-sync" onchange="filterCats()"><option value="">Toute sync</option><option value="no">Non synchronisé</option><option value="yes">Synchronisé</option></select>
@@ -504,6 +510,26 @@ textarea.fc{resize:vertical;min-height:80px;font-family:inherit}
             <div id="sr-empty" class="empty"><div class="ic">🔍</div>Utilisez les filtres pour rechercher des catalogues sur anime-sama.to</div>
           </div>
         </div>
+      </div>
+
+      <!-- FILMS & SÉRIES (TMDB + Vidzy — 2e source de contenu, indépendante d'anime-sama.to) -->
+      <div id="tab-filmseries" style="display:none">
+        <div class="alert a-info" style="margin-bottom:.85rem">
+          <strong>Source distincte d'anime-sama.to</strong> — recherche TMDB (métadonnées) +
+          lecteur Vidzy, aucun scraping. Les résultats sont ajoutés comme catalogues séparés
+          (<code>type_contenu</code> = <code>film</code>/<code>serie</code>, <code>source</code> = <code>tmdb-vidzy</code>).
+        </div>
+        <div class="fbar">
+          <input id="fs-q" placeholder="🔍 Titre du film ou de la série…" oninput="_fsDebounce()" onkeydown="if(event.key==='Enter')runFsSearch()">
+          <select id="fs-type" onchange="runFsSearch()">
+            <option value="">Films &amp; séries</option>
+            <option value="movie">🎞 Films uniquement</option>
+            <option value="tv">📺 Séries uniquement</option>
+          </select>
+        </div>
+        <div id="fs-status" style="display:none;padding:.35rem 0;font-size:.82rem;color:var(--mu)"></div>
+        <div id="fs-grid" class="search-results-grid"></div>
+        <div id="fs-empty" class="empty"><div class="ic">🎬</div>Recherchez un film ou une série (TMDB)</div>
       </div>
 
       <!-- APPLICATIONS -->
@@ -1334,14 +1360,14 @@ function goToCatalogues(){document.querySelector('.ni[data-tab="catalogues"]').c
 function switchTab(el){
   const tab=el.dataset.tab;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
-  ['users','catalogues','groups','search','apps','planning','downloads','security','connections'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',apps:'Applications',planning:'Planification',downloads:'Téléchargements',security:'Sécurité',connections:'Connexions & IPs'};
+  ['users','catalogues','groups','search','filmseries','apps','planning','downloads','security','connections'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  const titles={users:'Utilisateurs',catalogues:'Catalogues',groups:'Groupes',search:'Recherche avancée',filmseries:'Films & Séries (TMDB)',apps:'Applications',planning:'Planification',downloads:'Téléchargements',security:'Sécurité',connections:'Connexions & IPs'};
   const actions={
     users:`<button class="btn btn-primary btn-sm" onclick="openCreateUser()">+ Ajouter</button>`,
     catalogues:`<button class="btn btn-primary btn-sm" onclick="openAddCat()">+ Ajouter un catalogue</button>`,
     groups:`<button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ Nouveau groupe</button>`,
     apps:`<button class="btn btn-primary btn-sm" onclick="openCreateClient()">+ Créer une application</button>`,
-    search:'',planning:'',downloads:'',security:'',connections:'',
+    search:'',filmseries:'',planning:'',downloads:'',security:'',connections:'',
   };
   document.getElementById('tb-title').textContent=titles[tab]||tab;
   document.getElementById('tb-actions').innerHTML=actions[tab]||'';
@@ -1593,12 +1619,13 @@ function isStale(c){if(c.etat!=='en_cours')return false;if(!c.episodes_synced)re
 function filterCats(){
   const q=document.getElementById('cq').value.toLowerCase(),vis=document.getElementById('cf-vis').value;
   const et=document.getElementById('cf-etat').value,sy=document.getElementById('cf-sync').value,gen=document.getElementById('cf-genre').value;
-  renderCats(allCats.filter(c=>(!q||(c.nom+c.slug).toLowerCase().includes(q))&&(!vis||catVisType(c)===vis)&&(!et||c.etat===et)&&(!sy||(sy==='yes'?c.episodes_synced:!c.episodes_synced))&&(!gen||(c.genres||[]).includes(gen))));
+  const ty=document.getElementById('cf-type').value,src=document.getElementById('cf-source').value;
+  renderCats(allCats.filter(c=>(!q||(c.nom+c.slug).toLowerCase().includes(q))&&(!vis||catVisType(c)===vis)&&(!et||c.etat===et)&&(!sy||(sy==='yes'?c.episodes_synced:!c.episodes_synced))&&(!gen||(c.genres||[]).includes(gen))&&(!ty||c.type_contenu===ty)&&(!src||(c.source||'anime-sama')===src)));
 }
 function renderCats(list){
   const b=document.getElementById('ctbody');
   if(!list.length){b.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="ic">📚</div>Aucun catalogue</div></td></tr>`;return;}
-  const tl={anime:'🎬 Anime',scan:'📖 Scan',film:'🎞 Film',autre:'📦 Autre'};
+  const tl={anime:'🎬 Anime',scan:'📖 Scan',film:'🎞 Film',serie:'📺 Série',autre:'📦 Autre'};
   const eb={en_cours:'b-info',termine:'b-ok',abandonne:'b-mu'},el={en_cours:'En cours',termine:'Terminé',abandonne:'Abandonné'};
   b.innerHTML=list.map(c=>{
     const st=isStale(c),bg=bgSyncs.get(c.slug),isSyncing=bg&&!bg.done;
@@ -1611,7 +1638,7 @@ function renderCats(list){
         ${st?'<span class="badge b-wa" style="margin-top:2px">⚠ MàJ recommandée</span>':''}
         ${isSyncing?`<span class="badge b-info" style="margin-top:2px">${bg.state==='paused'?'⏸ En pause':'⟳ En cours'} ${bg.pct}%</span>`:''}
       </td>
-      <td><span class="badge b-mu">${tl[c.type_contenu]||c.type_contenu}</span></td>
+      <td><span class="badge b-mu">${tl[c.type_contenu]||c.type_contenu}</span>${c.source==='tmdb-vidzy'?'<br><span class="badge b-info" style="margin-top:2px;font-size:.62rem">TMDB</span>':''}</td>
       <td style="font-size:.79rem;color:var(--tx2)">${nb||'—'}</td>
       <td><span class="badge ${eb[c.etat]||'b-mu'}">${el[c.etat]||c.etat}</span></td>
       <td><span class="badge ${c.episodes_synced?'b-ok':'b-er'}">${c.episodes_synced?'✓ Oui':'✗ Non'}</span></td>
@@ -3117,6 +3144,94 @@ const _srStyle=document.createElement('style');
 _srStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(_srStyle);
 
+// ═══════════════════════ FILMS & SÉRIES (TMDB + Vidzy) ═══════════════════════
+
+let _fsTimer=null;
+function _fsDebounce(){clearTimeout(_fsTimer);_fsTimer=setTimeout(runFsSearch,450);}
+
+async function runFsSearch(){
+  const q=document.getElementById('fs-q').value.trim();
+  const type=document.getElementById('fs-type').value;
+  const statusEl=document.getElementById('fs-status');
+  const gridEl=document.getElementById('fs-grid');
+  const emptyEl=document.getElementById('fs-empty');
+
+  if(!q){
+    gridEl.innerHTML='';statusEl.style.display='none';
+    emptyEl.innerHTML='<div class="ic">🎬</div>Recherchez un film ou une série (TMDB)';
+    emptyEl.style.display='flex';
+    return;
+  }
+
+  emptyEl.style.display='none';
+  statusEl.innerHTML='<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="display:inline-block;width:13px;height:13px;border:2px solid var(--bdr);border-top-color:var(--ac);border-radius:50%;animation:spin .6s linear infinite"></span> Recherche TMDB…</span>';
+  statusEl.style.display='';
+  gridEl.innerHTML='';
+
+  try{
+    const p=new URLSearchParams({q});
+    if(type)p.set('type',type);
+    let results;
+    try{results=await api('GET',`/catalogues/tmdb/rechercher?${p}`);}
+    catch(e){if(String(e).includes('404')||String(e).includes('Aucun')){results=[];}else throw e;}
+    const list=Array.isArray(results)?results:[];
+
+    if(!list.length){
+      statusEl.style.display='none';
+      emptyEl.innerHTML='<div class="ic">😶</div>Aucun résultat TMDB pour ces critères';
+      emptyEl.style.display='flex';
+      return;
+    }
+
+    gridEl.innerHTML=list.map(r=>_fsCard(r)).join('');
+    statusEl.textContent=`${list.length} résultat${list.length>1?'s':''}`;
+  }catch(e){
+    statusEl.textContent=`❌ ${String(e)}`;
+  }
+}
+
+function _fsCard(r){
+  const img=r.image
+    ?`<img class="src-poster" src="${esc(r.image)}" loading="lazy" onerror="this.outerHTML='<div class=src-poster-ph>🎬</div>'">`
+    :`<div class="src-poster-ph">${r.media_type==='tv'?'📺':'🎞'}</div>`;
+  const tb=`<span class="badge b-mu" style="font-size:.62rem">${r.media_type==='tv'?'📺 Série':'🎞 Film'}</span>`;
+  const anb=r.annee?`<span class="badge b-mu" style="font-size:.62rem">${r.annee}</span>`:'';
+  const nb=r.note?`<span class="badge b-wa" style="font-size:.62rem">★ ${r.note}</span>`:'';
+  const db=r.in_db?`<span class="badge" style="background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid rgba(16,185,129,.3);font-size:.62rem">✓ En base</span>`:'';
+  const addBtn=r.in_db
+    ?`<button class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:.2rem .5rem;pointer-events:none" disabled>✓ Ajouté</button>`
+    :`<button class="btn btn-primary btn-sm" style="font-size:.7rem;padding:.2rem .5rem" onclick="addFromFs('${r.media_type}',${r.tmdb_id},'${esc(r.slug)}',this)">+ Ajouter</button>`;
+  return `<div class="src-card${r.in_db?' in-db':''}" data-slug="${esc(r.slug)}">
+    ${img}
+    <div class="src-info">
+      <div class="src-nom">${esc(r.nom||r.slug)}</div>
+      <div class="src-slug">${esc(r.slug)}</div>
+      <div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.2rem">${tb}${anb}${nb}${db}</div>
+    </div>
+    <div class="src-foot">${addBtn}</div>
+  </div>`;
+}
+
+async function addFromFs(mediaType,tmdbId,slug,btn){
+  btn.disabled=true;btn.textContent='⏳';
+  try{
+    const d=await api('POST',`/catalogues/tmdb/${mediaType}/${tmdbId}`);
+    toast(`${d.nom||slug} ajouté`,'ok');
+    const card=document.querySelector(`.src-card[data-slug="${slug}"]`);
+    if(card){
+      card.classList.add('in-db');
+      const foot=card.querySelector('.src-foot');
+      if(foot)foot.innerHTML=`<button class="btn btn-secondary btn-sm" style="font-size:.7rem;padding:.2rem .5rem" disabled>✓ Ajouté</button>`;
+      const infoLast=card.querySelector('.src-info>div:last-child');
+      if(infoLast)infoLast.insertAdjacentHTML('beforeend',`<span class="badge" style="background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid rgba(16,185,129,.3);font-size:.62rem">✓ En base</span>`);
+    }
+    loadCats();
+  }catch(e){
+    toast(String(e),'er');
+    btn.disabled=false;btn.textContent='+ Ajouter';
+  }
+}
+
 // ═══════════════════════ CONNEXIONS ══════════════════════════════════════════
 
 let _allConns=[], _connTab='all', _connBanned=new Set();
@@ -3284,8 +3399,9 @@ function renderHistory(list){
 </html>"""
 
 
-@app.get("/", response_class=HTMLResponse)
-async def admin_ui():
+@app.get("/legacy/", response_class=HTMLResponse)
+async def admin_ui_legacy():
+    """Ancienne interface vanilla-JS — sections pas encore migrées vers la nouvelle app React."""
     return HTMLResponse(
         _HTML.replace("__API_BASE__", API_BASE),
         headers={
@@ -3293,6 +3409,33 @@ async def admin_ui():
             "Pragma":        "no-cache",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Nouvelle interface React (admin_app/) — build statique servi par ce process
+# ---------------------------------------------------------------------------
+
+if ADMIN_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=ADMIN_DIST / "assets"), name="admin-assets")
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def admin_favicon():
+        return FileResponse(ADMIN_DIST / "favicon.svg")
+
+    @app.get("/icons.svg", include_in_schema=False)
+    async def admin_icons():
+        return FileResponse(ADMIN_DIST / "icons.svg")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def admin_spa(full_path: str):
+        """Fallback SPA : toute route côté client (React Router) sert index.html."""
+        return HTMLResponse(
+            (ADMIN_DIST / "index.html").read_text(encoding="utf-8"),
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma":        "no-cache",
+            },
+        )
 
 
 if __name__ == "__main__":

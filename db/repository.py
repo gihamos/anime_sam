@@ -41,6 +41,15 @@ async def find_by_slug(slug: str) -> Optional[dict]:
     return _clean(doc) if doc else None
 
 
+async def find_slugs(slugs: list[str]) -> set[str]:
+    """Sous-ensemble de `slugs` déjà présents en base — évite un aller-retour DB par résultat
+    pour marquer `in_db` sur une liste (ex. résultats de recherche TMDB)."""
+    if not slugs:
+        return set()
+    cursor = _col().find({"slug": {"$in": slugs}}, {"slug": 1})
+    return {d["slug"] async for d in cursor}
+
+
 async def search_with_filters(
     q:             Optional[str]       = None,
     type_contenu:  Optional[str]       = None,
@@ -111,13 +120,18 @@ async def count_all() -> int:
 
 
 async def get_all_summary(skip: int = 0, limit: int = 100) -> list[dict]:
-    """Résumé léger — admin uniquement (pas de filtrage visibilité)."""
+    """Résumé léger — admin uniquement (pas de filtrage visibilité).
+    `limit=0` retourne tout (utilisé par la vue de gestion complète, qui filtre
+    côté client — sans ça, les catalogues ajoutés après les 100 premiers en base
+    devenaient invisibles dans l'interface admin)."""
     cursor = _col().find(
         {},
         {"slug": 1, "nom": 1, "etat": 1, "type_contenu": 1,
          "genres": 1, "langues": 1, "updated_at": 1, "episodes_synced": 1,
          "enrichment": 1}
-    ).skip(skip).limit(limit)
+    ).skip(skip)
+    if limit:
+        cursor = cursor.limit(limit)
     return [_clean(d) async for d in cursor]
 
 
