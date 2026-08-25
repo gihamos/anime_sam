@@ -18,6 +18,22 @@ services:
     networks:
       - proxy_net
 
+  shop_backend:
+    build:
+      context: .
+      dockerfile: shop_backend/Dockerfile
+      args:
+        VITE_API_URL: https://shop.gihamos.fr
+    container_name: anime_sama_shop
+    restart: unless-stopped
+    env_file:
+      - shop_backend/.env
+    environment:
+      MONGODB_URL: ${MONGODB_URL}
+      MONGODB_DB: anime_sama_shop
+    networks:
+      - proxy_net
+
 networks:
   proxy_net:
     external: true

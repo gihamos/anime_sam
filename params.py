@@ -72,3 +72,10 @@ TMDB_API_URL     = os.getenv("TMDB_API_URL", "https://api.themoviedb.org/3")
 TMDB_API_KEY     = os.getenv("TMDB_API_KEY", "")
 TMDB_IMAGE_BASE  = os.getenv("TMDB_IMAGE_BASE", "https://image.tmdb.org/t/p")
 VIDZY_BASE_URL   = os.getenv("VIDZY_BASE_URL", "https://vidzy.org")
+
+# ── Jellyfin (synchronisation de la bibliothèque — plugin anime-sama) ──────
+# Clé d'API dédiée à ce service (générée via POST /Auth/Keys), distincte de celle de
+# shop_backend — même instance Jellyfin cible, deux préoccupations séparées (contenu vs
+# comptes clients).
+JELLYFIN_BASE_URL = os.getenv("JELLYFIN_BASE_URL", "http://jellyfin:8096")
+JELLYFIN_API_KEY  = os.getenv("JELLYFIN_API_KEY", "")

@@ -8,8 +8,8 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   ready: boolean
-  login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string, email?: string) => Promise<void>
+  login: (username: string, password: string) => Promise<Customer>
+  register: (username: string, password: string, email?: string) => Promise<Customer>
   logout: () => void
   checkAuth: () => Promise<void>
 }
@@ -36,6 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const { data: me } = await apiClient.get<Customer>('/auth/me')
       set({ customer: me, isAuthenticated: true, isLoading: false })
+      return me
     } catch (err) {
       set({ isLoading: false })
       throw new Error(getApiError(err))
@@ -58,6 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (data.refresh_token) setRefreshToken(data.refresh_token)
       const { data: me } = await apiClient.get<Customer>('/auth/me')
       set({ customer: me, isAuthenticated: true, isLoading: false })
+      return me
     } catch (err) {
       set({ isLoading: false })
       throw new Error(getApiError(err))

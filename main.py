@@ -18,6 +18,7 @@ from api.routes.scan_download import router as scan_dl_router, admin_router as s
 from api.routes.stream import router as stream_router
 from services.catalogue_service import mettre_a_jour_tous
 from services.enrichment_service import enrichir_tous
+from services.jellyfin_sync import refresh_library as jellyfin_refresh_library
 from services.scheduler_service import scheduler, load_schedules_from_db
 from params import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_PORT, ANILIST_ENRICHMENT_ENABLED
 
@@ -81,6 +82,18 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
             misfire_grace_time=3600,
         )
+
+    # Synchronisation périodique de la bibliothèque Jellyfin (plugin anime-sama) — évite
+    # d'attendre le scan interne de Jellyfin après un ajout/sync de contenu. Complète le
+    # déclenchement manuel exposé sur POST /admin/api/jellyfin/sync.
+    scheduler.add_job(
+        jellyfin_refresh_library,
+        "interval",
+        hours=1,
+        id="jellyfin_library_sync",
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
 
     scheduler.start()
 

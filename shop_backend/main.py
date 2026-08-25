@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from utils.logger import logger
@@ -90,3 +92,14 @@ app.include_router(admin_router)
 @app.get("/api/health", tags=["Root"])
 def health():
     return {"message": "shop_backend opérationnel", "version": "1.0", "docs": "/docs"}
+
+
+# ---------------------------------------------------------------------------
+# shop_app (build statique) — servi par ce même process, monté en dernier pour ne
+# jamais intercepter les routes API déclarées ci-dessus. `html=True` sert index.html en
+# fallback pour les routes React Router côté client (ex. /compte, /admin/offres).
+# ---------------------------------------------------------------------------
+
+_SHOP_APP_DIST = Path(__file__).parent / "shop_app_dist"
+if _SHOP_APP_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=_SHOP_APP_DIST, html=True), name="shop-app")

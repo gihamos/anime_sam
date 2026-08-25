@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Tv,
 } from 'lucide-react'
 import {
   useBulkDeleteCatalogues,
@@ -20,6 +21,7 @@ import {
   useDeleteCatalogue,
   useRefreshCatalogue,
 } from '@/hooks/useCatalogues'
+import { useJellyfinSyncStatus, useTriggerJellyfinSync } from '@/hooks/useJellyfinSync'
 import { getApiError } from '@/api/client'
 import type { CatalogueAdminSummary, Etat, Source, TypeContenu } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -70,6 +72,8 @@ export function CataloguesPage() {
   const bulkDelete = useBulkDeleteCatalogues()
   const bulkRefresh = useBulkRefreshCatalogues()
   const bulkVisibility = useBulkUpdateVisibility()
+  const { data: jellyfinStatus } = useJellyfinSyncStatus()
+  const jellyfinSync = useTriggerJellyfinSync()
 
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<Filter>('all')
@@ -142,6 +146,16 @@ export function CataloguesPage() {
     }
   }
 
+  async function handleJellyfinSync() {
+    try {
+      const res = await jellyfinSync.mutateAsync()
+      if (res.ok) toast.success('Synchronisation Jellyfin déclenchée')
+      else toast.error('Synchronisation Jellyfin impossible — vérifier la configuration')
+    } catch (err) {
+      toast.error(getApiError(err))
+    }
+  }
+
   async function handleBulkDelete() {
     try {
       const res = await bulkDelete.mutateAsync(Array.from(selected))
@@ -181,10 +195,21 @@ export function CataloguesPage() {
           <h1 className="text-xl font-semibold">Catalogues</h1>
           <p className="text-sm text-muted-foreground">Animes, films, séries et scans du catalogue.</p>
         </div>
-        <Button onClick={() => openDialog('add', null)}>
-          <Plus className="size-4" />
-          Ajouter
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {jellyfinStatus?.last_sync && (
+            <span className="text-xs text-muted-foreground">
+              Jellyfin synchronisé le {new Date(jellyfinStatus.last_sync).toLocaleString('fr-FR')}
+            </span>
+          )}
+          <Button variant="outline" onClick={handleJellyfinSync} disabled={jellyfinSync.isPending}>
+            {jellyfinSync.isPending ? <Loader2 className="size-4 animate-spin" /> : <Tv className="size-4" />}
+            Synchroniser Jellyfin
+          </Button>
+          <Button onClick={() => openDialog('add', null)}>
+            <Plus className="size-4" />
+            Ajouter
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2">

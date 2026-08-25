@@ -12,7 +12,6 @@ export function LoginPage() {
   const navigate = useNavigate()
   const login = useAuthStore((s) => s.login)
   const isLoading = useAuthStore((s) => s.isLoading)
-  const customer = useAuthStore((s) => s.customer)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -21,8 +20,8 @@ export function LoginPage() {
     e.preventDefault()
     setError('')
     try {
-      await login(username, password)
-      navigate(customer?.role === 'admin' ? '/admin/offres' : '/compte', { replace: true })
+      const customer = await login(username, password)
+      navigate(customer.role === 'admin' ? '/admin/offres' : '/compte', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connexion impossible')
     }

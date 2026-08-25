@@ -668,3 +668,31 @@ async def clear_access_logs(_: dict = Depends(require_admin)):
     import db.access_log_repository as log_repo
     count = await log_repo.clear_logs()
     return {"deleted": count}
+
+
+# ---------------------------------------------------------------------------
+# Synchronisation Jellyfin (bibliothèque)
+# ---------------------------------------------------------------------------
+
+@router.post("/api/jellyfin/sync", response_model=OkResponse, summary="Déclencher une synchronisation Jellyfin (admin)")
+async def trigger_jellyfin_sync(_: dict = Depends(require_admin)):
+    """
+    Déclenche un scan de la bibliothèque Jellyfin (POST /Library/Refresh côté Jellyfin) —
+    utile après l'ajout/la synchronisation de contenu pour que les nouveaux fichiers
+    `.strm` du plugin anime-sama apparaissent sans attendre le scan périodique interne de
+    Jellyfin. Un job planifié (voir main.py) le fait aussi automatiquement toutes les heures.
+    """
+    import services.jellyfin_sync as jellyfin_sync
+    import db.settings_repository as settings_repo
+
+    ok = await jellyfin_sync.refresh_library()
+    if ok:
+        await settings_repo.set_setting("jellyfin_last_sync", datetime.now(timezone.utc).isoformat())
+    return {"ok": ok}
+
+
+@router.get("/api/jellyfin/sync-status", summary="Dernière synchronisation Jellyfin (admin)")
+async def jellyfin_sync_status(_: dict = Depends(require_admin)):
+    import db.settings_repository as settings_repo
+    last_sync = await settings_repo.get_setting("jellyfin_last_sync")
+    return {"last_sync": last_sync}
