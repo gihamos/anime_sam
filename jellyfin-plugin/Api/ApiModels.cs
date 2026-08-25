@@ -193,6 +193,24 @@ public class TmdbSearchResult
     public bool InDb { get; set; }
 }
 
+public class TmdbGenre
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+}
+
+public class TmdbGenresResponse
+{
+    [JsonPropertyName("movie")]
+    public List<TmdbGenre> Movie { get; set; } = new();
+
+    [JsonPropertyName("tv")]
+    public List<TmdbGenre> Tv { get; set; } = new();
+}
+
 public class SyncStarted
 {
     [JsonPropertyName("status")]
@@ -276,4 +294,13 @@ public class StreamResolveResponse
 
     [JsonPropertyName("merged")]
     public bool Merged { get; set; }
+
+    // URL relative (sur le serveur Anime Sama) qui relaie déjà le flux avec les bons
+    // headers — à préférer à `Url` en lecture directe : certaines sources (Vidzy
+    // notamment) restreignent l'accès au flux résolu à l'IP/session du serveur qui l'a
+    // résolu, donc une requête directe depuis Jellyfin (IP différente) échoue en 403
+    // même avec les bons headers Referer/Origin, alors que ce proxy — hébergé sur le
+    // même serveur que la résolution — fonctionne toujours.
+    [JsonPropertyName("proxy_url")]
+    public string? ProxyUrl { get; set; }
 }

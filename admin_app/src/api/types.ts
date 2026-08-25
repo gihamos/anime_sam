@@ -208,6 +208,16 @@ export interface TmdbSearchResult {
   in_db: boolean
 }
 
+export interface TmdbGenre {
+  id: number
+  name: string
+}
+
+export interface TmdbGenresResponse {
+  movie: TmdbGenre[]
+  tv: TmdbGenre[]
+}
+
 // ─── Téléchargements ────────────────────────────────────────────────────────
 
 export interface JobCreated {
@@ -232,4 +242,198 @@ export interface JobStatus {
   nb_items: number
   error: string
   ready: boolean
+}
+
+// ─── Groupes ─────────────────────────────────────────────────────────────────
+
+export type GroupType = 'catalogue' | 'genre' | 'permission'
+
+export interface DownloadQuotaConfig {
+  enabled?: boolean
+  max_files_per_day?: number
+  max_gb_per_day?: number
+}
+
+export interface GroupPermissions {
+  can_sync: boolean
+  can_delete: boolean
+  can_refresh: boolean
+  can_download: boolean
+  download_forbidden_slugs: string[]
+  download_quota: DownloadQuotaConfig
+  quota: QuotaConfig
+}
+
+export interface Group {
+  id: string
+  name: string
+  type: GroupType
+  description: string | null
+  catalogue_slugs: string[]
+  catalogue_content: Record<string, ContentAccess>
+  genres: string[]
+  permissions: GroupPermissions
+  member_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface GroupCreate {
+  name: string
+  type: GroupType
+  description?: string
+  catalogue_slugs: string[]
+  catalogue_content: Record<string, ContentAccess>
+  genres: string[]
+  permissions: GroupPermissions
+}
+
+export type GroupUpdate = Partial<GroupCreate>
+
+// ─── Applications (clients API) ───────────────────────────────────────────────
+
+export interface ApiClientPermissions {
+  can_sync: boolean
+  can_delete: boolean
+  can_refresh: boolean
+  allowed_catalogues: string[]
+  catalogue_content: Record<string, ContentAccess>
+  quota: QuotaConfig
+}
+
+export interface ApiClient {
+  client_id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  permissions: ApiClientPermissions
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ApiClientCreated extends ApiClient {
+  client_secret: string
+}
+
+export interface SecretRegenerated {
+  client_id: string
+  client_secret: string
+}
+
+// ─── Planification ─────────────────────────────────────────────────────────
+
+export type ScheduleFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom'
+
+export interface Schedule {
+  id: string
+  slug: string
+  frequency: ScheduleFrequency
+  hour: number
+  minute: number
+  day_of_week: number | null
+  day_of_month: number | null
+  interval_days: number | null
+  description: string | null
+  active: boolean
+  last_run: string | null
+  next_run: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ScheduleCreate {
+  slug: string
+  frequency: ScheduleFrequency
+  hour: number
+  minute: number
+  day_of_week?: number | null
+  day_of_month?: number | null
+  interval_days?: number | null
+  description?: string | null
+  active: boolean
+}
+
+export type ScheduleUpdate = Partial<Omit<ScheduleCreate, 'slug'>>
+
+export interface PlanningAnime {
+  titre: string
+  slug: string
+  url: string
+  url_saison: string
+  image: string | null
+  heure: string
+  saison_info: string
+  lang: string
+}
+
+export interface PlanningJour {
+  jour: string
+  date: string
+  animes: PlanningAnime[]
+}
+
+export interface SyncHistoryEntry {
+  slug: string
+  triggered_by: string
+  started_at: string
+  ended_at: string
+  duration_s: number
+  status: 'completed' | 'cancelled' | 'error'
+  total_items: number
+}
+
+// ─── Téléchargements (admin) ──────────────────────────────────────────────────
+
+export interface DownloadRecord {
+  username: string
+  slug: string
+  type: string | null
+  nb_files: number
+  details: string
+  size_bytes: number
+  date: string
+}
+
+export interface DlQuota {
+  username: string
+  max_files_per_day: number
+  max_gb_per_day: number
+  can_download: boolean
+}
+
+// ─── Sécurité ───────────────────────────────────────────────────────────────
+
+export interface SecurityState {
+  locked: boolean
+  reason: string
+  banned_count: number
+}
+
+export interface IpBan {
+  ip: string
+  reason: string
+  banned_at: string | null
+  banned_by: string
+}
+
+// ─── Connexions (access logs) ─────────────────────────────────────────────────
+
+export interface AccessLogEntry {
+  ip: string
+  username: string | null
+  method: string
+  path: string
+  status_code: number
+  user_agent: string
+  timestamp: string
+}
+
+export interface AccessStats {
+  total: number
+  unique_ips: number
+  auth_count: number
+  anon_count: number
+  top_users: { username: string; count: number }[]
+  top_ips: { ip: string; count: number }[]
+  hourly_24h: { hour: string; count: number }[]
 }

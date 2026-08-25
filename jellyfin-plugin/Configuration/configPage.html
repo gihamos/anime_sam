@@ -151,17 +151,24 @@
             <br/>
 
             <div class="verticalSection">
-                <h3 class="sectionTitle">Rechercher un animé / manga sur Anime Sama</h3>
+                <h3 class="sectionTitle">Recherche</h3>
                 <p style="font-size:.85rem;color:#aaa;">
-                    Réservé aux administrateurs. Recherche directement sur anime-sama.to et lance la
-                    récupération des épisodes/chapitres pour le titre choisi.
+                    Réservé aux administrateurs. Cherchez un titre à ajouter au catalogue — anime-sama.to
+                    (animés, mangas) ou TMDB (films &amp; séries, lecteur Vidzy) — puis choisissez la source.
                 </p>
 
-                <!-- Recherche rapide -->
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="searchSource">Source</label>
+                    <select id="searchSource" is="emby-select" class="selectContainer" onchange="AnimeSamaConfig.onSourceChange()">
+                        <option value="anime-sama">anime-sama.to (animés, mangas)</option>
+                        <option value="tmdb">TMDB (films &amp; séries, lecteur Vidzy)</option>
+                    </select>
+                </div>
+
                 <div class="inputContainer" style="display:flex;gap:.5em;align-items:flex-end;">
                     <div style="flex:1;">
                         <label class="inputLabel inputLabelUnfocused">Titre</label>
-                        <input id="searchQuery" type="text" is="emby-input" placeholder="ex: naruto, one piece…" onkeydown="if(event.key==='Enter')AnimeSamaConfig.search()" />
+                        <input id="searchQuery" type="text" is="emby-input" placeholder="ex: naruto, inception…" onkeydown="if(event.key==='Enter')AnimeSamaConfig.search()" />
                     </div>
                     <button is="emby-button" class="raised emby-button" style="margin-bottom:.1em;" onclick="AnimeSamaConfig.search()">
                         &#128269; Rechercher
@@ -169,10 +176,11 @@
                 </div>
 
                 <!-- Filtres avancés (repliés par défaut) -->
-                <details style="margin-top:.75em;">
+                <details style="margin-top:.75em;" ontoggle="if(this.open)AnimeSamaConfig.onFiltersOpen()">
                     <summary style="cursor:pointer;color:var(--theme-button-flat-focused);font-size:.85rem;">Filtres avancés ▾</summary>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5em 1.5em;margin-top:.75em;">
 
+                    <!-- anime-sama.to -->
+                    <div id="asFilters" style="display:grid;grid-template-columns:1fr 1fr;gap:.5em 1.5em;margin-top:.75em;">
                         <div>
                             <label class="inputLabel inputLabelUnfocused">Type</label>
                             <select id="sf-type" is="emby-select" class="selectContainer">
@@ -204,11 +212,6 @@
                         </div>
 
                         <div>
-                            <label class="inputLabel inputLabelUnfocused">Genre</label>
-                            <input id="sf-genre" type="text" is="emby-input" placeholder="ex: Action,Aventure" />
-                        </div>
-
-                        <div>
                             <label class="inputLabel inputLabelUnfocused">Année min</label>
                             <input id="sf-annee-min" type="number" is="emby-input" placeholder="ex: 2000" min="1960" max="2030" />
                         </div>
@@ -227,46 +230,61 @@
                             <label class="inputLabel inputLabelUnfocused">Épisodes max</label>
                             <input id="sf-eps-max" type="number" is="emby-input" placeholder="ex: 100" min="1" />
                         </div>
+
+                        <div style="grid-column:1/-1;">
+                            <label class="inputLabel inputLabelUnfocused">Genres <span id="asGenreCount" style="color:var(--theme-button-flat-focused);font-size:.78rem;"></span></label>
+                            <input id="asGenreFilter" type="text" is="emby-input" placeholder="Filtrer les genres…" oninput="AnimeSamaConfig.renderGenreGrid('anime-sama')" />
+                            <div id="asGenreGrid" style="display:flex;flex-wrap:wrap;gap:.35em;max-height:170px;overflow-y:auto;margin-top:.5em;padding:.5em;border:1px solid rgba(255,255,255,.15);border-radius:4px;">
+                                <span style="color:#888;font-size:.78rem;">Chargement…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TMDB -->
+                    <div id="tmdbFilters" style="display:none;grid-template-columns:1fr 1fr;gap:.5em 1.5em;margin-top:.75em;">
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Type</label>
+                            <select id="tf-type" is="emby-select" class="selectContainer" onchange="AnimeSamaConfig.renderGenreGrid('tmdb')">
+                                <option value="">Films &amp; séries</option>
+                                <option value="movie">Films</option>
+                                <option value="tv">Séries</option>
+                            </select>
+                        </div>
+
+                        <div></div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Année min</label>
+                            <input id="tf-annee-min" type="number" is="emby-input" placeholder="ex: 2000" min="1900" max="2030" />
+                        </div>
+
+                        <div>
+                            <label class="inputLabel inputLabelUnfocused">Année max</label>
+                            <input id="tf-annee-max" type="number" is="emby-input" placeholder="ex: 2026" min="1900" max="2030" />
+                        </div>
+
+                        <div style="grid-column:1/-1;">
+                            <label class="inputLabel inputLabelUnfocused">Pays d'origine</label>
+                            <div id="tmdbCountryGrid" style="display:flex;flex-wrap:wrap;gap:.35em;margin-top:.35em;"></div>
+                        </div>
+
+                        <div style="grid-column:1/-1;">
+                            <label class="inputLabel inputLabelUnfocused">Genres <span id="tmdbGenreCount" style="color:var(--theme-button-flat-focused);font-size:.78rem;"></span></label>
+                            <input id="tmdbGenreFilter" type="text" is="emby-input" placeholder="Filtrer les genres…" oninput="AnimeSamaConfig.renderGenreGrid('tmdb')" />
+                            <div id="tmdbGenreGrid" style="display:flex;flex-wrap:wrap;gap:.35em;max-height:170px;overflow-y:auto;margin-top:.5em;padding:.5em;border:1px solid rgba(255,255,255,.15);border-radius:4px;">
+                                <span style="color:#888;font-size:.78rem;">Chargement…</span>
+                            </div>
+                        </div>
                     </div>
                 </details>
 
                 <!-- Pagination et résultats -->
-                <div id="searchPager" style="display:none;margin-top:.75em;display:none;gap:.5em;align-items:center;">
+                <div id="searchPager" style="display:none;margin-top:.75em;gap:.5em;align-items:center;">
                     <button id="searchPrevBtn" is="emby-button" class="raised emby-button" style="width:auto;padding:.3em .9em;" onclick="AnimeSamaConfig.searchPage(-1)">&#8592; Préc.</button>
                     <span id="searchPageLabel" style="font-size:.85rem;color:#aaa;"></span>
                     <button id="searchNextBtn" is="emby-button" class="raised emby-button" style="width:auto;padding:.3em .9em;" onclick="AnimeSamaConfig.searchPage(1)">Suiv. &#8594;</button>
                 </div>
                 <div id="searchResults" style="margin-top:.75em;"></div>
-            </div>
-
-            <br/>
-
-            <div class="verticalSection">
-                <h3 class="sectionTitle">Films &amp; séries (TMDB + Vidzy)</h3>
-                <p style="font-size:.85rem;color:#aaa;">
-                    Source indépendante d'anime-sama.to : métadonnées TMDB, lecteur Vidzy.
-                    Ajoutés comme catalogues séparés (type film/série), pas de scraping.
-                </p>
-
-                <div class="inputContainer" style="display:flex;gap:.5em;align-items:flex-end;">
-                    <div style="flex:1;">
-                        <label class="inputLabel inputLabelUnfocused">Titre</label>
-                        <input id="fsQuery" type="text" is="emby-input" placeholder="ex: Inception, The Office…" onkeydown="if(event.key==='Enter')AnimeSamaConfig.fsSearch()" />
-                    </div>
-                    <div>
-                        <label class="inputLabel inputLabelUnfocused">Type</label>
-                        <select id="fsType" is="emby-select" class="selectContainer">
-                            <option value="">Films &amp; séries</option>
-                            <option value="movie">Films</option>
-                            <option value="tv">Séries</option>
-                        </select>
-                    </div>
-                    <button is="emby-button" class="raised emby-button" style="margin-bottom:.1em;" onclick="AnimeSamaConfig.fsSearch()">
-                        &#128269; Rechercher
-                    </button>
-                </div>
-
-                <div id="fsResults" style="margin-top:.75em;"></div>
             </div>
 
             <br/>
@@ -376,6 +394,149 @@
                 });
             },
 
+            // ── Recherche unifiée (anime-sama.to / TMDB, source sélectionnable) ──────
+
+            // Codes ISO 3166-1 des origines les plus demandées (dramas coréens, tokusatsu
+            // japonais, séries turques…) — TMDB ne fournit pas de nom localisé pour la liste
+            // complète des ~250 pays, une liste restreinte et traduite est plus utile ici.
+            _TMDB_COUNTRIES: [
+                { code: 'KR', label: 'Corée du Sud' }, { code: 'JP', label: 'Japon' },
+                { code: 'CN', label: 'Chine' },         { code: 'TW', label: 'Taïwan' },
+                { code: 'HK', label: 'Hong Kong' },     { code: 'TH', label: 'Thaïlande' },
+                { code: 'IN', label: 'Inde' },          { code: 'TR', label: 'Turquie' },
+                { code: 'FR', label: 'France' },        { code: 'GB', label: 'Royaume-Uni' },
+                { code: 'US', label: 'États-Unis' },    { code: 'ES', label: 'Espagne' },
+                { code: 'DE', label: 'Allemagne' },     { code: 'IT', label: 'Italie' },
+                { code: 'BR', label: 'Brésil' },        { code: 'MX', label: 'Mexique' },
+                { code: 'CA', label: 'Canada' },
+            ],
+
+            _asGenres: null,       // string[] — chargés à la demande
+            _tmdbGenres: null,     // { movie: [{id,name}], tv: [...] } — chargés à la demande
+            _asSelGenres: new Set(),
+            _tmdbSelGenres: new Set(),
+            _tmdbSelCountry: '',
+
+            onSourceChange: function () {
+                const source = document.getElementById('searchSource').value;
+                document.getElementById('asFilters').style.display   = (source === 'anime-sama') ? 'grid' : 'none';
+                document.getElementById('tmdbFilters').style.display = (source === 'tmdb')        ? 'grid' : 'none';
+                document.getElementById('searchResults').innerHTML = '';
+                document.getElementById('searchPager').style.display = 'none';
+            },
+
+            onFiltersOpen: function () {
+                const source = document.getElementById('searchSource').value;
+                AnimeSamaConfig._ensureGenresLoaded(source);
+                if (AnimeSamaConfig._tmdbGenres && document.getElementById('tmdbCountryGrid').children.length === 0)
+                    AnimeSamaConfig._renderCountryGrid();
+            },
+
+            _ensureGenresLoaded: function (source) {
+                if (source === 'tmdb') {
+                    if (AnimeSamaConfig._tmdbGenres) { AnimeSamaConfig.renderGenreGrid('tmdb'); return; }
+                    AnimeSamaConfig._fetchJson('/AnimeSama/admin/genres?source=tmdb').then(function (data) {
+                        AnimeSamaConfig._tmdbGenres = data || { movie: [], tv: [] };
+                        AnimeSamaConfig.renderGenreGrid('tmdb');
+                        AnimeSamaConfig._renderCountryGrid();
+                    });
+                } else {
+                    if (AnimeSamaConfig._asGenres) { AnimeSamaConfig.renderGenreGrid('anime-sama'); return; }
+                    AnimeSamaConfig._fetchJson('/AnimeSama/admin/genres?source=anime-sama').then(function (data) {
+                        AnimeSamaConfig._asGenres = data || [];
+                        AnimeSamaConfig.renderGenreGrid('anime-sama');
+                    });
+                }
+            },
+
+            _fetchJson: function (path) {
+                const token = ApiClient.accessToken();
+                const baseUrl = ApiClient.serverAddress();
+                return fetch(baseUrl + path, {
+                    headers: { 'Authorization': 'MediaBrowser Token="' + token + '"', 'Accept': 'application/json' }
+                }).then(function (resp) { return resp.ok ? resp.json() : null; }).catch(function () { return null; });
+            },
+
+            _renderCountryGrid: function () {
+                const grid = document.getElementById('tmdbCountryGrid');
+                grid.innerHTML = '';
+                AnimeSamaConfig._TMDB_COUNTRIES.forEach(function (c) {
+                    const active = AnimeSamaConfig._tmdbSelCountry === c.code;
+                    const chip = document.createElement('span');
+                    chip.textContent = c.label;
+                    chip.style.cssText = AnimeSamaConfig._chipStyle(active);
+                    chip.onclick = function () {
+                        AnimeSamaConfig._tmdbSelCountry = (AnimeSamaConfig._tmdbSelCountry === c.code) ? '' : c.code;
+                        AnimeSamaConfig._renderCountryGrid();
+                    };
+                    grid.appendChild(chip);
+                });
+            },
+
+            _chipStyle: function (active) {
+                return 'display:inline-block;cursor:pointer;padding:.3em .7em;border-radius:12px;font-size:.78rem;'
+                    + (active
+                        ? 'background:var(--theme-button-flat-focused);color:#000;font-weight:600;'
+                        : 'background:rgba(255,255,255,.08);color:#ccc;border:1px solid rgba(255,255,255,.15);');
+            },
+
+            renderGenreGrid: function (source) {
+                if (source === 'tmdb') {
+                    const type = document.getElementById('tf-type').value;
+                    const all  = AnimeSamaConfig._tmdbGenres || { movie: [], tv: [] };
+                    let list;
+                    if (type === 'movie') list = all.movie;
+                    else if (type === 'tv') list = all.tv;
+                    else {
+                        const seen = new Set();
+                        list = all.movie.concat(all.tv).filter(function (g) {
+                            if (seen.has(g.id)) return false;
+                            seen.add(g.id); return true;
+                        });
+                    }
+                    const q = document.getElementById('tmdbGenreFilter').value.trim().toLowerCase();
+                    const filtered = list.filter(function (g) { return !q || g.name.toLowerCase().includes(q); });
+                    const grid = document.getElementById('tmdbGenreGrid');
+                    grid.innerHTML = '';
+                    filtered.forEach(function (g) {
+                        const active = AnimeSamaConfig._tmdbSelGenres.has(g.id);
+                        const chip = document.createElement('span');
+                        chip.textContent = g.name;
+                        chip.style.cssText = AnimeSamaConfig._chipStyle(active);
+                        chip.onclick = function () {
+                            if (AnimeSamaConfig._tmdbSelGenres.has(g.id)) AnimeSamaConfig._tmdbSelGenres.delete(g.id);
+                            else AnimeSamaConfig._tmdbSelGenres.add(g.id);
+                            AnimeSamaConfig.renderGenreGrid('tmdb');
+                        };
+                        grid.appendChild(chip);
+                    });
+                    if (filtered.length === 0) grid.innerHTML = '<span style="color:#888;font-size:.78rem;">Aucun genre.</span>';
+                    const cnt = document.getElementById('tmdbGenreCount');
+                    cnt.textContent = AnimeSamaConfig._tmdbSelGenres.size ? '(' + AnimeSamaConfig._tmdbSelGenres.size + ' sél.)' : '';
+                } else {
+                    const list = AnimeSamaConfig._asGenres || [];
+                    const q = document.getElementById('asGenreFilter').value.trim().toLowerCase();
+                    const filtered = list.filter(function (g) { return !q || g.toLowerCase().includes(q); });
+                    const grid = document.getElementById('asGenreGrid');
+                    grid.innerHTML = '';
+                    filtered.forEach(function (g) {
+                        const active = AnimeSamaConfig._asSelGenres.has(g);
+                        const chip = document.createElement('span');
+                        chip.textContent = g;
+                        chip.style.cssText = AnimeSamaConfig._chipStyle(active);
+                        chip.onclick = function () {
+                            if (AnimeSamaConfig._asSelGenres.has(g)) AnimeSamaConfig._asSelGenres.delete(g);
+                            else AnimeSamaConfig._asSelGenres.add(g);
+                            AnimeSamaConfig.renderGenreGrid('anime-sama');
+                        };
+                        grid.appendChild(chip);
+                    });
+                    if (filtered.length === 0) grid.innerHTML = '<span style="color:#888;font-size:.78rem;">Aucun genre.</span>';
+                    const cnt = document.getElementById('asGenreCount');
+                    cnt.textContent = AnimeSamaConfig._asSelGenres.size ? '(' + AnimeSamaConfig._asSelGenres.size + ' sél.)' : '';
+                }
+            },
+
             searchPage: function(delta) {
                 _searchPage = Math.max(1, _searchPage + delta);
                 AnimeSamaConfig._doSearch();
@@ -387,11 +548,17 @@
             },
 
             _doSearch: function () {
+                const source = document.getElementById('searchSource').value;
+                if (source === 'tmdb') AnimeSamaConfig._doTmdbSearch();
+                else AnimeSamaConfig._doAnimeSamaSearch();
+            },
+
+            _doAnimeSamaSearch: function () {
                 const q         = document.getElementById('searchQuery').value.trim();
                 const sfType    = document.getElementById('sf-type').value;
                 const sfLangue  = document.getElementById('sf-langue').value;
                 const sfStatut  = document.getElementById('sf-statut').value;
-                const sfGenre   = document.getElementById('sf-genre').value.trim();
+                const sfGenre   = Array.from(AnimeSamaConfig._asSelGenres).join(',');
                 const sfAnnMin  = document.getElementById('sf-annee-min').value;
                 const sfAnnMax  = document.getElementById('sf-annee-max').value;
                 const sfEpsMin  = document.getElementById('sf-eps-min').value;
@@ -399,16 +566,12 @@
 
                 const resultsDiv = document.getElementById('searchResults');
 
-                // Au moins un filtre doit être renseigné
                 if (!q && !sfType && !sfLangue && !sfStatut && !sfGenre && !sfAnnMin && !sfAnnMax && !sfEpsMin && !sfEpsMax) {
                     resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Saisissez au moins un critère.</p>';
                     return;
                 }
 
-                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche…</p>';
-
-                const token = ApiClient.accessToken();
-                const baseUrl = ApiClient.serverAddress();
+                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche sur anime-sama.to…</p>';
 
                 var qs = '/AnimeSama/admin/search?page=' + _searchPage;
                 if (q)        qs += '&q='        + encodeURIComponent(q);
@@ -421,56 +584,96 @@
                 if (sfEpsMin) qs += '&epsMin='   + sfEpsMin;
                 if (sfEpsMax) qs += '&epsMax='   + sfEpsMax;
 
-                const url = baseUrl + qs;
+                AnimeSamaConfig._fetchJson(qs).then(function (results) {
+                    AnimeSamaConfig._renderResults(results, 'anime-sama');
+                });
+            },
 
-                fetch(url, {
-                    headers: {
-                        'Authorization': 'MediaBrowser Token="' + token + '"',
-                        'Accept': 'application/json'
+            _doTmdbSearch: function () {
+                const q       = document.getElementById('searchQuery').value.trim();
+                const tfType  = document.getElementById('tf-type').value;
+                const genre   = Array.from(AnimeSamaConfig._tmdbSelGenres).join(',');
+                const annMin  = document.getElementById('tf-annee-min').value;
+                const annMax  = document.getElementById('tf-annee-max').value;
+                const pays    = AnimeSamaConfig._tmdbSelCountry;
+
+                const resultsDiv = document.getElementById('searchResults');
+
+                if (!q && !genre && !annMin && !annMax && !pays) {
+                    resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Saisissez un titre ou au moins un filtre.</p>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche TMDB…</p>';
+
+                var qs = '/AnimeSama/admin/tmdb-search?page=' + _searchPage;
+                if (q)      qs += '&q='        + encodeURIComponent(q);
+                if (tfType) qs += '&type='     + tfType;
+                if (genre)  qs += '&genre='    + encodeURIComponent(genre);
+                if (annMin) qs += '&anneeMin=' + annMin;
+                if (annMax) qs += '&anneeMax=' + annMax;
+                if (pays)   qs += '&pays='     + pays;
+
+                AnimeSamaConfig._fetchJson(qs).then(function (results) {
+                    AnimeSamaConfig._renderResults(results, 'tmdb');
+                });
+            },
+
+            _renderResults: function (results, source) {
+                const resultsDiv = document.getElementById('searchResults');
+                const pager = document.getElementById('searchPager');
+
+                if (!results || results.length === 0) {
+                    resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat' + (_searchPage > 1 ? ' (fin des résultats)' : '') + '.</p>';
+                    if (_searchPage > 1) {
+                        pager.style.display = 'flex';
+                        document.getElementById('searchNextBtn').disabled = true;
+                        document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage;
+                    } else {
+                        pager.style.display = 'none';
                     }
-                })
-                .then(function(resp) { return resp.json(); })
-                .then(function(results) {
-                    const pager = document.getElementById('searchPager');
-                    if (!results || results.length === 0) {
-                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat' + (_searchPage > 1 ? ' (fin des résultats)' : '') + '.</p>';
-                        if (_searchPage > 1) {
-                            pager.style.display = 'flex';
-                            document.getElementById('searchNextBtn').disabled = true;
-                            document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage;
-                        } else {
-                            pager.style.display = 'none';
-                        }
-                        return;
-                    }
+                    return;
+                }
 
-                    pager.style.display = 'flex';
-                    document.getElementById('searchPrevBtn').disabled = (_searchPage <= 1);
-                    document.getElementById('searchNextBtn').disabled = (results.length < 20);
-                    document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage + ' · ' + results.length + ' résultat(s)';
+                pager.style.display = 'flex';
+                document.getElementById('searchPrevBtn').disabled = (_searchPage <= 1);
+                document.getElementById('searchNextBtn').disabled = (results.length < (source === 'tmdb' ? 20 : 18));
+                document.getElementById('searchPageLabel').textContent = 'Page ' + _searchPage + ' · ' + results.length + ' résultat(s)';
 
-                    resultsDiv.innerHTML = '';
-                    results.forEach(function(r) {
+                resultsDiv.innerHTML = '';
+                results.forEach(function (r) {
+                    const nom = r.nom || r.Nom || r.slug || '';
+                    const img = r.image || r.Image || '';
+                    const meta = (source === 'tmdb')
+                        ? [r.media_type === 'tv' ? 'Série' : 'Film', r.annee, r.note ? ('★ ' + r.note) : null].filter(Boolean).join(' · ')
+                        : '';
+
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.6em 0;border-bottom:1px solid rgba(255,255,255,.1);';
+                    row.innerHTML =
+                        '<img src="' + img + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
+                        '<div style="flex:1;">' +
+                            '<div style="font-weight:500;">' + nom + '</div>' +
+                            (meta ? '<div style="font-size:.75rem;color:#aaa;">' + meta + '</div>' : '') +
+                        '</div>';
+
+                    if (source === 'tmdb') {
+                        row.innerHTML += r.in_db
+                            ? '<span style="font-size:.75rem;color:#4c4;">✓ En base</span>'
+                            : '<button class="raised emby-button" style="width:auto;padding:.4em 1em;">Ajouter</button>';
+                        const btn = row.querySelector('button');
+                        if (btn) btn.onclick = function () { AnimeSamaConfig.fsAdd(r.media_type, r.tmdb_id, btn); };
+                    } else {
                         const slug = r.slug || r.Slug || '';
-                        const nom  = r.nom  || r.Nom  || slug;
-                        const img  = r.image || r.Image || '';
-
-                        const row = document.createElement('div');
-                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.6em 0;border-bottom:1px solid rgba(255,255,255,.1);';
-                        row.innerHTML =
-                            '<img src="' + img + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
-                            '<span style="flex:1;font-weight:500;">' + nom + '</span>' +
+                        row.innerHTML +=
                             '<button class="raised emby-button" style="width:auto;padding:.4em 1em;" ' + (slug ? '' : 'disabled') + '>Synchroniser le contenu</button>' +
                             '<span class="syncStatusLabel" style="font-size:.8rem;color:#aaa;min-width:9em;text-align:right;"></span>';
-
                         const btn = row.querySelector('button');
                         const lbl = row.querySelector('.syncStatusLabel');
-                        btn.onclick = function() { AnimeSamaConfig.syncContent(slug, btn, lbl); };
-                        resultsDiv.appendChild(row);
-                    });
-                })
-                .catch(function() {
-                    resultsDiv.innerHTML = '<p style="color:#f44;font-size:.85rem;">Erreur de recherche.</p>';
+                        btn.onclick = function () { AnimeSamaConfig.syncContent(slug, btn, lbl); };
+                    }
+
+                    resultsDiv.appendChild(row);
                 });
             },
 
@@ -533,57 +736,7 @@
                 setTimeout(poll, 2000);
             },
 
-            // ── Films & séries (TMDB + Vidzy) ──────────────────────────────────
-            fsSearch: function () {
-                const q = document.getElementById('fsQuery').value.trim();
-                const type = document.getElementById('fsType').value;
-                const resultsDiv = document.getElementById('fsResults');
-
-                if (!q) {
-                    resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Saisissez un titre.</p>';
-                    return;
-                }
-                resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Recherche TMDB…</p>';
-
-                const token = ApiClient.accessToken();
-                const baseUrl = ApiClient.serverAddress();
-                var qs = '/AnimeSama/admin/tmdb-search?q=' + encodeURIComponent(q);
-                if (type) qs += '&type=' + encodeURIComponent(type);
-
-                fetch(baseUrl + qs, {
-                    headers: { 'Authorization': 'MediaBrowser Token="' + token + '"', 'Accept': 'application/json' }
-                })
-                .then(function(resp) { return resp.json(); })
-                .then(function(results) {
-                    if (!results || results.length === 0) {
-                        resultsDiv.innerHTML = '<p style="color:#aaa;font-size:.85rem;">Aucun résultat.</p>';
-                        return;
-                    }
-                    resultsDiv.innerHTML = '';
-                    results.forEach(function(r) {
-                        const row = document.createElement('div');
-                        row.style.cssText = 'display:flex;align-items:center;gap:.75em;padding:.6em 0;border-bottom:1px solid rgba(255,255,255,.1);';
-                        const typeLabel = r.media_type === 'tv' ? 'Série' : 'Film';
-                        const meta = [typeLabel, r.annee, r.note ? ('★ ' + r.note) : null].filter(Boolean).join(' · ');
-                        row.innerHTML =
-                            '<img src="' + (r.image || '') + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
-                            '<div style="flex:1;">' +
-                                '<div style="font-weight:500;">' + (r.nom || r.slug) + '</div>' +
-                                '<div style="font-size:.75rem;color:#aaa;">' + meta + '</div>' +
-                            '</div>' +
-                            (r.in_db
-                                ? '<span style="font-size:.75rem;color:#4c4;">✓ En base</span>'
-                                : '<button class="raised emby-button" style="width:auto;padding:.4em 1em;">Ajouter</button>');
-                        const btn = row.querySelector('button');
-                        if (btn) btn.onclick = function() { AnimeSamaConfig.fsAdd(r.media_type, r.tmdb_id, btn); };
-                        resultsDiv.appendChild(row);
-                    });
-                })
-                .catch(function() {
-                    resultsDiv.innerHTML = '<p style="color:#f44;font-size:.85rem;">Erreur de recherche.</p>';
-                });
-            },
-
+            // ── Ajout depuis TMDB (résultat de la recherche unifiée, source "tmdb") ──
             fsAdd: function (mediaType, tmdbId, btn) {
                 btn.disabled = true;
                 btn.textContent = 'Ajout…';

@@ -23,7 +23,7 @@ La résolution passe par yt-dlp dans un thread pool — compter 2-8 s selon la s
 import asyncio
 import re
 from typing import Optional
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -51,13 +51,37 @@ async def _get_stream_user(
     return await _enrich_user(user)
 
 
+# Extensions que le démuxeur HLS d'ffmpeg accepte pour les ressources imbriquées
+# (segments, sous-playlists, pistes alternatives) — passé ce point c'est une liste de sécurité
+# fermée côté ffmpeg (anti confusion de protocole), pas configurable depuis notre côté.
+_KNOWN_HLS_EXTENSIONS = {
+    ".ts", ".m4s", ".m4a", ".m4v", ".mp4", ".aac", ".m3u8", ".vtt", ".webvtt", ".key",
+}
+
+
+def _sniff_extension(target: str) -> str:
+    """Extension réelle de `target` si elle est reconnue par ffmpeg, sinon `.ts` par défaut
+    (le cas le plus courant pour un segment vidéo)."""
+    path = urlparse(target).path
+    ext = "." + path.rsplit(".", 1)[-1].lower() if "." in path.rsplit("/", 1)[-1] else ""
+    return ext if ext in _KNOWN_HLS_EXTENSIONS else ".ts"
+
+
 def _build_proxy_path(target: str, referer: Optional[str], ua: Optional[str], token: str) -> str:
+    """
+    Construit l'URL de notre proxy pour `target`. Le vrai flux à relayer voyage dans le
+    paramètre `url=` — mais le démuxeur HLS d'ffmpeg (utilisé par Jellyfin) rejette toute
+    ressource imbriquée dont le CHEMIN de l'URL n'expose pas une extension reconnue
+    ("... is not in allowed_segment_extensions"), même si le vrai flux en a une, planquée
+    dans la query string. On ajoute donc un nom de fichier cosmétique reprenant l'extension
+    réelle de `target` dans notre propre chemin, pour satisfaire ce sniffing.
+    """
     params = {"url": target, "token": token}
     if referer:
         params["referer"] = referer
     if ua:
         params["ua"] = ua
-    return "/api/stream/proxy?" + urlencode(params)
+    return f"/api/stream/proxy/seg{_sniff_extension(target)}?" + urlencode(params)
 
 
 @router.get(
@@ -109,24 +133,35 @@ async def resolve_stream(
     return result
 
 
+_URI_ATTR = re.compile(r'URI="([^"]+)"')
+
+
 def _rewrite_m3u8(text: str, manifest_url: str, referer: Optional[str], ua: Optional[str], token: str) -> str:
-    """Réécrit un manifest HLS pour que chaque segment/clé/sous-playlist repasse par /proxy."""
+    """
+    Réécrit un manifest HLS pour que chaque segment/clé/sous-playlist/piste alternative
+    repasse par /proxy.
+
+    N'importe quelle balise HLS peut porter un attribut URI="…" — pas seulement
+    EXT-X-KEY/EXT-X-MAP : Vidzy utilise EXT-X-MEDIA pour ses pistes audio alternatives
+    (français/anglais), qui n'étaient pas réécrites ici (seuls EXT-X-KEY/EXT-X-MAP
+    l'étaient), donc ffmpeg tentait de les récupérer en URL relative brute — 404 côté
+    lecteur ("Erreur de lecture"). On traite maintenant génériquement toute balise
+    commentaire contenant URI="…", ce qui couvre aussi EXT-X-I-FRAME-STREAM-INF et
+    consorts sans avoir à lister chaque balise HLS existante ou future.
+    """
     out: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped:
             out.append(line)
             continue
-        if stripped.startswith("#EXT-X-KEY") or stripped.startswith("#EXT-X-MAP"):
-            m = re.search(r'URI="([^"]+)"', stripped)
-            if m:
-                abs_url = urljoin(manifest_url, m.group(1))
-                proxied = _build_proxy_path(abs_url, referer, ua, token)
-                stripped = stripped.replace(m.group(1), proxied)
-            out.append(stripped)
-            continue
         if stripped.startswith("#"):
-            out.append(line)
+            if 'URI="' in stripped:
+                def _replace(m: "re.Match[str]") -> str:
+                    abs_url = urljoin(manifest_url, m.group(1))
+                    return f'URI="{_build_proxy_path(abs_url, referer, ua, token)}"'
+                stripped = _URI_ATTR.sub(_replace, stripped)
+            out.append(stripped)
             continue
         # Ligne d'URL : segment .ts ou sous-playlist (variant HLS)
         abs_url = urljoin(manifest_url, stripped)
@@ -134,17 +169,43 @@ def _rewrite_m3u8(text: str, manifest_url: str, referer: Optional[str], ua: Opti
     return "\n".join(out)
 
 
+async def _fetch_with_retry(
+    client: httpx.AsyncClient, url: str, headers: dict, retries: int = 2, delay: float = 0.7,
+) -> httpx.Response:
+    """
+    GET avec quelques tentatives en cas d'échec HTTP (pas d'exception réseau, qui remonte
+    directement) — certaines CDN de lecteurs (vu en conditions réelles sur Vidzy) répondent
+    parfois 403/404 juste après la résolution du manifest signé, avant de redevenir correctes
+    quelques centaines de ms plus tard (propagation entre nœuds edge probable).
+    """
+    upstream: Optional[httpx.Response] = None
+    for attempt in range(retries + 1):
+        req = client.build_request("GET", url, headers=headers)
+        upstream = await client.send(req, stream=True)
+        if upstream.is_success or attempt == retries:
+            return upstream
+        await upstream.aclose()
+        await asyncio.sleep(delay)
+    return upstream  # pragma: no cover — boucle toujours au moins une itération
+
+
 @router.get(
     "/proxy",
     summary="Relaie un flux vidéo/HLS en réinjectant les headers requis (Referer/User-Agent)",
 )
+@router.get(
+    "/proxy/{filename}",
+    include_in_schema=False,
+    summary="Identique à /proxy — chemin avec extension cosmétique pour le sniffing ffmpeg",
+)
 async def proxy_stream(
-    request: Request,
-    url:     str = Query(..., description="URL directe à relayer"),
-    referer: Optional[str] = Query(None),
-    ua:      Optional[str] = Query(None),
-    token:   Optional[str] = Query(None, description="Requis pour que les segments HLS réécrits restent authentifiés"),
-    user:    dict = Depends(_get_stream_user),
+    request:  Request,
+    url:      str = Query(..., description="URL directe à relayer"),
+    referer:  Optional[str] = Query(None),
+    ua:       Optional[str] = Query(None),
+    token:    Optional[str] = Query(None, description="Requis pour que les segments HLS réécrits restent authentifiés"),
+    filename: str = "seg.ts",  # non utilisé — voir _build_proxy_path
+    user:     dict = Depends(_get_stream_user),
 ):
     upstream_headers: dict = {}
     if referer:
@@ -157,14 +218,21 @@ async def proxy_stream(
 
     client = httpx.AsyncClient(follow_redirects=True, timeout=30.0)
     try:
-        req = client.build_request("GET", url, headers=upstream_headers)
-        upstream = await client.send(req, stream=True)
+        upstream = await _fetch_with_retry(client, url, upstream_headers)
     except httpx.HTTPError as exc:
         await client.aclose()
         raise HTTPException(status_code=502, detail=f"Erreur en amont : {exc}")
 
     content_type = upstream.headers.get("content-type", "")
-    is_manifest = url.split("?")[0].lower().endswith(".m3u8") or "mpegurl" in content_type
+    # Certains CDN (vu en conditions réelles sur Vidzy) renvoient parfois une erreur HTTP
+    # (403/404, page HTML nginx) juste après la résolution du manifest signé — flaky, sans
+    # doute une histoire de propagation entre nœuds edge. Un manifest n'est traité comme tel
+    # que si la requête a réellement réussi ; sinon on relaie l'erreur telle quelle plutôt que
+    # de réécrire la page d'erreur HTML comme si c'était une playlist HLS valide (ce qui
+    # produisait un flux qui semblait correct syntaxiquement mais ne jouait jamais).
+    is_manifest = upstream.is_success and (
+        url.split("?")[0].lower().endswith(".m3u8") or "mpegurl" in content_type
+    )
 
     if is_manifest:
         body = await upstream.aread()

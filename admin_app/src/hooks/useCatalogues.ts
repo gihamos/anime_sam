@@ -49,7 +49,7 @@ export function useSiteSearch(query: string) {
     queryKey: ['site-search', query],
     queryFn: async () => {
       const { data } = await apiClient.get<SiteSearchResult[]>('/catalogues/site/rechercher', {
-        params: { q: query },
+        params: { search: query },
       })
       return data
     },

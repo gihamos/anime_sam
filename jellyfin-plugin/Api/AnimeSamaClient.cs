@@ -199,17 +199,54 @@ public class AnimeSamaClient
 
     // ── Films & séries (TMDB + Vidzy) ────────────────────────────────────────
 
-    /// <summary>Recherche TMDB — `mediaType` : "movie" | "tv" | null (recherche les deux).</summary>
-    public async Task<List<TmdbSearchResult>> SearchTmdbAsync(string query, string? mediaType, CancellationToken ct)
+    /// <summary>
+    /// Recherche TMDB — `mediaType` : "movie" | "tv" | null (recherche les deux). `query` peut
+    /// être vide si au moins un filtre (genre/année/pays) est fourni — parcours par filtres
+    /// seuls côté API (voir /catalogues/tmdb/rechercher).
+    /// </summary>
+    public async Task<List<TmdbSearchResult>> SearchTmdbAsync(
+        string? query,
+        string? mediaType,
+        string? genreIds  = null,
+        int?    anneeMin  = null,
+        int?    anneeMax  = null,
+        string? paysOrigine = null,
+        int     page      = 1,
+        CancellationToken ct = default)
     {
-        var qs = $"/catalogues/tmdb/rechercher?q={System.Uri.EscapeDataString(query)}";
-        if (!string.IsNullOrWhiteSpace(mediaType)) qs += $"&type={mediaType}";
+        var qs = new System.Text.StringBuilder("/catalogues/tmdb/rechercher?page=").Append(page);
+        if (!string.IsNullOrWhiteSpace(query))       qs.Append("&q=").Append(System.Uri.EscapeDataString(query));
+        if (!string.IsNullOrWhiteSpace(mediaType))   qs.Append("&type=").Append(mediaType);
+        if (!string.IsNullOrWhiteSpace(genreIds))    qs.Append("&genre=").Append(genreIds);
+        if (anneeMin.HasValue)                       qs.Append("&annee_min=").Append(anneeMin);
+        if (anneeMax.HasValue)                       qs.Append("&annee_max=").Append(anneeMax);
+        if (!string.IsNullOrWhiteSpace(paysOrigine)) qs.Append("&pays=").Append(paysOrigine);
 
-        var resp = await GetAsync(qs, ct).ConfigureAwait(false);
+        var resp = await GetAsync(qs.ToString(), ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode) return new List<TmdbSearchResult>();
         return await resp.Content
             .ReadFromJsonAsync<List<TmdbSearchResult>>(cancellationToken: ct)
             .ConfigureAwait(false) ?? new List<TmdbSearchResult>();
+    }
+
+    /// <summary>Genres TMDB en français, pour peupler le sélecteur de genres de la recherche.</summary>
+    public async Task<TmdbGenresResponse?> GetTmdbGenresAsync(CancellationToken ct)
+    {
+        var resp = await GetAsync("/catalogues/tmdb/genres", ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return null;
+        return await resp.Content
+            .ReadFromJsonAsync<TmdbGenresResponse>(cancellationToken: ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Genres anime-sama.to (DB, avec repli sur les genres distincts déjà en base).</summary>
+    public async Task<List<string>> GetAnimeSamaGenresAsync(CancellationToken ct)
+    {
+        var resp = await GetAsync("/admin/api/genres", ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return new List<string>();
+        return await resp.Content
+            .ReadFromJsonAsync<List<string>>(cancellationToken: ct)
+            .ConfigureAwait(false) ?? new List<string>();
     }
 
     /// <summary>Ajoute un film/série au catalogue depuis TMDB (structure + lecteur Vidzy).</summary>

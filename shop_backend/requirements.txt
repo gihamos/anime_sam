@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+motor
+httpx
+python-jose[cryptography]
+bcrypt
+python-multipart
+python-dotenv
+apscheduler

@@ -44,6 +44,17 @@ public class AnimeSamaStreamController : ControllerBase
         if (stream?.Url is null)
             return NotFound("Impossible de résoudre le flux — toutes les sources ont échoué.");
 
+        // Préférer le proxy du serveur Anime Sama (même IP/session que la résolution) : des
+        // sources comme Vidzy lient l'URL signée à l'IP qui l'a obtenue, donc un fetch direct
+        // depuis Jellyfin échoue en 403 même avec les bons headers Referer/Origin, alors que ce
+        // proxy — hébergé sur le serveur qui a fait la résolution — passe toujours.
+        if (!string.IsNullOrEmpty(stream.ProxyUrl))
+        {
+            var apiUrl = Plugin.Instance?.Configuration.ApiUrl?.TrimEnd('/') ?? string.Empty;
+            if (!string.IsNullOrEmpty(apiUrl))
+                return Redirect($"{apiUrl}{stream.ProxyUrl}");
+        }
+
         stream.Headers.TryGetValue("Referer", out var referer);
         stream.Headers.TryGetValue("Origin",  out var origin);
         stream.Headers.TryGetValue("Cookie",  out var cookie);
@@ -90,8 +101,12 @@ public class AnimeSamaStreamController : ControllerBase
         }
 
         var contentType = upstream.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
-        bool isPlaylist = contentType.Contains("mpegurl", StringComparison.OrdinalIgnoreCase)
-                       || target.Contains(".m3u8", StringComparison.OrdinalIgnoreCase);
+        // Ne traiter comme playlist que si la requête a réellement réussi — sinon une page
+        // d'erreur HTML (403/404 amont) serait réécrite comme si c'était du HLS valide,
+        // produisant un flux syntaxiquement correct mais qui ne joue jamais.
+        bool isPlaylist = upstream.IsSuccessStatusCode
+                       && (contentType.Contains("mpegurl", StringComparison.OrdinalIgnoreCase)
+                           || target.Contains(".m3u8", StringComparison.OrdinalIgnoreCase));
 
         Response.StatusCode = (int)upstream.StatusCode;
 

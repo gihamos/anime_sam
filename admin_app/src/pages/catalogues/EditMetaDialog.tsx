@@ -89,7 +89,7 @@ export function EditMetaDialog({ open, onOpenChange, slug }: EditMetaDialogProps
 
         {!isLoading && detail && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="em-nom">Nom</Label>
                 <Input id="em-nom" value={nom} onChange={(e) => setNom(e.target.value)} />
@@ -105,7 +105,7 @@ export function EditMetaDialog({ open, onOpenChange, slug }: EditMetaDialogProps
               <Textarea id="em-synopsis" value={synopsis} onChange={(e) => setSynopsis(e.target.value)} rows={4} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Type</Label>
                 <Select value={type} onValueChange={(v) => setType(v as TypeContenu)}>

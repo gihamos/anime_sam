@@ -1,0 +1,87 @@
+from __future__ import annotations
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  AUTHENTIFICATION
+# ══════════════════════════════════════════════════════════════════════════
+
+class TokenResponse(BaseModel):
+    """Jeton d'accès shop_backend — indépendant des tokens anime_sam."""
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "access_token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "token_type":    "bearer",
+    }})
+
+    access_token:  str           = Field(description="JWT Bearer shop_backend — Authorization: Bearer <token>")
+    refresh_token: Optional[str] = Field(default=None, description="Refresh token (30 jours) — POST /auth/refresh")
+    token_type:    str           = Field(default="bearer", description="Toujours 'bearer'")
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  PLANS
+# ══════════════════════════════════════════════════════════════════════════
+
+class PlanPublic(BaseModel):
+    """Palier tel que visible sur la vitrine — jamais provider_refs, jamais les GUIDs
+    Jellyfin bruts (détail d'implémentation serveur, pas une info client)."""
+    id:                     str
+    slug:                   str
+    name:                   str
+    description:            str
+    price:                  float
+    currency:               str
+    billing_period:         str
+    jellyfin_library_names: list[str] = Field(default_factory=list)
+    max_devices:            int
+    allow_downloads:        bool
+    sort_order:              int = 0
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ABONNEMENTS
+# ══════════════════════════════════════════════════════════════════════════
+
+class SubscribeResponse(BaseModel):
+    subscription_id: str
+    approval_url:     str
+
+
+class SubscriptionDetail(BaseModel):
+    id:                                str
+    plan_id:                            str
+    plan_name:                          Optional[str] = None
+    status:                              str
+    cancel_at_period_end:                 bool = False
+    current_period_end:                    Optional[str] = None
+    jellyfin_username:                      Optional[str] = None
+    jellyfin_initial_password_pending:       Optional[str] = None
+    created_at:                              Optional[str] = None
+    activated_at:                            Optional[str] = None
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  TICKETS
+# ══════════════════════════════════════════════════════════════════════════
+
+class TicketMessagePublic(BaseModel):
+    author_role:     str
+    author_username: str
+    body:            str
+    created_at:      str
+
+
+class TicketPublic(BaseModel):
+    id:          str
+    username:    str
+    subject:     str
+    status:      str
+    messages:    list[TicketMessagePublic] = Field(default_factory=list)
+    created_at:  str
+    updated_at:  str

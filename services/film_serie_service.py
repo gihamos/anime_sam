@@ -22,6 +22,17 @@ from utils.logger import logger
 
 _STATUTS_EN_COURS = {"Returning Series", "In Production", "Planned"}
 
+# Langue originale typique par pays — utilisée uniquement pour filtrer les résultats de
+# `/search` (mode "avec titre"), qui ne porte l'origine que pour les séries (`origin_country`),
+# pas pour les films (seulement `original_language`). En mode `/discover` (sans titre),
+# `with_origin_country` est nativement supporté pour films ET séries, donc cette table n'entre
+# pas en jeu — approximation utile seulement pour la recherche texte, pas une vérité absolue.
+_COUNTRY_LANGUAGE = {
+    "KR": "ko", "JP": "ja", "CN": "zh", "TW": "zh", "HK": "zh", "TH": "th",
+    "IN": "hi", "TR": "tr", "FR": "fr", "US": "en", "GB": "en", "ES": "es",
+    "DE": "de", "IT": "it", "BR": "pt", "MX": "es", "CA": "en",
+}
+
 
 def _annee_from_date(date_str: Optional[str]) -> Optional[int]:
     if not date_str or len(date_str) < 4:
@@ -66,17 +77,54 @@ def _build_enrichment(details: dict, media_type: str) -> dict:
     }
 
 
-async def rechercher_tmdb(query: str, media_type: Optional[str] = None) -> list[dict]:
+async def tmdb_genres() -> dict[str, list[dict]]:
+    """Genres TMDB en français pour movie et tv — alimente le sélecteur de genres de la
+    recherche (TMDB ne filtre pas les genres en texte libre, ils sont recensés séparément)."""
+    return {
+        "movie": await tmdb_client.genres_fr("movie"),
+        "tv":    await tmdb_client.genres_fr("tv"),
+    }
+
+
+async def rechercher_tmdb(
+    query:          Optional[str]       = None,
+    media_type:     Optional[str]       = None,
+    genre_ids:      Optional[list[int]] = None,
+    annee_min:      Optional[int]       = None,
+    annee_max:      Optional[int]       = None,
+    origin_country: Optional[str]       = None,
+    page:           int                 = 1,
+) -> list[dict]:
     """
-    Recherche TMDB par titre. `media_type` : "movie" | "tv" | None (recherche les deux).
+    Recherche TMDB par titre et/ou filtres (genres, plage d'années, pays d'origine — ex: "KR"
+    pour ne voir que les séries/films coréens). `media_type` : "movie" | "tv" | None (les deux).
+
+    - Avec `query` : recherche texte TMDB, puis filtrage local par genre/année/pays (l'API de
+      recherche TMDB ne supporte pas ces filtres en même temps qu'un texte libre). Le pays est
+      vérifié via `origin_country` pour les séries (présent sur les résultats de recherche),
+      et via `original_language` pour les films (TMDB ne renvoie pas `origin_country` sur les
+      résultats de recherche film — seulement sur `/discover` — donc on approxime par la
+      langue originale typique du pays).
+    - Sans `query` : parcours TMDB par filtres (`/discover`), équivalent de la recherche
+      anime-sama.to sans titre — `with_origin_country` y est nativement supporté pour les
+      films ET les séries, donc le filtre pays est exact dans ce mode.
+
     Retourne des résultats légers avec `in_db` (comme la recherche combinée anime-sama.to).
     """
     types = [media_type] if media_type in ("movie", "tv") else ["movie", "tv"]
+    has_query = bool(query and query.strip())
 
     raw: list[tuple[dict, str]] = []
     for t in types:
-        for r in await tmdb_client.search(query, t):
-            raw.append((r, t))
+        if has_query:
+            for r in await tmdb_client.search(query.strip(), t, page=page):
+                raw.append((r, t))
+        else:
+            for r in await tmdb_client.discover(
+                t, genre_ids=genre_ids, annee_min=annee_min, annee_max=annee_max,
+                origin_country=origin_country, page=page,
+            ):
+                raw.append((r, t))
 
     slugs = [f"{t}-{r['id']}" for r, t in raw if r.get("id")]
     in_db = await repo.find_slugs(slugs)
@@ -86,6 +134,26 @@ async def rechercher_tmdb(query: str, media_type: Optional[str] = None) -> list[
         tmdb_id = r.get("id")
         if not tmdb_id:
             continue
+
+        annee = _annee_from_date(r.get("release_date") or r.get("first_air_date"))
+
+        # Filtrage local — uniquement nécessaire en mode recherche texte (le mode /discover
+        # applique déjà ces filtres côté TMDB).
+        if has_query:
+            if genre_ids and not (set(r.get("genre_ids", [])) & set(genre_ids)):
+                continue
+            if annee_min and (annee is None or annee < annee_min):
+                continue
+            if annee_max and (annee is None or annee > annee_max):
+                continue
+            if origin_country:
+                if t == "tv":
+                    if origin_country not in (r.get("origin_country") or []):
+                        continue
+                else:
+                    if r.get("original_language") != _COUNTRY_LANGUAGE.get(origin_country):
+                        continue
+
         slug = f"{t}-{tmdb_id}"
         results.append({
             "tmdb_id":    tmdb_id,
@@ -94,7 +162,7 @@ async def rechercher_tmdb(query: str, media_type: Optional[str] = None) -> list[
             "nom":        r.get("title") or r.get("name") or "",
             "image":      tmdb_client.image_url(r.get("poster_path"), "w342"),
             "synopsis":   r.get("overview"),
-            "annee":      _annee_from_date(r.get("release_date") or r.get("first_air_date")),
+            "annee":      annee,
             "note":       round(r["vote_average"], 1) if r.get("vote_average") else None,
             "in_db":      slug in in_db,
         })
@@ -124,7 +192,14 @@ async def ajouter_depuis_tmdb(media_type: str, tmdb_id: int) -> Optional[dict]:
     tmdb_url = f"https://www.themoviedb.org/{media_type}/{tmdb_id}"
 
     dispo = await vidzy_client.check_availability(tmdb_id)
-    langues = (dispo or {}).get("languages") or ["vf"]
+    if not dispo or not dispo.get("available", False):
+        # Vu en conditions réelles : Vidzy référence parfois un tmdb_id dans TMDB search
+        # sans avoir le fichier — ajouter quand même produirait un catalogue dont la
+        # lecture échoue systématiquement (404 sur le manifest résolu). Autant refuser
+        # l'ajout à la source plutôt que de laisser un catalogue "fantôme" injouable.
+        logger.warning(f"film_serie_service : '{slug}' indisponible sur Vidzy — ajout refusé")
+        return None
+    langues = dispo.get("languages") or ["vf"]
 
     catalogue = Catalogue(
         slug=slug,

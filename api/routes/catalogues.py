@@ -257,17 +257,39 @@ async def rechercher_sur_site_route(
     return results
 
 
+@router.get("/tmdb/genres", summary="Genres TMDB (films & séries) — pour filtrer la recherche")
+async def genres_tmdb_route():
+    """Retourne `{"movie": [...], "tv": [...]}`, chaque genre étant `{"id": int, "name": str}`
+    en français. Utilisé pour peupler un sélecteur de genres côté interface — TMDB ne permet
+    pas de filtrer par genre en texte libre, ce sont des IDs numériques distincts."""
+    from services.film_serie_service import tmdb_genres
+    return await tmdb_genres()
+
+
 @router.get("/tmdb/rechercher", summary="Recherche TMDB (films & séries — 2e source de contenu)")
 async def rechercher_tmdb_route(
-    q:    str           = Query(..., description="Titre recherché"),
-    type: Optional[str] = Query(None, description="movie | tv — omis = recherche les deux"),
+    q:         Optional[str] = Query(None, description="Titre recherché — omis = parcours par filtres seuls"),
+    type:      Optional[str] = Query(None, description="movie | tv — omis = recherche les deux"),
+    genre:     Optional[str] = Query(None, description="IDs de genres TMDB séparés par virgule"),
+    annee_min: Optional[int] = Query(None, description="Année de sortie minimum"),
+    annee_max: Optional[int] = Query(None, description="Année de sortie maximum"),
+    pays:      Optional[str] = Query(None, description="Pays d'origine — code ISO 3166-1 (ex: KR pour la Corée du Sud)"),
+    page:      int           = Query(1, ge=1),
 ):
-    """Recherche TMDB par titre, indépendante d'anime-sama.to. Chaque résultat porte `in_db`
-    (déjà ajouté au catalogue ou non) pour permettre de proposer l'ajout depuis l'interface."""
+    """Recherche TMDB par titre et/ou par filtres (genres, années, pays d'origine),
+    indépendante d'anime-sama.to. Chaque résultat porte `in_db` (déjà ajouté au catalogue ou
+    non) pour permettre de proposer l'ajout depuis l'interface."""
     from services.film_serie_service import rechercher_tmdb
     if type is not None and type not in ("movie", "tv"):
         raise HTTPException(422, "type doit être 'movie' ou 'tv'")
-    results = await rechercher_tmdb(q, type)
+    if not q and not genre and not annee_min and not annee_max and not pays:
+        raise HTTPException(422, "Fournir au moins un titre (q) ou un filtre (genre, annee_min, annee_max, pays)")
+
+    genre_ids = [int(g) for g in genre.split(",") if g.strip().isdigit()] if genre else None
+    results = await rechercher_tmdb(
+        q, type, genre_ids=genre_ids, annee_min=annee_min, annee_max=annee_max,
+        origin_country=pays.upper() if pays else None, page=page,
+    )
     if not results:
         raise HTTPException(status_code=404, detail="Aucun résultat TMDB")
     return results
@@ -289,7 +311,10 @@ async def ajouter_tmdb_route(
         raise HTTPException(422, "media_type doit être 'movie' ou 'tv'")
     catalogue = await ajouter_depuis_tmdb(media_type, tmdb_id)
     if not catalogue:
-        raise HTTPException(status_code=404, detail=f"'{media_type}/{tmdb_id}' introuvable sur TMDB")
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{media_type}/{tmdb_id}' introuvable sur TMDB, ou indisponible sur le lecteur Vidzy",
+        )
     return catalogue
 
 

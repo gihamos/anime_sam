@@ -16,6 +16,12 @@ public class SyncLibraryTask : IScheduledTask
 {
     private static readonly HttpClient ImageHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    // `Encoding.UTF8` écrit un BOM en tête de fichier — inoffensif pour le XML des .nfo (le
+    // BOM y est standard et les parseurs XML le gèrent nativement), mais certains lecteurs
+    // lisent le .strm comme une URL brute et échouent si le premier caractère n'est pas 'h'
+    // de "http…". `new UTF8Encoding(false)` écrit de l'UTF-8 sans BOM.
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+
     public string Name        => "Synchroniser la bibliothèque Anime Sama";
     public string Key         => "AnimeSamaSyncLibrary";
     public string Description => "Crée ou met à jour les fichiers vidéo (.strm/.mp4) et mangas (.cbz) dans la bibliothèque Anime Sama.";
@@ -245,7 +251,7 @@ public class SyncLibraryTask : IScheduledTask
         // dans l'ordre et bascule sur la suivante si la résolution échoue.
         var query = string.Join("&", urls.Select(u => $"url={Uri.EscapeDataString(u)}"));
         var streamUrl = $"{jellyfinBase}/AnimeSama/stream?{query}";
-        File.WriteAllText(strmPath, streamUrl, Encoding.UTF8);
+        File.WriteAllText(strmPath, streamUrl, Utf8NoBom);
     }
 
     private static async Task DownloadEpisodeAsync(

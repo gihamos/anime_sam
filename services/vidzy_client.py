@@ -19,6 +19,7 @@ Contrat identique aux autres clients externes du projet : ne lève jamais d'exce
 from __future__ import annotations
 
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from urllib.parse import urlparse
@@ -31,6 +32,18 @@ from utils.logger import logger
 # Pool dédié pour Playwright, séparé de celui de scraper.py (sources indépendantes,
 # on ne veut pas qu'une résolution Vidzy lente bloque un scraping anime-sama.to ou l'inverse).
 _executor = ThreadPoolExecutor(max_workers=2)
+
+# La résolution Playwright prend 3-10 s (navigateur headless réel) — recommencer cette
+# résolution à *chaque* clic sur lecture (y compris resélectionner la même vidéo quelques
+# secondes après) ajoute une latence perçue par le lecteur qui peut dépasser son propre délai
+# d'attente et déclencher une "erreur de lecture" côté client, alors que le serveur aurait
+# fini par répondre correctement. Le manifest signé reste valide ~48h côté Vidzy (e=172800
+# dans l'URL) — on peut donc réutiliser une résolution récente sans risque de rejouer un lien
+# expiré. Cache mémoire simple : clé = URL embed, valeur = (expiration, résultat).
+_resolve_cache: dict[str, tuple[float, Optional[dict]]] = {}
+_CACHE_TTL_OK     = 1800  # 30 min — largement sous les 48h de validité du lien signé
+_CACHE_TTL_FAILED = 120   # 2 min — évite de marteler Playwright sur un titre cassé,
+                          # mais retente vite au cas où l'échec précédent était transitoire
 
 # Referer/Origin exigés par le CDN vidzy.cc pour servir les segments/manifests HLS —
 # constants car toujours les mêmes quel que soit le titre (vérifié en conditions réelles).
@@ -120,6 +133,18 @@ def _resolve_embed_sync(url: str) -> Optional[dict]:
 
 
 async def resolve_embed(url: str) -> Optional[dict]:
-    """Wrapper async (thread pool dédié) de _resolve_embed_sync."""
+    """
+    Wrapper async (thread pool dédié) de _resolve_embed_sync, avec cache mémoire de courte
+    durée pour éviter de repayer la latence Playwright (3-10 s) à chaque tentative de lecture
+    du même titre — voir le commentaire sur `_resolve_cache` plus haut.
+    """
+    cached = _resolve_cache.get(url)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_executor, _resolve_embed_sync, url)
+    result = await loop.run_in_executor(_executor, _resolve_embed_sync, url)
+
+    ttl = _CACHE_TTL_OK if result else _CACHE_TTL_FAILED
+    _resolve_cache[url] = (time.monotonic() + ttl, result)
+    return result

@@ -95,11 +95,13 @@ export function ContentDialog({ open, onOpenChange, slug }: ContentDialogProps) 
 
         {!isLoading && contenu && (hasSaisons || hasFilms || hasScans) && (
           <Tabs defaultValue={defaultTab}>
-            <TabsList>
-              {hasSaisons && <TabsTrigger value="saisons">Saisons</TabsTrigger>}
-              {hasFilms && <TabsTrigger value="films">Films</TabsTrigger>}
-              {hasScans && <TabsTrigger value="scans">Scans</TabsTrigger>}
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList>
+                {hasSaisons && <TabsTrigger value="saisons">Saisons</TabsTrigger>}
+                {hasFilms && <TabsTrigger value="films">Films</TabsTrigger>}
+                {hasScans && <TabsTrigger value="scans">Scans</TabsTrigger>}
+              </TabsList>
+            </div>
 
             {hasSaisons && (
               <TabsContent value="saisons" className="space-y-3 pt-2">
@@ -127,7 +129,7 @@ export function ContentDialog({ open, onOpenChange, slug }: ContentDialogProps) 
 
                 {season && (
                   <ScrollArea className="h-64 rounded-lg border border-border p-2">
-                    <div className="grid grid-cols-6 gap-1.5">
+                    <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
                       {season.episodes.map((ep) => (
                         <EpisodeChip
                           key={ep.numero}

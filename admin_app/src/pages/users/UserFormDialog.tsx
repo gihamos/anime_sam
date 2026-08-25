@@ -126,7 +126,7 @@ export function UserFormDialog({ open, onOpenChange, user }: UserFormDialogProps
           </DialogDescription>
         </DialogHeader>
         <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="uf-username">Nom d'utilisateur</Label>
               <Input
@@ -154,7 +154,7 @@ export function UserFormDialog({ open, onOpenChange, user }: UserFormDialogProps
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Rôle</Label>
               <Select value={role} onValueChange={(v) => setRole(v as Role)}>
@@ -186,7 +186,7 @@ export function UserFormDialog({ open, onOpenChange, user }: UserFormDialogProps
               <Switch checked={quota.enabled} onCheckedChange={(v) => setQuota({ ...quota, enabled: v })} />
             </div>
             {quota.enabled && (
-              <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
                 <div className="space-y-1.5">
                   <Label htmlFor="uf-quota-max" className="text-xs">Maximum</Label>
                   <Input

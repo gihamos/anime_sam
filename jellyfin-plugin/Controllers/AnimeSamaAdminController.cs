@@ -65,20 +65,45 @@ public class AnimeSamaAdminController : ControllerBase
         return Ok(status);
     }
 
+    // ── Genres (anime-sama.to + TMDB) — pour le sélecteur de la recherche unifiée ──
+
+    [HttpGet("genres")]
+    public async Task<IActionResult> Genres([FromQuery] string source, CancellationToken ct)
+    {
+        var client = Plugin.Instance?.ApiClient;
+        if (client is null) return StatusCode(503, "Plugin non initialisé.");
+
+        if (source == "tmdb")
+        {
+            var tmdbGenres = await client.GetTmdbGenresAsync(ct).ConfigureAwait(false);
+            return Ok(tmdbGenres ?? new TmdbGenresResponse());
+        }
+
+        var genres = await client.GetAnimeSamaGenresAsync(ct).ConfigureAwait(false);
+        return Ok(genres);
+    }
+
     // ── Films & séries (TMDB + Vidzy — source indépendante d'anime-sama.to) ────
 
     [HttpGet("tmdb-search")]
     public async Task<IActionResult> TmdbSearch(
-        [FromQuery] string  q,
-        [FromQuery] string? type = null,
-        CancellationToken   ct   = default)
+        [FromQuery] string?  q         = null,
+        [FromQuery] string?  type      = null,
+        [FromQuery] string?  genre     = null,
+        [FromQuery] int?     anneeMin  = null,
+        [FromQuery] int?     anneeMax  = null,
+        [FromQuery] string?  pays      = null,
+        [FromQuery] int      page      = 1,
+        CancellationToken    ct        = default)
     {
-        if (string.IsNullOrWhiteSpace(q)) return BadRequest("Paramètre 'q' manquant.");
+        if (string.IsNullOrWhiteSpace(q) && string.IsNullOrWhiteSpace(genre)
+            && !anneeMin.HasValue && !anneeMax.HasValue && string.IsNullOrWhiteSpace(pays))
+            return BadRequest("Fournir un titre (q) ou au moins un filtre (genre, anneeMin, anneeMax, pays).");
 
         var client = Plugin.Instance?.ApiClient;
         if (client is null) return StatusCode(503, "Plugin non initialisé.");
 
-        var results = await client.SearchTmdbAsync(q, type, ct).ConfigureAwait(false);
+        var results = await client.SearchTmdbAsync(q, type, genre, anneeMin, anneeMax, pays, page, ct).ConfigureAwait(false);
         return Ok(results);
     }
 

@@ -211,13 +211,7 @@ async def sync_content_bg(
             return total_loaded
         nom = saison.get("nom", f"Saison {i}")
         url = _ensure_absolute_url(saison.get("url", ""), slug)
-
-        if saison.get("episodes"):
-            logger.info(f"sync [{slug}] saison {i} déjà présente, ignorée")
-            await _emit({"type": "saison_skip", "index": i, "nom": nom,
-                         "reason": "already_synced"})
-            steps_done += 1
-            continue
+        existing_episodes = saison.get("episodes") or []
 
         if not url:
             await _emit({"type": "saison_skip", "index": i, "nom": nom,
@@ -225,15 +219,25 @@ async def sync_content_bg(
             steps_done += 1
             continue
 
+        # Toujours re-scraper la liste des épisodes, même si la saison est déjà en base —
+        # sinon un nouvel épisode publié sur le site n'est jamais détecté (une saison en
+        # cours accumule des épisodes au fil des semaines). Le coût est une requête par
+        # saison, comme lors du premier sync ; on n'écrit en DB que si le résultat a changé.
         await _emit({"type": "saison_start", "index": i, "nom": nom, "url": url})
-        logger.info(f"sync [{slug}] chargement saison {i} : {url}")
+        logger.info(f"sync [{slug}] vérification saison {i} : {url}")
 
         raw = await scraper.get_episodes(url)
         # Vérifier l'annulation dès que le scraper rend la main
         if not await _check():
             return total_loaded
         if not raw:
-            await _emit({"type": "saison_error", "index": i, "nom": nom})
+            # Échec de scraping transitoire : si la saison était déjà synchronisée, ne pas
+            # effacer les épisodes existants — les considérer à jour plutôt qu'en erreur.
+            if existing_episodes:
+                await _emit({"type": "saison_skip", "index": i, "nom": nom,
+                             "reason": "already_synced"})
+            else:
+                await _emit({"type": "saison_error", "index": i, "nom": nom})
             steps_done += 1
             continue
 
@@ -246,6 +250,14 @@ async def sync_content_bg(
             }
             for ep_num, lecteurs in raw.items()
         ]
+
+        # Même nombre d'épisodes qu'en base → rien de neuf, pas besoin de ré-écrire.
+        if existing_episodes and len(episodes) == len(existing_episodes):
+            await _emit({"type": "saison_skip", "index": i, "nom": nom,
+                         "reason": "already_synced"})
+            steps_done += 1
+            continue
+
         await repo.update_saison_episodes(slug, i, episodes)
         total_loaded += len(episodes)
         steps_done   += 1
@@ -257,7 +269,10 @@ async def sync_content_bg(
             "episodes_count": len(episodes),
             "progress":       round(steps_done / total_steps * 100) if total_steps else 100,
         })
-        logger.info(f"sync [{slug}] saison {i} : {len(episodes)} épisodes sauvegardés")
+        logger.info(
+            f"sync [{slug}] saison {i} : {len(episodes)} épisodes sauvegardés "
+            f"(était {len(existing_episodes)})"
+        )
 
     # --- Films ---
     for j, film in films:

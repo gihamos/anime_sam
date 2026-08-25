@@ -176,7 +176,7 @@ export function CataloguesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Catalogues</h1>
           <p className="text-sm text-muted-foreground">Animes, films, séries et scans du catalogue.</p>
@@ -220,9 +220,9 @@ export function CataloguesPage() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
           <p className="text-sm font-medium">{selected.size} sélectionné(s)</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={handleBulkRefresh} disabled={bulkRefresh.isPending}>
               {bulkRefresh.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
               Rafraîchir

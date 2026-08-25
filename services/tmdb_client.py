@@ -23,6 +23,7 @@ from utils.logger import logger
 # Cache mémoire simple : la liste des genres TMDB est quasi statique, pas besoin de la
 # re-télécharger à chaque appel. Clé = media_type ("movie" | "tv"), valeur = {id: name}.
 _genre_cache_en: dict[str, dict[int, str]] = {}
+_genre_cache_fr: dict[str, list[dict]] = {}
 
 
 def image_url(path: Optional[str], size: str = "original") -> Optional[str]:
@@ -69,9 +70,53 @@ async def search(query: str, media_type: str, page: int = 1) -> list[dict]:
     """
     Recherche par titre. `media_type` : "movie" | "tv".
     Retourne les résultats bruts TMDB (liste vide si échec ou aucun résultat).
+    Chaque résultat porte `genre_ids` (liste d'IDs) — pas d'objets genres complets,
+    utilisable pour un filtrage par genre côté appelant sans requête supplémentaire.
     """
     data = await _get(f"/search/{media_type}", {"query": query, "language": "fr-FR", "page": page})
     return (data or {}).get("results", []) or []
+
+
+async def discover(
+    media_type: str,
+    genre_ids: Optional[list[int]] = None,
+    annee_min: Optional[int] = None,
+    annee_max: Optional[int] = None,
+    origin_country: Optional[str] = None,
+    page: int = 1,
+) -> list[dict]:
+    """
+    Parcourt le catalogue TMDB par filtres (genres/années/pays d'origine), sans titre — utilisé
+    quand la recherche ne porte que sur des critères (comme la recherche avancée
+    anime-sama.to, qui permet de chercher sans titre). `media_type` : "movie" | "tv".
+    `origin_country` : code ISO 3166-1 (ex: "KR" pour la Corée du Sud) — `with_origin_country`
+    est supporté nativement par `/discover` pour les films ET les séries (vérifié en direct).
+    """
+    date_field = "primary_release_date" if media_type == "movie" else "first_air_date"
+    params: dict = {"language": "fr-FR", "page": page, "sort_by": "popularity.desc"}
+    if genre_ids:
+        params["with_genres"] = ",".join(str(g) for g in genre_ids)
+    if annee_min:
+        params[f"{date_field}.gte"] = f"{annee_min}-01-01"
+    if annee_max:
+        params[f"{date_field}.lte"] = f"{annee_max}-12-31"
+    if origin_country:
+        params["with_origin_country"] = origin_country
+
+    data = await _get(f"/discover/{media_type}", params)
+    return (data or {}).get("results", []) or []
+
+
+async def genres_fr(media_type: str) -> list[dict]:
+    """Table [{id, name}] des genres en français — mise en cache mémoire, pour peupler un
+    sélecteur de genres côté interface (recherche TMDB par genre)."""
+    if media_type in _genre_cache_fr:
+        return _genre_cache_fr[media_type]
+
+    data = await _get(f"/genre/{media_type}/list", {"language": "fr-FR"})
+    table = (data or {}).get("genres", []) or []
+    _genre_cache_fr[media_type] = table
+    return table
 
 
 async def get_details(tmdb_id: int, media_type: str) -> Optional[dict]:
