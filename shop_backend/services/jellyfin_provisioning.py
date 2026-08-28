@@ -8,9 +8,11 @@ réauthentification username/password au runtime.
 
 Noms de champs `UserPolicy` vérifiés en conditions réelles contre l'instance Jellyfin de
 production (version 10.11.11) avant l'écriture de ce module : EnabledFolders,
-EnableAllFolders, EnableContentDownloading, MaxActiveSessions, IsDisabled — cycle de vie
-complet (création, mot de passe, policy, désactivation, suppression) testé de bout en bout
-sur un compte jetable.
+EnableAllFolders, EnableContentDownloading, MaxActiveSessions, IsDisabled,
+MaxParentalRating — cycle de vie complet (création, mot de passe, policy, désactivation,
+suppression) testé de bout en bout sur un compte jetable, y compris le filtrage réel du
+catalogue par classification d'âge (un titre TV-MA masqué avec MaxParentalRating=12, un
+TV-PG resté visible).
 
 Contrat identique aux autres clients externes du projet (cf. anime_sam/services/*.py) :
 ne lève jamais d'exception vers l'appelant, retourne None/False en cas d'échec et logue.
@@ -63,15 +65,39 @@ async def create_user(username: str) -> Optional[tuple[str, str]]:
     return jellyfin_user_id, password
 
 
+async def set_password(jellyfin_user_id: str, new_password: str) -> bool:
+    """Change le mot de passe Jellyfin d'un compte déjà provisionné — appelé quand le client
+    (ou l'admin) change le mot de passe de son compte boutique, pour garder les deux
+    synchronisés (un seul mot de passe à retenir pour le client)."""
+    try:
+        async with _client() as c:
+            r = await c.post(f"/Users/{jellyfin_user_id}/Password", json={
+                "CurrentPw": "", "NewPw": new_password,
+            })
+            if r.status_code not in (200, 204):
+                logger.warning(f"Jellyfin : échec changement de mot de passe {jellyfin_user_id} — {r.status_code} {r.text}")
+                return False
+            return True
+    except Exception as exc:
+        logger.warning(f"Jellyfin : erreur réseau changement de mot de passe {jellyfin_user_id} — {exc}")
+        return False
+
+
 async def set_library_access(
     jellyfin_user_id: str,
     folder_ids: list[str],
     max_devices: int,
     allow_downloads: bool,
     enabled: bool,
+    max_parental_rating: Optional[int] = None,
 ) -> bool:
-    """Applique l'accès bibliothèques/appareils/téléchargement. Jellyfin ne fusionne pas les
-    policies partielles : on récupère la policy actuelle, on la mute, on la renvoie entière."""
+    """Applique l'accès bibliothèques/appareils/téléchargement/restriction d'âge. Jellyfin ne
+    fusionne pas les policies partielles : on récupère la policy actuelle, on la mute, on la
+    renvoie entière.
+
+    max_parental_rating : seuil UserPolicy.MaxParentalRating (vérifié en conditions réelles —
+    Jellyfin compare ce seuil au score de classification de chaque titre, ex. TV-MA/FR-16,
+    et masque tout ce qui le dépasse). None = aucune restriction d'âge."""
     try:
         async with _client() as c:
             r = await c.get(f"/Users/{jellyfin_user_id}")
@@ -85,6 +111,7 @@ async def set_library_access(
             policy["EnabledFolders"]           = folder_ids if enabled else []
             policy["EnableContentDownloading"] = allow_downloads and enabled
             policy["MaxActiveSessions"]        = max_devices if enabled else 0
+            policy["MaxParentalRating"]        = max_parental_rating if enabled else None
 
             r2 = await c.post(f"/Users/{jellyfin_user_id}/Policy", json=policy)
             if r2.status_code not in (200, 204):
@@ -97,8 +124,14 @@ async def set_library_access(
     return True
 
 
-async def enable_user(jellyfin_user_id: str, folder_ids: list[str], max_devices: int, allow_downloads: bool) -> bool:
-    return await set_library_access(jellyfin_user_id, folder_ids, max_devices, allow_downloads, enabled=True)
+async def enable_user(
+    jellyfin_user_id: str, folder_ids: list[str], max_devices: int, allow_downloads: bool,
+    max_parental_rating: Optional[int] = None,
+) -> bool:
+    return await set_library_access(
+        jellyfin_user_id, folder_ids, max_devices, allow_downloads, enabled=True,
+        max_parental_rating=max_parental_rating,
+    )
 
 
 async def disable_user(jellyfin_user_id: str) -> bool:

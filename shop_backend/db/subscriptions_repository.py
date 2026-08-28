@@ -87,6 +87,19 @@ async def update(sid: str, fields: dict) -> bool:
     return r.matched_count > 0
 
 
+async def delete(sid: str) -> bool:
+    """Réservé au rollback d'une souscription 'pending' jamais confirmée côté fournisseur
+    (ex. échec de création côté PayPal juste après création du document local) — un
+    abonnement qui a réellement existé côté fournisseur ne doit jamais être supprimé,
+    seulement transitionné de statut (historique de facturation)."""
+    oid = _oid(sid)
+    if not oid:
+        return False
+    db = get_db()
+    r = await db[COLLECTION].delete_one({"_id": oid})
+    return r.deleted_count > 0
+
+
 async def count_by_plan(plan_id: str) -> int:
     db = get_db()
     return await db[COLLECTION].count_documents({
@@ -105,3 +118,16 @@ async def list_expiring_cancellations(before_iso: str) -> list[dict]:
         "current_period_end": {"$lt": before_iso},
     }).to_list(None)
     return [_clean(d) for d in docs]
+
+
+async def delete_stale_pending(before_iso: str) -> int:
+    """Supprime les tentatives 'pending' jamais finalisées côté PayPal (approbation
+    abandonnée, onglet fermé...) et créées avant `before_iso` — filet de sécurité pour les
+    clients qui n'ont jamais cliqué sur 'annuler' eux-mêmes (cf. self-service dans
+    api/routes/billing.py). Retourne le nombre supprimé."""
+    db = get_db()
+    r = await db[COLLECTION].delete_many({
+        "status": "pending",
+        "created_at": {"$lt": before_iso},
+    })
+    return r.deleted_count

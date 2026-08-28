@@ -15,9 +15,14 @@ import { TicketsPage } from '@/pages/account/TicketsPage'
 import { TicketDetailPage } from '@/pages/account/TicketDetailPage'
 import { CheckoutReturnPage } from '@/pages/account/CheckoutReturnPage'
 import { CheckoutCancelPage } from '@/pages/account/CheckoutCancelPage'
+import { AccountSettingsPage } from '@/pages/account/AccountSettingsPage'
 import { PlansAdminPage } from '@/pages/admin/PlansAdminPage'
 import { SubscriptionsAdminPage } from '@/pages/admin/SubscriptionsAdminPage'
+import { CustomersAdminPage } from '@/pages/admin/CustomersAdminPage'
 import { TicketsAdminPage } from '@/pages/admin/TicketsAdminPage'
+import { StatsAdminPage } from '@/pages/admin/StatsAdminPage'
+import { PromotionsAdminPage } from '@/pages/admin/PromotionsAdminPage'
+import { SyncAdminPage } from '@/pages/admin/SyncAdminPage'
 
 function LoadingScreen() {
   return (
@@ -67,12 +72,17 @@ function App() {
         <Route path="/compte/tickets/:ticketId" element={<TicketDetailPage />} />
         <Route path="/compte/paiement/retour" element={<CheckoutReturnPage />} />
         <Route path="/compte/paiement/annule" element={<CheckoutCancelPage />} />
+        <Route path="/compte/parametres" element={<AccountSettingsPage />} />
       </Route>
 
       <Route element={<AdminOnly />}>
+        <Route path="/admin/statistiques" element={<StatsAdminPage />} />
         <Route path="/admin/offres" element={<PlansAdminPage />} />
+        <Route path="/admin/promotions" element={<PromotionsAdminPage />} />
         <Route path="/admin/abonnements" element={<SubscriptionsAdminPage />} />
+        <Route path="/admin/clients" element={<CustomersAdminPage />} />
         <Route path="/admin/tickets" element={<TicketsAdminPage />} />
+        <Route path="/admin/synchronisation" element={<SyncAdminPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

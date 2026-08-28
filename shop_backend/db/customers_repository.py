@@ -21,6 +21,11 @@ async def update_customer(username: str, fields: dict) -> bool:
     return result.modified_count > 0
 
 
+async def delete_customer(username: str) -> bool:
+    result = await _col().delete_one({"username": username})
+    return result.deleted_count > 0
+
+
 async def count_customers() -> int:
     return await _col().count_documents({})
 

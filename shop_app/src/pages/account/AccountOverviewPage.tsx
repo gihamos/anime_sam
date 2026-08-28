@@ -50,19 +50,37 @@ export function AccountOverviewPage() {
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <div>
                 <h2 className="text-base font-semibold">{subscription.plan_name ?? 'Palier'}</h2>
-                <p className="text-sm text-muted-foreground">Renouvellement le {formatDate(subscription.current_period_end)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {subscription.auto_renew && !subscription.cancel_at_period_end ? 'Renouvellement' : 'Expire'} le {formatDate(subscription.current_period_end)}
+                </p>
               </div>
-              <Badge variant={STATUS_LABELS[subscription.status]?.variant ?? 'secondary'}>
-                {STATUS_LABELS[subscription.status]?.label ?? subscription.status}
-              </Badge>
+              <div className="flex flex-col items-end gap-1.5">
+                <Badge variant={STATUS_LABELS[subscription.status]?.variant ?? 'secondary'}>
+                  {STATUS_LABELS[subscription.status]?.label ?? subscription.status}
+                </Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  {subscription.auto_renew ? 'Renouvellement auto' : 'Paiement unique'}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {subscription.cancel_at_period_end && (
+              {subscription.status === 'cancelled' && (
                 <Alert>
                   <AlertTriangle className="size-4" />
                   <AlertTitle>Abonnement annulé</AlertTitle>
                   <AlertDescription>
                     Votre accès reste actif jusqu'au {formatDate(subscription.current_period_end)}, puis sera désactivé automatiquement.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {subscription.status === 'active' && !subscription.auto_renew && (
+                <Alert>
+                  <AlertTriangle className="size-4" />
+                  <AlertTitle>Paiement unique — pas de renouvellement</AlertTitle>
+                  <AlertDescription>
+                    Votre accès expirera le {formatDate(subscription.current_period_end)}. Repassez par
+                    la page des tarifs pour continuer au-delà de cette date.
                   </AlertDescription>
                 </Alert>
               )}

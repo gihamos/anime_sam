@@ -90,16 +90,20 @@ class PayPalProvider(PaymentProvider):
 
     async def create_billing_plan(
         self, *, product_id: str, plan_name: str, description: str,
-        price: float, currency: str, billing_period: str,
+        price: float, currency: str, duration_days: int,
     ) -> str:
-        interval_unit = "MONTH" if billing_period == "month" else "YEAR"
         async with await self._client() as c:
             r = await c.post("/v1/billing/plans", json={
                 "product_id":  product_id,
                 "name":        plan_name,
-                "description": description,
+                # PayPal rejette une description vide (INVALID_STRING_MIN_LENGTH) — repli sur
+                # le nom du palier si l'admin n'a pas renseigné de description.
+                "description": description or plan_name,
                 "billing_cycles": [{
-                    "frequency": {"interval_unit": interval_unit, "interval_count": 1},
+                    # Frequency en jours — vérifié en conditions réelles (DAY est un
+                    # interval_unit valide) : correspond exactement à duration_days, plus
+                    # précis qu'un mapping mois/année approximatif.
+                    "frequency": {"interval_unit": "DAY", "interval_count": duration_days},
                     "tenure_type": "REGULAR",
                     "sequence": 1,
                     "total_cycles": 0,  # 0 = infini (récurrent tant que non annulé)
@@ -127,7 +131,7 @@ class PayPalProvider(PaymentProvider):
                 "application_context": {
                     "return_url": return_url,
                     "cancel_url": cancel_url,
-                    "user_action": "SUBSCRIBE",
+                    "user_action": "SUBSCRIBE_NOW",
                 },
             })
             r.raise_for_status()
@@ -137,6 +141,48 @@ class PayPalProvider(PaymentProvider):
             (l["href"] for l in data.get("links", []) if l.get("rel") == "approve"), "",
         )
         return CheckoutSession(provider_subscription_id=data["id"], approval_url=approve_url)
+
+    # ------------------------------------------------------------------
+    # Paiement unique (pas de renouvellement automatique)
+    # ------------------------------------------------------------------
+
+    async def create_one_time_checkout(
+        self, *, price: float, currency: str, return_url: str, cancel_url: str, custom_id: str,
+    ) -> CheckoutSession:
+        async with await self._client() as c:
+            r = await c.post("/v2/checkout/orders", json={
+                "intent": "CAPTURE",
+                "purchase_units": [{
+                    "custom_id": custom_id,
+                    "amount": {"currency_code": currency, "value": f"{price:.2f}"},
+                }],
+                "application_context": {
+                    "return_url": return_url,
+                    "cancel_url": cancel_url,
+                    "user_action": "PAY_NOW",
+                },
+            })
+            r.raise_for_status()
+            data = r.json()
+
+        approve_url = next(
+            (l["href"] for l in data.get("links", []) if l.get("rel") == "approve"), "",
+        )
+        return CheckoutSession(provider_subscription_id=data["id"], approval_url=approve_url)
+
+    async def capture_one_time_payment(self, order_id: str) -> dict:
+        async with await self._client() as c:
+            r = await c.post(f"/v2/checkout/orders/{order_id}/capture")
+            r.raise_for_status()
+            data = r.json()
+
+        capture = data["purchase_units"][0]["payments"]["captures"][0]
+        return {
+            "status":      capture["status"],
+            "payment_id":  capture["id"],
+            "amount":      float(capture["amount"]["value"]),
+            "currency":    capture["amount"]["currency_code"],
+        }
 
     async def get_subscription_status(self, provider_subscription_id: str) -> dict:
         async with await self._client() as c:

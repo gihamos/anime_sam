@@ -35,6 +35,33 @@ from services import downloader
 
 router = APIRouter(prefix="/api/stream", tags=["Stream"])
 
+# Client HTTP partagé pour /proxy — un épisode HLS peut représenter des centaines de
+# segments, et ouvrir un httpx.AsyncClient() par requête (comme avant) rouvre une connexion
+# TCP+TLS neuve à chaque segment au lieu de réutiliser une connexion déjà établie vers le
+# même hôte (keep-alive). Constaté en conditions réelles : des segments qui devraient se
+# récupérer en < 1 s prenaient 5-15 s, avec des redémarrages complets du flux (Jellyfin
+# rejouant le manifest depuis le début) toutes les quelques minutes — cohérent avec des
+# connexions lentes/instables plutôt qu'un vrai problème de source. Un client unique, créé
+# au démarrage de l'app et fermé à l'arrêt (voir init_client/close_client, câblés dans
+# main.py), garde un pool de connexions persistantes par hôte.
+_client: Optional[httpx.AsyncClient] = None
+
+
+def init_client() -> None:
+    global _client
+    _client = httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30.0,
+        limits=httpx.Limits(max_connections=200, max_keepalive_connections=50, keepalive_expiry=30.0),
+    )
+
+
+async def close_client() -> None:
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
 # ── Auth pour /proxy : header Bearer OU ?token= (requis pour les lecteurs vidéo) ──
 
 _oauth2_optional_query = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
@@ -216,11 +243,10 @@ async def proxy_stream(
     if range_header:
         upstream_headers["Range"] = range_header
 
-    client = httpx.AsyncClient(follow_redirects=True, timeout=30.0)
+    assert _client is not None, "init_client() doit être appelé au démarrage de l'app"
     try:
-        upstream = await _fetch_with_retry(client, url, upstream_headers)
+        upstream = await _fetch_with_retry(_client, url, upstream_headers)
     except httpx.HTTPError as exc:
-        await client.aclose()
         raise HTTPException(status_code=502, detail=f"Erreur en amont : {exc}")
 
     content_type = upstream.headers.get("content-type", "")
@@ -237,7 +263,6 @@ async def proxy_stream(
     if is_manifest:
         body = await upstream.aread()
         await upstream.aclose()
-        await client.aclose()
         text = body.decode("utf-8", errors="ignore")
         rewritten = _rewrite_m3u8(text, url, referer, ua, token or "")
         return Response(content=rewritten, media_type="application/vnd.apple.mpegurl")
@@ -248,7 +273,6 @@ async def proxy_stream(
                 yield chunk
         finally:
             await upstream.aclose()
-            await client.aclose()
 
     passthrough_headers = {}
     for h in ("content-length", "content-range", "accept-ranges", "content-type"):

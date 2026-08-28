@@ -19,6 +19,7 @@ Contrat identique aux autres clients externes du projet : ne lève jamais d'exce
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
@@ -32,6 +33,56 @@ from utils.logger import logger
 # Pool dédié pour Playwright, séparé de celui de scraper.py (sources indépendantes,
 # on ne veut pas qu'une résolution Vidzy lente bloque un scraping anime-sama.to ou l'inverse).
 _executor = ThreadPoolExecutor(max_workers=2)
+
+# Navigateur Chromium persistant, un par thread du pool (sync_playwright — voir
+# services/scraper.py pour la justification Windows — est lié au thread qui l'a démarré,
+# donc pas de partage entre threads possible). Avant, un navigateur complet était relancé à
+# CHAQUE résolution (~0.5-1.5 s de démarrage Chromium en plus des 3-10 s de résolution) —
+# constaté en conditions réelles comme une part significative de la lenteur perçue, en plus
+# de la charge CPU/mémoire inutile qui pouvait faire échouer une résolution concurrente sous
+# charge. Avec 2 threads dans l'executor, au plus 2 navigateurs vivent en permanence après
+# préchauffe — même budget mémoire que prévu par le commentaire ci-dessus (~300 Mo/instance).
+_thread_local = threading.local()
+
+
+def _get_browser():
+    """Retourne le navigateur du thread courant, le (re)lançant si besoin (première
+    utilisation de ce thread, ou navigateur mort — crash/OOM)."""
+    browser = getattr(_thread_local, "browser", None)
+    if browser is not None:
+        try:
+            if browser.is_connected():
+                return browser
+        except Exception:
+            pass
+        _reset_browser()
+
+    from playwright.sync_api import sync_playwright
+
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=True)
+    _thread_local.pw = pw
+    _thread_local.browser = browser
+    return browser
+
+
+def _reset_browser() -> None:
+    """Ferme proprement le navigateur/playwright du thread courant (s'ils existent) et
+    efface l'état — le prochain appel à _get_browser() en relance des neufs."""
+    pw = getattr(_thread_local, "pw", None)
+    browser = getattr(_thread_local, "browser", None)
+    _thread_local.browser = None
+    _thread_local.pw = None
+    try:
+        if browser is not None:
+            browser.close()
+    except Exception:
+        pass
+    try:
+        if pw is not None:
+            pw.stop()
+    except Exception:
+        pass
 
 # La résolution Playwright prend 3-10 s (navigateur headless réel) — recommencer cette
 # résolution à *chaque* clic sur lecture (y compris resélectionner la même vidéo quelques
@@ -92,26 +143,40 @@ def _resolve_embed_sync(url: str) -> Optional[dict]:
     que downloader._resolve_sync (url/audio_url/ext/protocol/headers/title/duration/merged) —
     pour rester un drop-in dans le pipeline de résolution existant.
     """
-    from playwright.sync_api import sync_playwright
-
-    requests_seen: list[str] = []
+    try:
+        browser = _get_browser()
+    except Exception as exc:
+        logger.warning(f"Vidzy : impossible de démarrer Chromium — {exc}")
+        return None
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.on("request", lambda req: requests_seen.append(req.url))
-            try:
-                page.goto(url, timeout=20000, wait_until="networkidle")
-            except Exception:
-                # Un flux qui continue de streamer peut empêcher "networkidle" d'être atteint —
-                # sans gravité, le manifest a très probablement déjà été demandé à ce stade.
-                pass
-            title = page.title()
-            browser.close()
+        page = browser.new_page()
+    except Exception as exc:
+        # Le navigateur du thread est dans un état invalide (ex. crashé entre deux appels) —
+        # on le jette pour qu'il soit relancé au prochain appel, plutôt que de rester bloqué
+        # à échouer indéfiniment sur ce même navigateur mort.
+        logger.warning(f"Vidzy : navigateur indisponible, relance au prochain appel — {exc}")
+        _reset_browser()
+        return None
+
+    requests_seen: list[str] = []
+    try:
+        page.on("request", lambda req: requests_seen.append(req.url))
+        try:
+            page.goto(url, timeout=20000, wait_until="networkidle")
+        except Exception:
+            # Un flux qui continue de streamer peut empêcher "networkidle" d'être atteint —
+            # sans gravité, le manifest a très probablement déjà été demandé à ce stade.
+            pass
+        title = page.title()
     except Exception as exc:
         logger.warning(f"Vidzy : échec résolution Playwright pour {url!r} — {exc}")
         return None
+    finally:
+        try:
+            page.close()
+        except Exception:
+            pass
 
     master = next((u for u in requests_seen if "master.m3u8" in u), None) \
         or next((u for u in requests_seen if ".m3u8" in u), None)

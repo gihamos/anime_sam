@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { LibraryFolder, PlanAdmin } from '@/api/types'
+import type { DiscountType, LibraryFolder, PlanAdmin } from '@/api/types'
 
 const PLANS_KEY = ['admin', 'plans']
 
@@ -10,13 +10,17 @@ export interface PlanFormValues {
   description: string
   price: number
   currency: string
-  billing_period: string
+  duration_days: number
   jellyfin_library_folder_ids: string[]
   jellyfin_library_names: string[]
   max_devices: number
   allow_downloads: boolean
   is_active: boolean
   sort_order: number
+  discount_type: DiscountType | null
+  discount_value: number | null
+  discount_expires_at: string | null
+  max_parental_rating: number | null
 }
 
 export function useAdminPlans() {

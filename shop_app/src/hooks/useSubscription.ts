@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Payment, SubscriptionDetail } from '@/api/types'
+import type { Payment, PromoPreview, SubscriptionDetail } from '@/api/types'
 
 const SUBSCRIPTION_KEY = ['me', 'subscription']
 const PAYMENTS_KEY = ['me', 'payments']
@@ -27,13 +27,29 @@ export function useMyPayments() {
 
 export function useSubscribe() {
   return useMutation({
-    mutationFn: async (planId: string) => {
+    mutationFn: async ({
+      planId, autoRenew, promoCode,
+    }: { planId: string; autoRenew: boolean; promoCode?: string }) => {
       const { data } = await apiClient.post<{ subscription_id: string; approval_url: string }>(
         '/billing/subscribe',
-        { plan_id: planId },
+        { plan_id: planId, auto_renew: autoRenew, promo_code: promoCode || null },
       )
       return data
     },
+  })
+}
+
+export function usePromoPreview(code: string, planId: string | null) {
+  return useQuery({
+    queryKey: ['promo-preview', code, planId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<PromoPreview>(
+        `/billing/promo/${encodeURIComponent(code)}?plan_id=${encodeURIComponent(planId as string)}`,
+      )
+      return data
+    },
+    enabled: !!code && !!planId,
+    retry: false,
   })
 }
 

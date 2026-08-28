@@ -2,6 +2,8 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
+from models.promotion import DiscountType
+
 
 # ══════════════════════════════════════════════════════════════════════════
 #  AUTHENTIFICATION
@@ -24,6 +26,15 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class CustomerCreatedResponse(BaseModel):
+    username:          str
+    email:              Optional[str] = None
+    generated_password: Optional[str] = Field(
+        default=None,
+        description="Révélé une seule fois — null si l'admin a fourni son propre mot de passe à la création.",
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  PLANS
 # ══════════════════════════════════════════════════════════════════════════
@@ -37,11 +48,18 @@ class PlanPublic(BaseModel):
     description:            str
     price:                  float
     currency:               str
-    billing_period:         str
+    duration_days:          int
     jellyfin_library_names: list[str] = Field(default_factory=list)
     max_devices:            int
     allow_downloads:        bool
     sort_order:              int = 0
+    discount_type:            Optional[DiscountType] = None
+    discount_value:             Optional[float]        = None
+    discount_expires_at:          Optional[str]         = None
+    discounted_price:               Optional[float]     = Field(
+        default=None, description="Prix après réduction active du palier, ou null si aucune réduction en cours."
+    )
+    max_parental_rating:               Optional[int]     = None
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -58,6 +76,7 @@ class SubscriptionDetail(BaseModel):
     plan_id:                            str
     plan_name:                          Optional[str] = None
     status:                              str
+    auto_renew:                           bool = True
     cancel_at_period_end:                 bool = False
     current_period_end:                    Optional[str] = None
     jellyfin_username:                      Optional[str] = None

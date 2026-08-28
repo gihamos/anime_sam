@@ -3,12 +3,16 @@ import {
   User,
   Receipt,
   LifeBuoy,
+  Settings,
   LayoutGrid,
   Users,
   Ticket,
   LogOut,
   Sun,
   Moon,
+  BarChart3,
+  Tag,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
@@ -21,12 +25,17 @@ const CUSTOMER_NAV = [
   { to: '/compte', label: 'Mon compte', icon: User },
   { to: '/compte/facturation', label: 'Facturation', icon: Receipt },
   { to: '/compte/tickets', label: 'Support', icon: LifeBuoy },
+  { to: '/compte/parametres', label: 'Paramètres', icon: Settings },
 ]
 
 const ADMIN_NAV = [
+  { to: '/admin/statistiques', label: 'Statistiques', icon: BarChart3 },
   { to: '/admin/offres', label: 'Offres', icon: LayoutGrid },
+  { to: '/admin/promotions', label: 'Promotions', icon: Tag },
   { to: '/admin/abonnements', label: 'Abonnements', icon: Users },
+  { to: '/admin/clients', label: 'Clients', icon: User },
   { to: '/admin/tickets', label: 'Tickets', icon: Ticket },
+  { to: '/admin/synchronisation', label: 'Synchronisation', icon: RefreshCw },
 ]
 
 interface SidebarContentProps {

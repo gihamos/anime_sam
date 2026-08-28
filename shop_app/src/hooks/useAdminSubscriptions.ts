@@ -27,6 +27,21 @@ export function useAdminSubscriptionDetail(id: string | null) {
   })
 }
 
+export function useCreateManualSubscription() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ username, planId, durationDays }: { username: string; planId: string; durationDays?: number }) => {
+      const { data } = await apiClient.post<SubscriptionAdmin>('/admin/api/subscriptions', {
+        username,
+        plan_id: planId,
+        duration_days: durationDays || null,
+      })
+      return data
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SUBS_KEY }),
+  })
+}
+
 export function useExtendSubscription() {
   const queryClient = useQueryClient()
   return useMutation({

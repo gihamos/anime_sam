@@ -14,6 +14,12 @@ import {
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PlanFormDialog } from './plans/PlanFormDialog'
 
+function activeDiscount(plan: PlanAdmin): string | null {
+  if (!plan.discount_type || plan.discount_value === null) return null
+  if (plan.discount_expires_at && plan.discount_expires_at < new Date().toISOString()) return null
+  return plan.discount_type === 'percent' ? `-${plan.discount_value}%` : `-${plan.discount_value.toFixed(2)} ${plan.currency}`
+}
+
 export function PlansAdminPage() {
   const { data: plans = [], isLoading } = useAdminPlans()
   const deletePlan = useDeletePlan()
@@ -86,9 +92,21 @@ export function PlansAdminPage() {
                     <span className="text-xs text-muted-foreground">{plan.slug}</span>
                   </div>
                 </TableCell>
-                <TableCell>{plan.price.toFixed(2)} {plan.currency} / {plan.billing_period === 'month' ? 'mois' : 'an'}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span>{plan.price.toFixed(2)} {plan.currency} / {plan.duration_days} j</span>
+                    {activeDiscount(plan) && <Badge variant="default">{activeDiscount(plan)}</Badge>}
+                  </div>
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {plan.jellyfin_library_names.length > 0 ? plan.jellyfin_library_names.join(', ') : '—'}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>{plan.jellyfin_library_names.length > 0 ? plan.jellyfin_library_names.join(', ') : '—'}</span>
+                    {plan.max_parental_rating !== null && (
+                      <Badge variant="secondary">
+                        {plan.max_parental_rating === 0 ? 'Tous publics' : `-${plan.max_parental_rating}`}
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={plan.is_active ? 'default' : 'secondary'}>{plan.is_active ? 'Actif' : 'Inactif'}</Badge>

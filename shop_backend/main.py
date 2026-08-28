@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -45,7 +46,7 @@ async def lifespan(app: FastAPI):
     await setup_indexes()
     await _create_default_admin()
 
-    from services.billing_service import disable_expired_cancellations
+    from services.billing_service import disable_expired_cancellations, cleanup_stale_pending_subscriptions
     scheduler.add_job(
         disable_expired_cancellations,
         "interval",
@@ -54,7 +55,19 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    scheduler.add_job(
+        cleanup_stale_pending_subscriptions,
+        "interval",
+        hours=24,
+        id="cleanup_stale_pending_subscriptions",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
+
+    import services.jellyfin_auto_sync as jellyfin_auto_sync
+    jellyfin_auto_sync.init(scheduler)
+    await jellyfin_auto_sync.start()
 
     logger.info("shop_backend : démarrage")
     yield
@@ -95,11 +108,29 @@ def health():
 
 
 # ---------------------------------------------------------------------------
-# shop_app (build statique) — servi par ce même process, monté en dernier pour ne
-# jamais intercepter les routes API déclarées ci-dessus. `html=True` sert index.html en
-# fallback pour les routes React Router côté client (ex. /compte, /admin/offres).
+# shop_app (build statique) — servi par ce même process, déclaré en dernier pour ne
+# jamais intercepter les routes API ci-dessus. Même pattern qu'admin_main.py :
+# /assets monté séparément, catch-all explicite qui renvoie index.html pour toute
+# route côté client (React Router) — StaticFiles(html=True) seul ne suffit pas pour
+# ce fallback (vérifié : renvoie 404 sur les sous-routes comme /compte).
 # ---------------------------------------------------------------------------
 
 _SHOP_APP_DIST = Path(__file__).parent / "shop_app_dist"
+
 if _SHOP_APP_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=_SHOP_APP_DIST, html=True), name="shop-app")
+    app.mount("/assets", StaticFiles(directory=_SHOP_APP_DIST / "assets"), name="shop-assets")
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def shop_favicon():
+        return FileResponse(_SHOP_APP_DIST / "favicon.svg")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def shop_spa(full_path: str):
+        """Fallback SPA : toute route côté client (React Router) sert index.html."""
+        return HTMLResponse(
+            (_SHOP_APP_DIST / "index.html").read_text(encoding="utf-8"),
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma":        "no-cache",
+            },
+        )

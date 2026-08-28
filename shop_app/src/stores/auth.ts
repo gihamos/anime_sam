@@ -9,7 +9,7 @@ interface AuthState {
   isLoading: boolean
   ready: boolean
   login: (username: string, password: string) => Promise<Customer>
-  register: (username: string, password: string, email?: string) => Promise<Customer>
+  register: (username: string, password: string, dateOfBirth: string, email?: string) => Promise<Customer>
   logout: () => void
   checkAuth: () => Promise<void>
 }
@@ -43,10 +43,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (username, password, email) => {
+  register: async (username, password, dateOfBirth, email) => {
     set({ isLoading: true })
     try {
-      await apiClient.post('/auth/register', { username, password, email: email || null })
+      await apiClient.post('/auth/register', { username, password, date_of_birth: dateOfBirth, email: email || null })
       const form = new URLSearchParams()
       form.append('username', username)
       form.append('password', password)

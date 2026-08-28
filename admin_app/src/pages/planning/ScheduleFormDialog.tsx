@@ -28,7 +28,10 @@ interface ScheduleFormDialogProps {
 
 export function ScheduleFormDialog({ open, onOpenChange, schedule }: ScheduleFormDialogProps) {
   const isEdit = !!schedule
-  const { data: catalogues = [] } = useCatalogues()
+  // La programmation ré-exécute le scraper anime-sama.to — non applicable aux catalogues
+  // TMDB/Vidzy, qui n'ont pas de mécanisme de resynchronisation périodique (voir backend).
+  const { data: allCatalogues = [] } = useCatalogues()
+  const catalogues = allCatalogues.filter((c) => c.source !== 'tmdb-vidzy')
   const createSchedule = useCreateSchedule()
   const updateSchedule = useUpdateSchedule()
   const isPending = createSchedule.isPending || updateSchedule.isPending

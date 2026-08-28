@@ -471,6 +471,16 @@ async def create_schedule(body: ScheduleCreate, _: dict = Depends(require_admin)
     doc = await repo.find_by_slug(body.slug)
     if not doc:
         raise HTTPException(404, f"Catalogue '{body.slug}' introuvable en DB")
+    if doc.get("source") == "tmdb-vidzy":
+        # La programmation ré-exécute le scraper anime-sama.to (rafraichir_catalogue), qui ne
+        # sait pas lire une URL themoviedb.org — inoffensif (échoue proprement, catalogue
+        # inchangé) mais inutile. Un catalogue TMDB+Vidzy n'a pas de mécanisme de resynchro
+        # périodique : une nouvelle saison Vidzy nécessite de re-ajouter le titre.
+        raise HTTPException(
+            400,
+            "La programmation automatique ne s'applique qu'aux catalogues anime-sama.to — "
+            f"'{body.slug}' vient de TMDB/Vidzy et n'a pas de mécanisme de resynchronisation périodique.",
+        )
     now = datetime.now(timezone.utc).isoformat()
     sched_doc = {
         **body.model_dump(),

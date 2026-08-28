@@ -33,16 +33,33 @@ class PaymentProvider(ABC):
     @abstractmethod
     async def create_billing_plan(
         self, *, product_id: str, plan_name: str, description: str,
-        price: float, currency: str, billing_period: str,
+        price: float, currency: str, duration_days: int,
     ) -> str:
-        """Crée un plan de facturation récurrent pour un palier. Retourne l'id fournisseur."""
+        """Crée un plan de facturation récurrent (renouvelé tous les `duration_days` jours)
+        pour un palier. Retourne l'id fournisseur."""
 
     @abstractmethod
     async def create_subscription_checkout(
         self, *, provider_plan_id: str, return_url: str, cancel_url: str, custom_id: str,
     ) -> CheckoutSession:
-        """Initie un abonnement pour un client. Retourne l'URL d'approbation à laquelle
-        rediriger le client (hébergée par le fournisseur, pas de formulaire à construire)."""
+        """Initie un abonnement récurrent pour un client. Retourne l'URL d'approbation à
+        laquelle rediriger le client (hébergée par le fournisseur, pas de formulaire à
+        construire)."""
+
+    @abstractmethod
+    async def create_one_time_checkout(
+        self, *, price: float, currency: str, return_url: str, cancel_url: str, custom_id: str,
+    ) -> CheckoutSession:
+        """Initie un paiement unique (pas de renouvellement automatique — le client garde
+        l'accès `duration_days` puis doit repasser par la caisse). Même contrat de retour
+        que create_subscription_checkout pour que les routes n'aient pas à distinguer les
+        deux cas avant la redirection."""
+
+    @abstractmethod
+    async def capture_one_time_payment(self, order_id: str) -> dict:
+        """Capture effectivement les fonds d'un paiement unique après approbation du client.
+        Retourne {"status", "payment_id", "amount", "currency"}. Lève si le client n'a pas
+        (encore) approuvé côté fournisseur."""
 
     @abstractmethod
     async def get_subscription_status(self, provider_subscription_id: str) -> dict:

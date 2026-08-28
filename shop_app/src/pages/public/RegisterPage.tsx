@@ -15,6 +15,7 @@ export function RegisterPage() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [error, setError] = useState('')
 
   async function handleSubmit(e: FormEvent) {
@@ -25,7 +26,7 @@ export function RegisterPage() {
       return
     }
     try {
-      await register(username, password, email)
+      await register(username, password, dateOfBirth, email)
       navigate('/tarifs', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Inscription impossible")
@@ -79,6 +80,19 @@ export function RegisterPage() {
                 autoComplete="new-password"
                 required
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="date-of-birth">Date de naissance</Label>
+              <Input
+                id="date-of-birth"
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                autoComplete="bday"
+                max={new Date().toISOString().slice(0, 10)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Sert à appliquer les restrictions de contenu liées à l'âge.</p>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}

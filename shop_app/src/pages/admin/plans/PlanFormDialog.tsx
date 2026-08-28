@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { useCreatePlan, useUpdatePlan, useLibraryFolders } from '@/hooks/useAdminPlans'
 import { getApiError } from '@/api/client'
-import type { PlanAdmin } from '@/api/types'
+import type { DiscountType, PlanAdmin } from '@/api/types'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -13,6 +13,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 interface PlanFormDialogProps {
   open: boolean
@@ -21,9 +24,23 @@ interface PlanFormDialogProps {
 }
 
 const EMPTY = {
-  slug: '', name: '', description: '', price: 0, currency: 'EUR', billing_period: 'month',
+  slug: '', name: '', description: '', price: 0, currency: 'EUR', duration_days: 30,
   max_devices: 1, allow_downloads: false, is_active: true, sort_order: 0,
+  discount_type: null as DiscountType | null, discount_value: null as number | null,
+  discount_expires_at: null as string | null, max_parental_rating: null as number | null,
 }
+
+const RATING_STEPS: { value: number; label: string }[] = [
+  { value: 0, label: 'Tous publics' },
+  { value: 6, label: '-6' },
+  { value: 9, label: '-9' },
+  { value: 10, label: '-10' },
+  { value: 12, label: '-12' },
+  { value: 13, label: '-13' },
+  { value: 14, label: '-14' },
+  { value: 16, label: '-16' },
+  { value: 18, label: '-18' },
+]
 
 export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps) {
   const { data: folders = [] } = useLibraryFolders()
@@ -37,9 +54,12 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
     if (plan) {
       setForm({
         slug: plan.slug, name: plan.name, description: plan.description,
-        price: plan.price, currency: plan.currency, billing_period: plan.billing_period,
+        price: plan.price, currency: plan.currency, duration_days: plan.duration_days,
         max_devices: plan.max_devices, allow_downloads: plan.allow_downloads,
         is_active: plan.is_active, sort_order: plan.sort_order,
+        discount_type: plan.discount_type, discount_value: plan.discount_value,
+        discount_expires_at: plan.discount_expires_at?.slice(0, 10) ?? null,
+        max_parental_rating: plan.max_parental_rating,
       })
       setSelectedFolderIds(plan.jellyfin_library_folder_ids)
     } else {
@@ -47,6 +67,12 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
       setSelectedFolderIds([])
     }
   }, [plan, open])
+
+  function toggleDiscount(enabled: boolean) {
+    setForm((f) => enabled
+      ? { ...f, discount_type: 'percent', discount_value: 10 }
+      : { ...f, discount_type: null, discount_value: null, discount_expires_at: null })
+  }
 
   function toggleFolder(id: string) {
     setSelectedFolderIds((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
@@ -58,6 +84,7 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
       ...form,
       jellyfin_library_folder_ids: selectedFolderIds,
       jellyfin_library_names: selectedNames,
+      discount_expires_at: form.discount_expires_at ? new Date(form.discount_expires_at).toISOString() : null,
     }
     try {
       if (plan) {
@@ -100,7 +127,7 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
             <Textarea id="description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="price">Prix</Label>
               <Input id="price" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
@@ -108,6 +135,20 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
             <div className="space-y-1.5">
               <Label htmlFor="currency">Devise</Label>
               <Input id="currency" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="duration_days">Validité (jours)</Label>
+              <Input
+                id="duration_days"
+                type="number"
+                min={1}
+                value={form.duration_days}
+                onChange={(e) => setForm({ ...form, duration_days: Number(e.target.value) })}
+              />
+              <p className="text-xs text-muted-foreground">Durée d'accès par période — aussi l'intervalle de renouvellement si le client active le renouvellement automatique.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="max_devices">Appareils</Label>
@@ -146,6 +187,79 @@ export function PlanFormDialog({ open, onOpenChange, plan }: PlanFormDialogProps
               <p className="text-xs text-muted-foreground">Visible et souscriptible sur la vitrine.</p>
             </div>
             <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
+          </div>
+
+          <div className="space-y-3 rounded-md border border-border p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Réduction</p>
+                <p className="text-xs text-muted-foreground">Prix barré affiché automatiquement sur la page tarifs, sans code à saisir.</p>
+              </div>
+              <Switch checked={form.discount_type !== null} onCheckedChange={toggleDiscount} />
+            </div>
+
+            {form.discount_type !== null && (
+              <div className="space-y-3 border-t border-border pt-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Type</Label>
+                    <Select
+                      value={form.discount_type}
+                      onValueChange={(v) => setForm({ ...form, discount_type: v as DiscountType })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percent">Pourcentage</SelectItem>
+                        <SelectItem value="fixed">Montant fixe</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="discount_value">
+                      Valeur {form.discount_type === 'percent' ? '(%)' : `(${form.currency})`}
+                    </Label>
+                    <Input
+                      id="discount_value"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={form.discount_value ?? 0}
+                      onChange={(e) => setForm({ ...form, discount_value: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="discount_expires_at">Expire le</Label>
+                  <Input
+                    id="discount_expires_at"
+                    type="date"
+                    value={form.discount_expires_at ?? ''}
+                    onChange={(e) => setForm({ ...form, discount_expires_at: e.target.value || null })}
+                  />
+                  <p className="text-xs text-muted-foreground">Laissez vide pour une réduction sans date de fin.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Restriction de contenu</Label>
+            <Select
+              value={form.max_parental_rating === null ? 'none' : String(form.max_parental_rating)}
+              onValueChange={(v) => setForm({ ...form, max_parental_rating: v === 'none' ? null : Number(v) })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucune restriction</SelectItem>
+                {RATING_STEPS.map((step) => (
+                  <SelectItem key={step.value} value={String(step.value)}>{step.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Masque le contenu au-delà de ce seuil pour les abonnés de ce palier. Se cumule avec la
+              restriction liée à l'âge du client (la plus stricte des deux s'applique).
+            </p>
           </div>
         </div>
 

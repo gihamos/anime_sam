@@ -15,7 +15,7 @@ from api.routes.admin import router as admin_router
 from api.routes.groups import router as groups_router
 from api.routes.download import router as download_router, admin_router as dl_admin_router
 from api.routes.scan_download import router as scan_dl_router, admin_router as scan_dl_admin_router
-from api.routes.stream import router as stream_router
+from api.routes.stream import router as stream_router, init_client as init_stream_client, close_client as close_stream_client
 from services.catalogue_service import mettre_a_jour_tous
 from services.enrichment_service import enrichir_tous
 from services.jellyfin_sync import refresh_library as jellyfin_refresh_library
@@ -60,6 +60,7 @@ async def lifespan(app: FastAPI):
     await _create_default_admin()
     await ip_bans_repo.load()
     await api_guard.load()
+    init_stream_client()
 
     # Sync auto quotidienne (mise à jour des métadonnées)
     scheduler.add_job(
@@ -103,6 +104,7 @@ async def lifespan(app: FastAPI):
     logger.info("Démarrage de l'application")
     yield
     scheduler.shutdown()
+    await close_stream_client()
     logger.info("Arrêt de l'application")
 
 

@@ -18,10 +18,12 @@ export function PlanManagementPage() {
   const changePlan = useChangePlan()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  const isPending = subscription?.status === 'pending'
+
   async function handleCancel() {
     try {
       await cancelSubscription.mutateAsync(undefined)
-      toast.success('Abonnement annulé — accès conservé jusqu\'à la fin de la période payée')
+      toast.success(isPending ? 'Tentative annulée — vous pouvez réessayer' : 'Abonnement annulé — accès conservé jusqu\'à la fin de la période payée')
       setConfirmOpen(false)
     } catch (err) {
       toast.error(getApiError(err))
@@ -62,7 +64,7 @@ export function PlanManagementPage() {
               <div key={p.id} className="flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <p className="text-sm font-medium">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.price.toFixed(2)} {p.currency} / {p.billing_period === 'month' ? 'mois' : 'an'}</p>
+                  <p className="text-xs text-muted-foreground">{p.price.toFixed(2)} {p.currency} / {p.duration_days} jours</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => handleChangePlan(p.id)} disabled={changePlan.isPending}>
                   {changePlan.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -74,7 +76,25 @@ export function PlanManagementPage() {
         </Card>
       )}
 
-      {!subscription.cancel_at_period_end && subscription.status !== 'cancelled' && subscription.status !== 'expired' && (
+      {isPending && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-sm font-semibold">Paiement non finalisé</h2>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Votre paiement PayPal n'a pas abouti (approbation abandonnée, ou carte refusée). Annulez cette
+              tentative pour pouvoir choisir un palier et réessayer.
+            </p>
+            <Button variant="outline" onClick={handleCancel} disabled={cancelSubscription.isPending}>
+              {cancelSubscription.isPending && <Loader2 className="size-4 animate-spin" />}
+              Annuler cette tentative
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isPending && !subscription.cancel_at_period_end && subscription.status !== 'cancelled' && subscription.status !== 'expired' && (
         <Card>
           <CardHeader>
             <h2 className="text-sm font-semibold">Annuler mon abonnement</h2>

@@ -37,3 +37,12 @@ PAYPAL_API_BASE      = os.getenv("PAYPAL_API_BASE",      "https://api-m.sandbox.
 SHOP_PUBLIC_URL       = os.getenv("SHOP_PUBLIC_URL", "http://localhost:5173")
 PAYPAL_RETURN_URL     = os.getenv("PAYPAL_RETURN_URL", f"{SHOP_PUBLIC_URL}/compte/paiement/retour")
 PAYPAL_CANCEL_URL     = os.getenv("PAYPAL_CANCEL_URL", f"{SHOP_PUBLIC_URL}/compte/paiement/annule")
+
+# ── API anime_sam — SEULE dépendance volontaire vers l'autre système, réservée au
+# raccourci "Synchroniser Jellyfin" de l'admin boutique (décision explicite : shop_backend
+# reste sinon totalement indépendant, voir le plan de commercialisation). Identifiants d'un
+# compte admin anime_sam dédié, distincts de SHOP_ADMIN_USERNAME/PASSWORD ci-dessus — à
+# renseigner dans .env, aucune valeur par défaut correcte n'existant pour un mot de passe.
+ANIME_SAM_API_URL       = os.getenv("ANIME_SAM_API_URL", "http://anime_sama:8000")
+ANIME_SAM_ADMIN_USERNAME = os.getenv("ANIME_SAM_ADMIN_USERNAME", "")
+ANIME_SAM_ADMIN_PASSWORD = os.getenv("ANIME_SAM_ADMIN_PASSWORD", "")

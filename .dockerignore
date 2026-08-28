@@ -12,3 +12,7 @@ README.md
 mobile_app
 admin_app/node_modules
 admin_app/dist
+shop_app/node_modules
+shop_app/dist
+shop_backend/.venv
+shop_backend/logs

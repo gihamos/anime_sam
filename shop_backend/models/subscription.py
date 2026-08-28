@@ -14,7 +14,9 @@ class SubscriptionStatus(str, Enum):
 
 
 class SubscribeRequest(BaseModel):
-    plan_id: str
+    plan_id:    str
+    auto_renew: bool           = True
+    promo_code: Optional[str]  = None
 
 
 class ChangePlanRequest(BaseModel):
@@ -31,3 +33,9 @@ class SubscriptionExtendRequest(BaseModel):
 
 class SubscriptionAdminCancelRequest(BaseModel):
     reason: Optional[str] = None
+
+
+class ManualSubscriptionCreate(BaseModel):
+    username:      str
+    plan_id:       str
+    duration_days: Optional[int] = None  # remplace la durée par défaut du palier si fourni

@@ -13,13 +13,22 @@ cas de redélivraison PayPal.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Optional
 
 import db.subscriptions_repository as subscriptions_repo
 import db.plans_repository as plans_repo
 import db.payments_repository as payments_repo
+import db.promotions_repository as promotions_repo
+import db.customers_repository as customers_repo
 import services.jellyfin_provisioning as jellyfin
+from services.parental_rating import effective_max_rating
 from services.payments.events import NormalizedSubscriptionEvent, SubscriptionEventType
 from utils.logger import logger
+
+
+async def _max_rating_for(username: str, plan: dict) -> Optional[int]:
+    customer = await customers_repo.find_by_username(username)
+    return effective_max_rating(customer.get("date_of_birth") if customer else None, plan.get("max_parental_rating"))
 
 
 async def handle_subscription_event(event: NormalizedSubscriptionEvent) -> None:
@@ -89,8 +98,16 @@ async def _activate(sub: dict, plan: dict, period_end_iso: str | None) -> None:
         plan.get("jellyfin_library_folder_ids", []),
         plan.get("max_devices", 1),
         plan.get("allow_downloads", False),
+        max_parental_rating=await _max_rating_for(sub["username"], plan),
     )
     await subscriptions_repo.update(sub["id"], fields)
+
+    # Compte l'usage du code promo une seule fois — au moment où l'activation aboutit
+    # vraiment (pas à la simple tentative), et jamais une deuxième fois si l'événement
+    # d'activation est rejoué (webhook + confirmation synchrone peuvent tous deux arriver).
+    if sub.get("promotion_code") and not sub.get("activated_at"):
+        await promotions_repo.increment_usage(sub["promotion_code"])
+
     logger.info(f"billing_service : abonnement {sub['id']} activé pour '{sub['username']}'")
 
 
@@ -121,11 +138,33 @@ async def _renew(sub: dict, plan: dict, event: NormalizedSubscriptionEvent, peri
             plan.get("jellyfin_library_folder_ids", []),
             plan.get("max_devices", 1),
             plan.get("allow_downloads", False),
+            max_parental_rating=await _max_rating_for(sub["username"], plan),
         )
         fields["status"] = "active"
 
     if fields:
         await subscriptions_repo.update(sub["id"], fields)
+
+
+async def reapply_access_policy(username: str) -> None:
+    """Réapplique immédiatement la policy Jellyfin (bibliothèques/appareils/téléchargement/
+    restriction d'âge) de l'abonnement en cours d'un client — appelé quand sa date de
+    naissance change (self-service ou admin), pour que la restriction d'âge prenne effet
+    tout de suite plutôt qu'au prochain renouvellement. Sans effet si le client n'a pas
+    d'abonnement en cours ou pas encore de compte Jellyfin provisionné."""
+    sub = await subscriptions_repo.find_current_for_user(username)
+    if not sub or not sub.get("jellyfin_user_id") or sub["status"] not in ("active", "past_due"):
+        return
+    plan = await plans_repo.find_by_id(sub["plan_id"])
+    if not plan:
+        return
+    await jellyfin.enable_user(
+        sub["jellyfin_user_id"],
+        plan.get("jellyfin_library_folder_ids", []),
+        plan.get("max_devices", 1),
+        plan.get("allow_downloads", False),
+        max_parental_rating=await _max_rating_for(username, plan),
+    )
 
 
 async def disable_expired_cancellations() -> int:
@@ -144,4 +183,16 @@ async def disable_expired_cancellations() -> int:
 
     if count:
         logger.info(f"billing_service : {count} abonnement(s) désactivé(s) en fin de période (job planifié)")
+    return count
+
+
+async def cleanup_stale_pending_subscriptions() -> int:
+    """Job planifié quotidien — filet de sécurité qui efface les tentatives d'abonnement
+    'pending' abandonnées (paiement PayPal jamais finalisé) datant de plus d'une heure,
+    pour les clients qui n'ont jamais cliqué sur 'annuler' eux-mêmes. Sans ça, un abonnement
+    figé bloque indéfiniment toute nouvelle tentative (constaté en conditions réelles)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    count = await subscriptions_repo.delete_stale_pending(cutoff)
+    if count:
+        logger.info(f"billing_service : {count} tentative(s) d'abonnement abandonnée(s) nettoyée(s) (job planifié)")
     return count

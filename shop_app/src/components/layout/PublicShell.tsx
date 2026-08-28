@@ -41,7 +41,7 @@ export function PublicShell() {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground sm:px-6">
-          © {new Date().getFullYear()} Anime Sama — Accès au serveur Jellyfin sur abonnement.
+          © {new Date().getFullYear()} Anime Sama, accès au serveur Jellyfin sur abonnement.
         </div>
       </footer>
     </div>

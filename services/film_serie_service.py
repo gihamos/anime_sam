@@ -201,6 +201,18 @@ async def ajouter_depuis_tmdb(media_type: str, tmdb_id: int) -> Optional[dict]:
         return None
     langues = dispo.get("languages") or ["vf"]
 
+    # dispo["seasons"] liste précisément ce que Vidzy possède vraiment (saison → épisodes) —
+    # à ne pas confondre avec la liste de saisons/épisodes de TMDB, bien plus complète (inclut
+    # souvent une "saison 0" Specials et des saisons entières que Vidzy n'a jamais hébergées).
+    # Constaté en conditions réelles : sans ce filtre, ~51% des séries ajoutées se retrouvent
+    # avec des épisodes fantômes en base → 404 systématique à la résolution Vidzy. On ne garde
+    # donc que l'intersection avec ce que Vidzy confirme réellement disposer.
+    vidzy_seasons: dict[int, set[int]] = {
+        s["season"]: set(s.get("episodes", []))
+        for s in dispo.get("seasons", [])
+        if s.get("season") is not None
+    }
+
     catalogue = Catalogue(
         slug=slug,
         url=tmdb_url,
@@ -233,6 +245,11 @@ async def ajouter_depuis_tmdb(media_type: str, tmdb_id: int) -> Optional[dict]:
             numero = s.get("season_number")
             if numero is None:
                 continue
+            real_episodes = vidzy_seasons.get(numero)
+            if not real_episodes:
+                # Vidzy n'a pas du tout cette saison (ex. "Specials"/saison 0, ou une
+                # saison jamais mise en ligne côté Vidzy) — ne pas créer d'entrée fantôme.
+                continue
             season_detail = await tmdb_client.get_season(tmdb_id, numero)
             if not season_detail:
                 continue
@@ -250,7 +267,7 @@ async def ajouter_depuis_tmdb(media_type: str, tmdb_id: int) -> Optional[dict]:
                     },
                 )
                 for ep in season_detail.get("episodes", [])
-                if ep.get("episode_number") is not None
+                if ep.get("episode_number") is not None and ep["episode_number"] in real_episodes
             ]
             if not episodes:
                 continue

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, MoreHorizontal, Search } from 'lucide-react'
+import { Loader2, MoreHorizontal, Plus, Search } from 'lucide-react'
 import { useAdminSubscriptions, useExtendSubscription, useForceCancelSubscription } from '@/hooks/useAdminSubscriptions'
 import { useAdminPlans } from '@/hooks/useAdminPlans'
 import { getApiError } from '@/api/client'
@@ -18,6 +18,7 @@ import {
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { ManualSubscriptionDialog } from './subscriptions/ManualSubscriptionDialog'
 
 const STATUS_OPTIONS = ['all', 'pending', 'active', 'past_due', 'suspended', 'cancelled', 'expired']
 
@@ -43,6 +44,7 @@ export function SubscriptionsAdminPage() {
   const [extendTarget, setExtendTarget] = useState<SubscriptionAdmin | null>(null)
   const [extendDays, setExtendDays] = useState(30)
   const [cancelTarget, setCancelTarget] = useState<SubscriptionAdmin | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
 
   const planNameById = Object.fromEntries(plans.map((p) => [p.id, p.name]))
 
@@ -70,9 +72,15 @@ export function SubscriptionsAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Abonnements</h1>
-        <p className="text-sm text-muted-foreground">Suivi et gestion des abonnements clients.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Abonnements</h1>
+          <p className="text-sm text-muted-foreground">Suivi et gestion des abonnements clients.</p>
+        </div>
+        <Button onClick={() => setManualOpen(true)}>
+          <Plus className="size-4" />
+          Ajouter un abonnement
+        </Button>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -178,6 +186,8 @@ export function SubscriptionsAdminPage() {
         isPending={forceCancel.isPending}
         onConfirm={handleForceCancel}
       />
+
+      <ManualSubscriptionDialog open={manualOpen} onOpenChange={setManualOpen} />
     </div>
   )
 }

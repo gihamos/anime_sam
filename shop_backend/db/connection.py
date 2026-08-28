@@ -52,6 +52,8 @@ async def setup_indexes():
             [("provider", 1), ("event_id", 1)], unique=True,
         )
 
+        await db["promotions"].create_index("code", unique=True)
+
         logger.info("shop_backend : index MongoDB créés")
 
     except OperationFailure as e:
